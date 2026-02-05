@@ -1,23 +1,11 @@
 package engine.data;
 
 import java.io.File;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import engine.cards.CardData;
-import engine.cards.types.Attribute;
-import engine.cards.types.CardType;
-import engine.cards.types.Color;
-import engine.cards.types.Rarity;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -35,7 +23,7 @@ public class CardDatabase {
 
     public CardDatabase() {
         // Default constructor
-        this("src/main/resources/compiled/data/")   ;
+        this("src/main/resources/compiled/data/");
     }
 
     public void loadAllCards(String compiledDir) {
@@ -50,7 +38,7 @@ public class CardDatabase {
                 File[] files = new File(dirPath.toString()).listFiles((d, name) -> name.endsWith(".json"));
                 if (files == null) {
                     System.out.println("No JSON files found in directory: " + dirPath);
-                    return;
+                    continue;
                 }
                 System.out.println("Found " + files.length + " JSON files. Loading card data...");
                 
@@ -72,7 +60,7 @@ public class CardDatabase {
     }
 
     // Method to look up and return card information by card ID
-    public CardData loadCardInfo(String cardId) {
+    public CardData getCardData(String cardId) {
         CardData data = cardCache.get(cardId);
         if (data == null) {
             throw new IllegalArgumentException("Card with ID " + cardId + " not found in database.");
@@ -84,7 +72,7 @@ public class CardDatabase {
         System.out.println("Card Database");
         String rawPath = "src/main/resources/raw/data/";
         CardDatabase cardDatabase = new CardDatabase(rawPath);
-        System.out.println(cardDatabase.loadCardInfo("OP03-008"));
+        System.out.println(cardDatabase.getCardData("OP03-008"));
     }
 
 }
