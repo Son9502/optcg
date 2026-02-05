@@ -23,6 +23,7 @@ public record CardData(
         @JsonProperty("card_power") Integer power,
         Integer life,
         @JsonProperty("counter_amount") Integer counter,
+        // Set<Keyword> keywords, --- IGNORE ---
         @JsonProperty("market_price") Double marketPrice) {
     public CardData {
         // Validate and set default values for optional fields
