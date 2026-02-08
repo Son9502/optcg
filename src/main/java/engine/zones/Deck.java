@@ -1,22 +1,29 @@
 package engine.zones;
+
 import engine.player.Player;
 import engine.cards.Card;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.Iterator;
+
 public class Deck extends Zone {
     public Deck(Player owner) {
         super(ZoneType.DECK, owner);
     }
+
     public Deck(ZoneType type, Player owner) {
         super(type, owner);
     }
+
     /**
      * Draws a card from the top of the deck and adds it to the player's hand.
+     * 
      * @param count The number of cards to draw.
      * @return The card drawn, or null if the deck is empty.
      */
-    public List<Card> draw(int count){
+    public List<Card> draw(int count) {
         List<Card> drawnCards = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             if (cards.isEmpty()) {
@@ -31,8 +38,11 @@ public class Deck extends Zone {
         }
         return drawnCards;
     }
+
     /**
-     * Searches the deck for cards that match the given condition and returns a list of matching cards.
+     * Searches the deck for cards that match the given condition and returns a list
+     * of matching cards.
+     * 
      * @param condition A predicate that defines the search condition for the cards.
      * @return A list of cards that match the search condition.
      */
@@ -41,16 +51,25 @@ public class Deck extends Zone {
                 .filter(condition)
                 .toList();
     }
+
     /**
      * Peeks at the top 'count' cards of the deck without removing them.
+     * 
      * @param count The number of top cards to peek at.
-     * @return A list of the top 'count' cards from the deck, or fewer if the deck has less than 'count' cards.
+     * @return A list of the top 'count' cards from the deck, or fewer if the deck
+     *         has less than 'count' cards.
      */
     public List<Card> peekTop(int count) {
-        List<Card> topCards = getCards();
-        int size = topCards.size();
-        int start = Math.max(0, size - count);
-        return topCards.subList(start, size);
+        Deque<Card> deck = getCards();
+        int actualCount = Math.min(count, deck.size());
+        List<Card> result = new ArrayList<>();
+
+        Iterator<Card> iterator = deck.descendingIterator();
+        for (int i = 0; i < actualCount; i++) {
+            result.add(iterator.next());
+        }
+
+        return result;
     }
 
 }
