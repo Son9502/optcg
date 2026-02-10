@@ -61,10 +61,10 @@ public class CardTest {
             0.0 // marketPrice
         );
         Card card = new Card("card1", cardData, null);
-        card.activate();
+        card.rest();
         assertTrue(card.isRested());
-        card.rest();    
-        assertTrue(card.isRested());
+        card.activate();    
+        assertFalse(card.isRested());
     }
     @Test
     /**
