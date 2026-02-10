@@ -66,9 +66,9 @@ public class ZoneTest {
      * If all assertions pass, it prints a success message.
      */
     public void testDrawTop() {
-        Zone deck = new Zone(ZoneType.DECK, player);
+        Deck deck = new Deck(player);
         deck.add(card);
-        Card drawnCard = deck.drawTop();
+        Card drawnCard = deck.draw();
         assertEquals(card, drawnCard);
         assertFalse(deck.getCards().contains(card));
         assertEquals(0, deck.size());
@@ -86,7 +86,8 @@ public class ZoneTest {
         Zone hand = new Zone(ZoneType.HAND, player);
         Zone trash = new Zone(ZoneType.TRASH, player);
         hand.add(card);
-        hand.moveTo(trash, card);
+        hand.remove(card);
+        trash.add(card);
         assertFalse(hand.getCards().contains(card));
         assertTrue(trash.getCards().contains(card));
         assertEquals(trash, card.getZone());
