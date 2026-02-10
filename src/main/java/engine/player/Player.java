@@ -35,7 +35,7 @@ public class Player {
         this.stage = new Zone(ZoneType.STAGE, this);
     
         this.leader = leader;
-        this.lifePoints = leader.getLifePoints();
+        this.lifePoints = (leader != null) ? leader.getLifePoints() : 0;
         this.activeDon = 0;
         this.restedDon = 0;
     }
