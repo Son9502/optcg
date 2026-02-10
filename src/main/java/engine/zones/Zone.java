@@ -6,9 +6,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ArrayList;
 public class Zone {
-    public ZoneType type;
-    public Player owner;
-    public Deque<Card> cards;   
+    protected ZoneType type;
+    protected Player owner;
+    protected Deque<Card> cards;   
     public Zone(ZoneType type, Player owner) {
         this.type = type;
         this.owner = owner;
@@ -33,34 +33,6 @@ public class Zone {
         cards.remove(card);
         card.setZone(null);
     }
-    public Card drawTop(){
-        if (cards.isEmpty()) {
-            System.out.println("No cards to draw from " + type);
-            return null;
-        }
-        return cards.removeLast();
-    }
-    public Card drawBottom(){
-         if (cards.isEmpty()) {
-            System.out.println("No cards to draw from " + type);
-            return null;
-        }
-        return cards.removeFirst();
-    } 
-    public Card peekTop() {
-        if (cards.isEmpty()) {
-            System.out.println("No cards to peek in " + type);
-            return null;
-        }
-        return cards.peekLast();
-    }
-    public Card peekBottom() {
-        if (cards.isEmpty()) {
-            System.out.println("No cards to peek in " + type);
-            return null;    
-        }
-        return cards.peekFirst();
-    }
     public void shuffle() {
         List<Card> tempList = new ArrayList<>(cards);
         java.util.Collections.shuffle(tempList);
@@ -77,12 +49,7 @@ public class Zone {
     public String toString() {
         return "Zone [type=" + type + ", owner=" + owner.getName() + ", cards=" + cards + "]";
     }
-    public void moveTo(Zone targetZone, Card card) {
-        if (this.contains(card)) {
-            this.remove(card);
-            targetZone.add(card);
-        } else {
-            System.out.println("Card not found in " + type);
-        }
+    public boolean isEmpty() {
+        return cards.isEmpty();
     }
 }

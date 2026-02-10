@@ -1,10 +1,10 @@
 package engine.cards.types;
 
 public enum Color {
-    RED,
-    BLUE,
-    GREEN,
-    YELLOW,
-    PURPLE,
-    BLACK
+    Red,
+    Blue,
+    Green,
+    Yellow,
+    Purple,
+    Black
 }

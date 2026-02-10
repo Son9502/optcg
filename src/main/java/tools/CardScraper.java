@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 
 public class CardScraper {
+    // private static String baseUrlTwo = "https://tcgcodex.com/api/";
     private static final String all_set = "https://www.optcgapi.com/api/allSets/";
     private static final String set_base = "https://www.optcgapi.com/api/sets/";
     private static final String all_deck = "https://www.optcgapi.com/api/allDecks/";
@@ -148,7 +149,6 @@ public class CardScraper {
                     }));
 
                     ArrayNode sorted = mapper.createArrayNode().addAll(nodes);
-                    String sortedJson = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(sorted);
                     
                     mapper.writerWithDefaultPrettyPrinter().writeValue(outputFile, sorted);
                     System.out.println("Saved sorted details to " + outputFile.getAbsolutePath());

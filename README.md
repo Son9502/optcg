@@ -59,12 +59,26 @@ Possible File Architecture:
 │   │   │   │       ├── RNG
 │   │   │   │       └── IDGenerator
 │   │   │   │
+│   │   │   ├── tools/
+│   │   │   │   ├── scraper/
+│   │   │   │   │   └──  CardScraper.java
 │   │   │   ├── cli/ or ui/ (optional)
 │   │   ├── resources/
-│   │   │   ├── data/
-│   │   │   │   ├── cards/
-│   │   │   │   │   ├── op01.json
-│   │   │   │   │   ├── op02.json
-│   │   │   │   │   └── etc...
+│   │   │   ├── raw/
+│   │   │   │   ├── data/
+│   │   │   │   │   ├── cards/
+│   │   │   │   │   │   ├── op01.json
+│   │   │   │   │   │   ├── op02.json
+│   │   │   │   │   │   └── etc...
+│   │   │   │   │   └── decks/
+│   │   │   ├── compiled/
+│   │   │   │   ├── data/
+│   │   │   │   │   ├── cards/
+│   │   │   │   │   │   ├── op01.json
+│   │   │   │   │   │   ├── op02.json
+│   │   │   │   │   │   └── etc...
 │   │   │   │   └── decks/
+│   ├── test/
+│   │   ├── java/
+│   │   │   ├── engine/
 ```
