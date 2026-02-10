@@ -10,7 +10,7 @@ public class Leader extends Card {
         return lifePoints;
     }
     public void takeLife(){
-        lifePoints--;
+        lifePoints = Math.max(0, lifePoints - 1);
     }
     public void gainLife(){
         lifePoints++;

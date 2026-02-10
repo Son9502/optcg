@@ -1,9 +1,9 @@
 package engine.cards.types;
 
 public enum Attribute {
-    STRIKE,
-    SLASH,
-    SPECIAL,
-    WISDOM,
-    RANGED
+    Strike,
+    Slash,
+    Special,
+    Wisdom,
+    Ranged
 }
