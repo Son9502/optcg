@@ -37,7 +37,7 @@ public class DeckTest {
         deck.add(card2);
         deck.add(card3);
         assertEquals(3, deck.size());
-        Card drawnCard = deck.drawTop();
+        Card drawnCard = deck.draw();
         assertEquals(card3, drawnCard);
         assertEquals(2, deck.size());
         System.out.println("drawMultipleCards passed");

@@ -11,6 +11,7 @@ engine/cards/effects/Effect.class
 engine/cards/types/Attribute.class
 engine/cards/DonCard.class
 engine/cards/abilities/Trigger.class
+engine/cards/abilities/Cost$CostType.class
 engine/core/GameState.class
 engine/cards/CardFactory.class
 engine/cards/effects/EffectData.class
@@ -19,16 +20,17 @@ engine/cards/abilities/AbilityFactory.class
 engine/cards/abilities/Ability.class
 tools/CardCompiler.class
 tools/Parser.class
+engine/battle/GameHistory.class
 engine/player/Player.class
 engine/core/GameEngine.class
 engine/data/CardDatabase.class
 engine/cards/keywords/Keyword.class
 engine/cards/abilities/Cost.class
 engine/cards/Card.class
-engine/player/Player$1.class
 engine/cards/types/CardType.class
 engine/cards/effects/EffectType.class
 engine/cards/effects/EffectFactory.class
 engine/cards/types/Color.class
+engine/core/GameState$1.class
 engine/cards/effects/Target.class
 tools/CardScraper.class
