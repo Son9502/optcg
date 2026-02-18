@@ -4,8 +4,6 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 import engine.player.Player;
-import engine.zones.Zone;
-import engine.zones.ZoneType;
 public class CardTest {
     @Test
     /**
@@ -61,10 +59,10 @@ public class CardTest {
             0.0 // marketPrice
         );
         Card card = new Card("card1", cardData, null);
-        card.activate();
+        card.rest();
         assertTrue(card.isRested());
-        card.rest();    
-        assertTrue(card.isRested());
+        card.activate();    
+        assertFalse(card.isRested());
     }
     @Test
     /**
@@ -101,9 +99,36 @@ public class CardTest {
     }
     @Test
     /**
-     * 
+     * Tests the attach and detach functionality of Don cards by creating a Card and a DonCard, 
+     * attaching the DonCard to the Card,
      *  */ 
-    void attachAndDetachDon(){}
+    void attachAndDetachDon(){
+        Player player = new Player();
+        CardData cardData = new CardData(
+            "TEST-001", // id
+            "TEST-SET", // setId
+            "Test Card", // name
+            "Test description", // description
+            "Test Set", // setName
+            null, // rarity
+            null, // cardType
+            null, // attribute
+            null, // color
+            1, // cost
+            500, // power
+            null, // life
+            null, // counter
+            0.0 // marketPrice
+        );
+        Card card = new Card("card1", cardData, player);
+        DonCard donCard = new DonCard(player);
+        card.attachDonCard(donCard);
+        assertEquals(1500, card.getTotalPower());
+        assertTrue(card.getAttachedDons().size() == 1);
+        card.detachDonCard();
+        assertEquals(500, card.getTotalPower());
+        assertTrue(card.getAttachedDons().isEmpty());
+    }
     
 
 

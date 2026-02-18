@@ -5,8 +5,6 @@ import engine.cards.Card;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.ArrayList;
-import java.util.Deque;
-import java.util.Iterator;
 
 public class Deck extends Zone {
     public Deck(Player owner) {
@@ -24,10 +22,9 @@ public class Deck extends Zone {
      */
     public Card draw() {
         if (cards.isEmpty()) {
-            System.out.println("No more cards to draw from " + type);
             return null;
         }
-        Card drawnCard = cards.removeLast();
+        Card drawnCard = this.remove();
         if (drawnCard == null) {
             return null;
         }
@@ -48,7 +45,7 @@ public class Deck extends Zone {
                 System.out.println("No more cards to draw from " + type);
                 break;
             }
-            Card drawnCard = cards.removeLast();
+            Card drawnCard = this.remove();
             if (drawnCard == null) {
                 break;
             }
@@ -71,20 +68,20 @@ public class Deck extends Zone {
                 .toList();
     }
 
-
     /**
      * Peeks at the top card of the deck without removing them.
      * 
      * @return The top card of the deck, or null if the deck is empty.
      */
     public Card peek() {
-        Deque<Card> deck = getCards();
+        List<Card> deck = getCards();
         if (deck.isEmpty()) {
             System.out.println("No cards to peek in " + type);
             return null;
         }
-        return deck.peekLast();
+        return deck.get(deck.size() - 1);
     }
+
     /**
      * Peeks at the top 'count' cards of the deck without removing them.
      * 
@@ -93,17 +90,16 @@ public class Deck extends Zone {
      *         has less than 'count' cards.
      */
     public List<Card> peek(int count) {
-        Deque<Card> deck = getCards();
+        List<Card> deck = getCards();
         int actualCount = Math.min(count, deck.size());
         List<Card> result = new ArrayList<>();
 
-        Iterator<Card> iterator = deck.descendingIterator();
-        for (int i = 0; i < actualCount; i++) {
-            result.add(iterator.next());
+        for (int i = deck.size() - 1; i >= deck.size() - actualCount; i--) {
+            result.add(deck.get(i));
         }
         if (result.size() < count) {
             System.out.println("Only " + result.size() + " cards available to peek in " + type);
-        }   
+        }
         return result;
     }
 

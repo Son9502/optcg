@@ -1,6 +1,7 @@
 package engine.cards;
 
 import engine.zones.Zone;
+import engine.zones.ZoneType;
 import engine.player.Player;
 import java.util.List;
 import java.util.ArrayList;
@@ -15,8 +16,8 @@ public class Card {
     protected Player controller;
     protected Zone zone;
     protected boolean rested;
-    private List<DonCard> attachedDons;
-    private List<Ability> abilities;
+    protected List<DonCard> attachedDons;
+    protected List<Ability> abilities;
 
     public Card(String card_id, CardData data, Player owner) {
         this(card_id, data, owner, null);
@@ -167,5 +168,17 @@ public class Card {
      */
     public int countDon() {
         return attachedDons.size();
+    }
+    @Override
+    public String toString() {
+        String card = "Card: [Name=" + data.name() + "\n" +  "Power=" + getTotalPower() + "\n" + "Cost=" + data.cost() + "\n" + "Description=" + data.description();
+        if (zone.getType() == ZoneType.CHARACTER) {
+            card += "\n" + "Rested=" + rested;
+            if (!attachedDons.isEmpty()) {
+                card += "\n" + "Attached Dons: " + attachedDons.size();
+            }
+        }
+        card += "]";
+        return card;
     }
 }

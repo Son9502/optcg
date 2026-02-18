@@ -2,31 +2,32 @@ package engine.player;
 import engine.zones.Zone;
 import engine.zones.ZoneType;
 import engine.zones.Deck;
+import engine.zones.DonDeck;
 import engine.cards.Leader;
-
 public class Player {
     private String player_id;
     private String name;
 
     private Deck deck;
-    private Deck donDeck;
+    private DonDeck donDeck;
+    private Deck life_zone;
+
     private Zone hand;
     private Zone field;
     private Zone trash;
-    private Deck life_zone;
     private Zone cost_zone;
     private Zone stage;
 
     private int activeDon;
     private int restedDon;
-
     private int lifePoints;
+    
     private Leader leader;
     public Player(String player_id, String name, Leader leader) {
         this.player_id = player_id;
         this.name = name;
         this.deck = new Deck(this);
-        this.donDeck = new Deck(ZoneType.DON_DECK, this);
+        this.donDeck = new DonDeck(this);
         this.hand = new Zone(ZoneType.HAND, this);
         this.field = new Zone(ZoneType.CHARACTER, this);
         this.trash = new Zone(ZoneType.TRASH, this);
@@ -35,23 +36,25 @@ public class Player {
         this.stage = new Zone(ZoneType.STAGE, this);
     
         this.leader = leader;
-        this.lifePoints = leader.getLifePoints();
+        this.lifePoints = (leader != null) ? leader.getLifePoints() : 0;
         this.activeDon = 0;
         this.restedDon = 0;
     }
-    public Player(String name, Leader leader) {
-        this("default_id", name, leader);
+    public Player(String player_id, Leader leader) {
+        this(player_id, "Default Player", leader);
+    }
+    public Player(String player_id) {
+        this(player_id, "Default Player", null);
     }
     public Player() {
         this("default_id", "Default Player", null);
     }
-
     // Accessor methods
     public Deck getDeck() {
         return deck;
     }
 
-    public Deck getDonDeck() {
+    public DonDeck getDonDeck() {
         return donDeck;
     }
 
