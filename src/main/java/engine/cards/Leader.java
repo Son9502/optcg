@@ -1,5 +1,6 @@
 package engine.cards;
 import engine.player.Player;
+import engine.zones.ZoneType;
 public class Leader extends Card {
     private int lifePoints;
     public Leader(String card_id, CardData data, Player owner) {
@@ -14,6 +15,18 @@ public class Leader extends Card {
     }
     public void gainLife(){
         lifePoints++;
+    }
+    @Override
+    public String toString() {
+        String card = "Leader: [Name=" + data.name() + "\n" + "Life=" + lifePoints + "\n" + "Power=" + getTotalPower() + "\n" + "Cost=" + data.cost() + "\n" + "Description=" + data.description();
+        if (zone.getType() == ZoneType.CHARACTER) {
+            card += "\n" + "Rested=" + rested;
+            if (!attachedDons.isEmpty()) {
+                card += "\n" + "Attached Dons: " + attachedDons.size();
+            }
+        }
+        card += "]";
+        return card;
     }
 
     
