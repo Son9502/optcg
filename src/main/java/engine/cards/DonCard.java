@@ -5,6 +5,7 @@ import engine.player.Player;
 
 public class DonCard extends Card {
     private CardType type;
+    private boolean isAttached;
 
     public DonCard(String card_id, CardData data, Player owner) {
         super(card_id, data, owner);
@@ -27,6 +28,12 @@ public class DonCard extends Card {
     }
     public boolean isDonCard() {
         return this.type == CardType.Don;
+    }
+    public boolean isAttached() {
+        return isAttached;
+    }
+    public void setAttached(boolean attached) {
+        this.isAttached = attached;
     }
     public int getBoost() {
         return 1000; // Placeholder for boost value, can be modified as needed

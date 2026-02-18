@@ -76,4 +76,43 @@ public class DeckTest {
         assertEquals(3, deck.size());
         System.out.println("searchCards passed");
     }
+    @Test
+    /**
+     * Tests the draw method of the Deck class by adding a card to the deck, drawing
+     * the card, and verifying that the drawn card is correct and that the size of the deck is 
+     * updated correctly after drawing.
+     * It also checks that the card's zone reference is cleared after drawing. 
+     * If all assertions pass, it prints a success message.
+     */
+    public void testDrawCard() {
+        Player player = new Player();
+        Deck deck = new Deck(player);
+        CardData cardData = new CardData(
+            "TEST-001", "TEST-SET", "Test Card", "Test description", "Test Set",
+            null, null, null, null, 1, 1000, null, null, 0.0
+        );
+        Card card = new Card("card1", cardData, player);
+        deck.add(card);
+        assertEquals(1, deck.size());
+        Card drawnCard = deck.draw();
+        assertEquals(card, drawnCard);
+        assertEquals(0, deck.size());
+        assertNull(drawnCard.getZone());
+        System.out.println("testDrawCard passed");
+    }
+    @Test 
+    /**
+     * Tests the draw method of the Deck class when the deck is empty by attempting to draw a card 
+     * from an empty deckand verifying that the result is null and that the size of the deck remains unchanged. 
+     * If all assertions pass, it prints a success message.
+     */
+    public void testDrawFromEmptyDeck() {
+        Player player = new Player();
+        Deck deck = new Deck(player);
+        assertEquals(0, deck.size());
+        Card drawnCard = deck.draw();
+        assertNull(drawnCard);
+        assertEquals(0, deck.size());
+        System.out.println("testDrawFromEmptyDeck passed");
+    }
 }
