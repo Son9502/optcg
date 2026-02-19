@@ -53,7 +53,7 @@ public class Zone {
     }
     public Card remove(){
         if (!cards.isEmpty()) {
-            Card removedCard = cards.removeLast();
+            Card removedCard = cards.remove();
             removedCard.setZone(null);
             return removedCard;
         }

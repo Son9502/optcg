@@ -12,6 +12,7 @@ public class GameStateTest {
     /**
      * Test that drawing a card moves it from the deck to the hand
      */
+    @Test
     void testdrawCard() {
         Player p1 = new Player();
         Player p2 = new Player();
@@ -42,7 +43,7 @@ public class GameStateTest {
         assertTrue(p1.getHand().contains(card));
         assertFalse(p1.getDeck().contains(card));
     }
-    
+
     @Test
     /**
      * Test that drawing a Don card moves it from the Don deck to the hand
@@ -53,9 +54,9 @@ public class GameStateTest {
         Player p2 = new Player();
         GameState gameState = new GameState(p1, p2);
         p1.getDonDeck().add(donCard);
-        assertEquals(0, p1.getHand().size());
+        assertEquals(0, p1.getCost().size());
         gameState.drawDon(p1, 1);
-        assertTrue(p1.getHand().contains(donCard));
+        assertTrue(p1.getCost().contains(donCard)); // Don cards go to cost zone, not hand
         assertFalse(p1.getDonDeck().contains(donCard));
     }
 
@@ -220,7 +221,7 @@ public class GameStateTest {
         }
         assertEquals(5, p1.getLife().size());
         for (int i = 0; i < 5; i++) {
-            Card lifeCard = p1.getLife().getCards().getLast();
+            Card lifeCard = p1.getLife().getCards().get(0); // add() uses addFirst; remove() uses removeFirst → index 0 is drawn
             gameState.removeLife(p1);
             assertEquals(5 - (i + 1), p1.getLife().size());
             assertTrue(p1.getHand().contains(lifeCard));
@@ -267,20 +268,12 @@ public class GameStateTest {
         assertFalse(card.getAttachedDons().contains(donCard));
     }
 
-    @Test
     /**
      * Test that refreshing the game state at the end of a turn correctly resets the
      * state of cards (e.g., untapping, refreshing abilities) and updates any
      * relevant game variables
      */
     void testRefreshBehavior() {
-        // Player p1 = new Player();
-        // Player p2 = new Player();
-        // GameState gameState = new GameState(p1, p2);
-        // // Setup initial conditions (e.g., tap some cards, use abilities)
-        // // Call the refresh method
-        // // Assert that the cards are untapped and abilities are refreshed
-
 
     }
 
@@ -318,7 +311,6 @@ public class GameStateTest {
     }
 
     // Future tests to consider:
-    @Test
     void testCostReduction() {
 
     }

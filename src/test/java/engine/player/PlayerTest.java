@@ -15,6 +15,7 @@ public class PlayerTest {
         assertTrue(player.getTrash().isEmpty());
         assertTrue(player.getLife().isEmpty());
         assertTrue(player.getCost().isEmpty());
+        assertTrue(player.getStage().isEmpty());
         assertTrue(player.getDonDeck().isEmpty());
     }
 

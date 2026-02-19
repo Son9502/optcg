@@ -3,6 +3,7 @@ package engine.battle;
 import engine.cards.Card;
 import engine.cards.Leader;
 import engine.core.GameState;
+import engine.core.TurnManager;
 import engine.player.Player;
 
 import java.util.ArrayList;
@@ -10,9 +11,11 @@ import java.util.List;
 
 public class BattleSystem {
     private final GameState gameState;
+    private final TurnManager turnManager;
 
-    public BattleSystem(GameState gameState) {
+    public BattleSystem(GameState gameState, TurnManager turnManager) {
         this.gameState = gameState;
+        this.turnManager = turnManager;
     }
 
     /**
@@ -24,6 +27,22 @@ public class BattleSystem {
      */
     public boolean canAttack(Card attacker) {
         return !attacker.isRested();
+    }
+
+    /**
+     * Calculates the effective power of a card for battle purposes.
+     * For the active player's cards, this includes any Don boosts. For the
+     * opponent's cards, this is just the base power.
+     *
+     * @param card The card whose effective power is being calculated.
+     * @return The effective power of the card.
+     */
+    private int getEffectivePower(Card card) {
+        // Don boost applies only to the active player's cards
+        if (card.getOwner() == turnManager.getActivePlayer()) {
+            return card.getTotalPower(); // base + Dons
+        }
+        return card.getBasePower(); // base only
     }
 
     /**
@@ -83,7 +102,8 @@ public class BattleSystem {
 
     /**
      * Resolves a battle between an attacker and a target. Compares the attacker's
-     * total power against the target's total power plus any counter boost. If the
+     * effective power against the target's effective power plus any counter boost.
+     * If the
      * attacker wins, the appropriate consequence is applied: the target loses a
      * life card if it is the opponent's leader, or is sent to trash if it is a
      * character. Rests the attacker regardless of outcome.
@@ -95,17 +115,19 @@ public class BattleSystem {
     public void resolve(Card attacker, Card target, int counterBoost) {
         attacker.rest();
 
-        int attackerPower = attacker.getTotalPower();
-        int defenderPower = target.getTotalPower() + counterBoost;
+        int attackerPower = getEffectivePower(attacker);
+        int defenderPower = getEffectivePower(target) + counterBoost;
 
-        if (attackerPower > defenderPower) {
+        if (attackerPower >= defenderPower) {
             Player targetOwner = target.getOwner();
             if (target instanceof Leader) {
                 gameState.removeLife(targetOwner);
             } else {
                 gameState.trash(targetOwner, target);
+                // Detach any Dons from the target as it leaves the field
+                target.detachDonCards();
             }
         }
-        // If attacker power <= defender power, attack fails — no consequence
+        // If attacker power < defender power, attack fails — no consequence
     }
 }
