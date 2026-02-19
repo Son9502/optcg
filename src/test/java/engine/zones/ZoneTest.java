@@ -102,7 +102,6 @@ public class ZoneTest {
         assertEquals(trash, card.getZone());
         assertEquals(0, hand.size());
         assertEquals(1, trash.size());
-        assertTrue(card.getZone() == trash);
         System.out.println("testMoveCard passed");
     }
 
@@ -123,10 +122,13 @@ public class ZoneTest {
         assertEquals(0, hand.size());
         System.out.println("removeMissingCard passed");
     }
-    @Test 
+
+    @Test
     /**
-     * Tests the shuffle method of the Zone class by adding multiple cards to a zone,
-     * shuffling the zone, and verifying that all cards are still present in the zone
+     * Tests the shuffle method of the Zone class by adding multiple cards to a
+     * zone,
+     * shuffling the zone, and verifying that all cards are still present in the
+     * zone
      * after shuffling. It also checks that the size of the zone remains unchanged
      * after shuffling. If all assertions pass, it prints a success message.
      */
