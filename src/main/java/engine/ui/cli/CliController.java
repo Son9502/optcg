@@ -12,6 +12,8 @@ import java.util.List;
 
 import engine.cards.Card;
 import engine.cards.DonCard;
+import engine.cards.Leader;
+import engine.cards.types.Color;
 import engine.battle.BattleSystem;
 
 public class CliController {
@@ -20,11 +22,24 @@ public class CliController {
     private final BattleSystem battleSystem;
     private final TurnManager turnManager;
 
+    // ANSI escape codes for colored text output
+    // Will be used to show cost and color of cards in the CLI for better
+    // readability
+    public static final String RESET = "\u001B[0m";
+    public static final String BLACK = "\u001B[30m";
+    public static final String RED = "\u001B[31m";
+    public static final String GREEN = "\u001B[32m";
+    public static final String YELLOW = "\u001B[33m";
+    public static final String BLUE = "\u001B[34m";
+    public static final String PURPLE = "\u001B[35m";
+    public static final String WHITE  = "\u001B[37m";
+    public static final String BOLD   = "\u001B[1m";
+
     public CliController(GameState gameState, TurnManager turnManager) {
         this.gameState = gameState;
         this.inputHandler = new InputHandler();
-        this.battleSystem = new BattleSystem(gameState);
         this.turnManager = turnManager;
+        this.battleSystem = new BattleSystem(gameState, turnManager);
     }
 
     // -------------------------------------------------------------------------
@@ -33,6 +48,47 @@ public class CliController {
 
     private Player getOpponent(Player player) {
         return (player == gameState.getPlayer1()) ? gameState.getPlayer2() : gameState.getPlayer1();
+    }
+
+    /**
+     * Wraps text in the ANSI color matching the given card color.
+     * Returns plain text if color is null.
+     *
+     * NOTE: dual-color cards (e.g. Red/Yellow leaders) require CardData to expose
+     * a second Color field. When that is added, this method should accept a List<Color>
+     * and alternate the ANSI codes character-by-character across the name string.
+     */
+    private String colorize(String text, Color color) {
+        if (color == null) return text;
+        switch (color) {
+            case Red:    return RED    + text + RESET;
+            case Green:  return GREEN  + text + RESET;
+            case Blue:   return BLUE   + text + RESET;
+            case Yellow: return YELLOW + text + RESET;
+            case Purple: return PURPLE + text + RESET;
+            case Black:  return BLACK  + text + RESET;
+            default:     return text;
+        }
+    }
+
+    /**
+     * Wraps text in bold + the ANSI color matching the given card color.
+     * Always appends RESET so surrounding text is unaffected.
+     * Safe when color is null — produces bold plain text.
+     */
+    private String boldColorize(String text, Color color) {
+        String code = BOLD;
+        if (color != null) {
+            switch (color) {
+                case Red:    code += RED;    break;
+                case Green:  code += GREEN;  break;
+                case Blue:   code += BLUE;   break;
+                case Yellow: code += YELLOW; break;
+                case Purple: code += PURPLE; break;
+                case Black:  code += BLACK;  break;
+            }
+        }
+        return code + text + RESET;
     }
 
     /**
@@ -49,7 +105,15 @@ public class CliController {
         }
         for (int i = 0; i < cards.size(); i++) {
             Card card = cards.get(i);
-            String name = (card.getData() != null) ? card.getData().name() : "Don Card";
+            String name;
+            if (card instanceof DonCard) {
+                String raw = (card.getData() != null) ? card.getData().name() : "DON!!";
+                name = WHITE + raw + RESET;
+            } else if (card.getData() != null) {
+                name = colorize(card.getData().name(), card.getData().color());
+            } else {
+                name = "Unknown Card";
+            }
             System.out.printf("%d. %s%n", i + 1, name);
         }
         System.out.println("0. Cancel");
@@ -68,17 +132,25 @@ public class CliController {
      * @param opponent The opponent player.
      */
     public void printStatus(Player active, Player opponent) {
-        System.out.println("=== " + active.getName() + " vs " + opponent.getName() + " ===");
+        Color activeColor   = (active.getLeader()   != null) ? active.getLeader().getData().color()   : null;
+        Color opponentColor = (opponent.getLeader()  != null) ? opponent.getLeader().getData().color() : null;
+        System.out.println("=== " + boldColorize(active.getName(), activeColor)
+                + " vs " + boldColorize(opponent.getName(), opponentColor) + " ===");
 
-        // Don counts derived from cost zone (activeDon/restedDon fields are not yet updated)
+        // Don counts derived from cost zone (activeDon/restedDon fields are not yet
+        // updated)
         long yourActiveDon = active.getCost().getCards().stream()
-                .filter(c -> c instanceof DonCard && !c.isRested()).count();
+                .filter(c -> c instanceof DonCard d && !d.isRested() && !d.isAttached()).count();
+        long yourAttachedDon = active.getCost().getCards().stream()
+                .filter(c -> c instanceof DonCard d && d.isAttached()).count();
         long yourRestedDon = active.getCost().getCards().stream()
-                .filter(c -> c instanceof DonCard && c.isRested()).count();
+                .filter(c -> c instanceof DonCard d && d.isRested()).count();
         long oppActiveDon = opponent.getCost().getCards().stream()
-                .filter(c -> c instanceof DonCard && !c.isRested()).count();
+                .filter(c -> c instanceof DonCard d && !d.isRested() && !d.isAttached()).count();
+        long oppAttachedDon = opponent.getCost().getCards().stream()
+                .filter(c -> c instanceof DonCard d && d.isAttached()).count();
         long oppRestedDon = opponent.getCost().getCards().stream()
-                .filter(c -> c instanceof DonCard && c.isRested()).count();
+                .filter(c -> c instanceof DonCard d && d.isRested()).count();
 
         // Stage cards
         String yourStage = active.getStage().isEmpty() ? "None"
@@ -92,10 +164,10 @@ public class CliController {
         String oppTrashTop = opponent.getTrash().isEmpty() ? "Empty"
                 : opponent.getTrash().getCards().get(0).getData().name();
 
-        System.out.printf("Your  | Life: %d | Don: %d active, %d rested | Stage: %s | Trash top: %s%n",
-                active.getLife().size(), yourActiveDon, yourRestedDon, yourStage, yourTrashTop);
-        System.out.printf("Opp   | Life: %d | Don: %d active, %d rested | Stage: %s | Trash top: %s%n",
-                opponent.getLife().size(), oppActiveDon, oppRestedDon, oppStage, oppTrashTop);
+        System.out.printf("Your  | Life: %d | Don: %d active, %d attached, %d rested | Stage: %s | Trash top: %s%n",
+                active.getLife().size(), yourActiveDon, yourAttachedDon, yourRestedDon, yourStage, yourTrashTop);
+        System.out.printf("Opp   | Life: %d | Don: %d active, %d attached, %d rested | Stage: %s | Trash top: %s%n",
+                opponent.getLife().size(), oppActiveDon, oppAttachedDon, oppRestedDon, oppStage, oppTrashTop);
     }
 
     /**
@@ -105,9 +177,21 @@ public class CliController {
      */
     public void printHand(Player owner) {
         List<Card> cards = owner.getHand().getCards();
-        System.out.println("Your Hand: ");
+        System.out.println("--- " + owner.getName() + "'s Hand (" + cards.size() + " cards) ---");
+        if (cards.isEmpty()) {
+            System.out.println("  (empty)");
+            return;
+        }
         for (int i = 0; i < cards.size(); i++) {
-            System.out.printf("- %s%n", cards.get(i));
+            Card card = cards.get(i);
+            if (card.getData() == null) {
+                System.out.printf("%d. Unknown Card%n", i + 1);
+                continue;
+            }
+            String name = boldColorize(card.getData().name(), card.getData().color());
+            String type = (card.getData().cardType() != null) ? " [" + card.getData().cardType() + "]" : "";
+            System.out.printf("%d. %s%s  |  Cost: %d, Power: %d%n",
+                    i + 1, name, type, card.getData().cost(), card.getData().power());
         }
     }
 
@@ -143,14 +227,36 @@ public class CliController {
      * @param player The player whose field is being printed.
      */
     public void printField(Player player) {
-        StringBuilder fieldBuilder = new StringBuilder();
-        fieldBuilder.append(player.getName()).append("'s Field:\n");
-        fieldBuilder.append(String.format("%s\n", player.getLeader()));
-        fieldBuilder.append("Characters:\n");
-        for (Card card : player.getField().getCards()) {
-            fieldBuilder.append(String.format("- %s\n", card));
+        System.out.println("--- " + player.getName() + "'s Field ---");
+
+        // Leader
+        Leader leader = player.getLeader();
+        if (leader != null && leader.getData() != null) {
+            String name   = boldColorize(leader.getData().name(), leader.getData().color());
+            String rested = leader.isRested() ? "Rested" : "Active";
+            String dons   = leader.countDon() > 0 ? " | Dons: " + leader.countDon() : "";
+            int power = (turnManager.getActivePlayer() == player) ? leader.getTotalPower() : leader.getBasePower();
+            System.out.printf("  %s [Leader]  |  Power: %d | Life: %d | %s%s%n",
+                    name, power, leader.getLifePoints(), rested, dons);
         }
-        System.out.println(fieldBuilder.toString());
+
+        // Characters
+        List<Card> fieldCards = player.getField().getCards();
+        System.out.println("  Characters (" + fieldCards.size() + "/5):");
+        if (fieldCards.isEmpty()) {
+            System.out.println("    (none)");
+        } else {
+            for (Card card : fieldCards) {
+                if (card.getData() == null) { System.out.println("    - Unknown Card"); continue; }
+                String name   = boldColorize(card.getData().name(), card.getData().color());
+                String type   = (card.getData().cardType() != null) ? " [" + card.getData().cardType() + "]" : "";
+                int power = (turnManager.getActivePlayer() == player) ? card.getTotalPower() : card.getBasePower();
+                String rested = card.isRested() ? "Rested" : "Active";
+                String dons   = card.countDon() > 0 ? " | Dons: " + card.countDon() : "";
+                System.out.printf("    - %s%s  |  Power: %d | %s%s%n",
+                        name, type, power, rested, dons);
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -188,15 +294,18 @@ public class CliController {
         while (!finished) {
             printStatus(currentPlayer, opponent);
             System.out.println("\nCurrent Phase: " + turnManager.getCurrentPhase().getName());
-            System.out.println("1. Attack");
-            System.out.println("2. Reveal Hand");
-            System.out.println("3. Reveal Your Field");
-            System.out.println("4. Reveal Opponent's Field");
-            System.out.println("5. Play Card");
-            System.out.println("6. Attach Don");
-            System.out.println("7. End Phase");
-            int choice = inputHandler.readInt("Choose an action: ", 1, 7);
-            switch (choice) {
+            int mod = (turnManager.getTurnCount() < 3) ? 0 : 1; // Restrict certain actions on the first turn
+            if (turnManager.getTurnCount() >= 3) {
+                System.out.printf("%d. Attack\n", mod);
+            }
+            System.out.printf("%d. Reveal Hand\n", mod + 1);
+            System.out.printf("%d. Reveal Your Field\n", mod + 2);
+            System.out.printf("%d. Reveal Opponent's Field\n", mod + 3);
+            System.out.printf("%d. Play Card\n", mod + 4);
+            System.out.printf("%d. Attach Don\n", mod + 5);
+            System.out.printf("%d. End Phase\n", mod + 6);
+            int choice = inputHandler.readInt("Choose an action: ", 1, 7 - (mod == 0 ? 1 : 0));
+            switch (choice + (mod == 0 ? 1 : 0)) {
                 case 1:
                     battle(currentPlayer);
                     break;
@@ -233,6 +342,10 @@ public class CliController {
      * @param currentPlayer The attacking player.
      */
     public void battle(Player currentPlayer) {
+        if (turnManager.getTurnCount() < 3) {
+            System.out.println("Attacking is not allowed on the first turn.");
+            return;
+        }
         Player opponent = getOpponent(currentPlayer);
 
         List<Card> attackers = battleSystem.getValidAttackers(currentPlayer);
@@ -243,7 +356,8 @@ public class CliController {
 
         System.out.println("Select an attacker:");
         Card attacker = selectCard(attackers, "Attacker: ");
-        if (attacker == null) return;
+        if (attacker == null)
+            return;
 
         List<Card> targets = battleSystem.getValidTargets(opponent);
         if (targets.isEmpty()) {
@@ -253,7 +367,8 @@ public class CliController {
 
         System.out.println("Select a target:");
         Card target = selectCard(targets, "Target: ");
-        if (target == null) return;
+        if (target == null)
+            return;
 
         System.out.println(attacker.getData().name() + " attacks " + target.getData().name() + "!");
 
@@ -297,12 +412,27 @@ public class CliController {
             return;
         }
 
-        System.out.println("Select a card to play:");
-        Card selected = selectCard(playable, "Card: ");
-        if (selected == null) return;
+        long availableDon = currentPlayer.getCost().getCards().stream()
+                .filter(c -> c instanceof DonCard && !c.isRested()).count();
 
+        System.out.println("Select a card to play:");
+        for (int i = 0; i < playable.size(); i++) {
+            Card card = playable.get(i);
+            String name = colorize(card.getData().name(), card.getData().color());
+            int cost  = card.getData().cost();
+            int power = card.getData().power();
+            String stats = (availableDon >= cost)
+                    ? GREEN + "(Cost: " + cost + ", Power: " + power + ")" + RESET
+                    : RED   + "(Cost: " + cost + ", Power: " + power + ")" + RESET;
+            System.out.printf("%d. %s %s%n", i + 1, name, stats);
+        }
+        System.out.println("0. Cancel");
+        int choice = inputHandler.readInt("Card: ", 0, playable.size());
+        if (choice == 0) return;
+
+        Card selected = playable.get(choice - 1);
         gameState.playCard(currentPlayer, selected);
-        System.out.println("Played: " + selected.getData().name());
+        System.out.println("Played: " + colorize(selected.getData().name(), selected.getData().color()));
     }
 
     /**
@@ -315,7 +445,7 @@ public class CliController {
         // Get non-rested Dons from cost zone
         List<Card> availableDons = new ArrayList<>();
         for (Card card : currentPlayer.getCost().getCards()) {
-            if (card instanceof DonCard && !card.isRested()) {
+            if (card instanceof DonCard && !card.isRested() && !((DonCard) card).isAttached()) {
                 availableDons.add(card);
             }
         }
@@ -324,23 +454,28 @@ public class CliController {
             System.out.println("No available Don cards to attach.");
             return;
         }
+        // For simplicity, auto-select the first available Don
+        DonCard selectedDon = (DonCard) availableDons.get(0); 
+        
+        if (selectedDon == null)
+            return;
 
-        System.out.println("Select a Don to attach:");
-        Card selectedDon = selectCard(availableDons, "Don: ");
-        if (selectedDon == null) return;
-
-        // Get characters on field
+        // Get characters on field (and Leader if not rested) to attach Don to
         List<Card> fieldCards = new ArrayList<>(currentPlayer.getField().getCards());
+        if (currentPlayer.getLeader() != null && !currentPlayer.getLeader().isRested()) {
+            fieldCards.add(currentPlayer.getLeader());
+        }
         if (fieldCards.isEmpty()) {
-            System.out.println("No characters on the field to attach to.");
+            System.out.println("No characters to attach to.");
             return;
         }
 
         System.out.println("Select a character to attach the Don to:");
         Card target = selectCard(fieldCards, "Character: ");
-        if (target == null) return;
+        if (target == null)
+            return;
 
-        gameState.attachDon(target, (DonCard) selectedDon);
+        gameState.attachDon(target, selectedDon);
         System.out.println("Don attached to " + target.getData().name()
                 + " (total power: " + target.getTotalPower() + ")");
     }
