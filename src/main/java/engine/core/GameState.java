@@ -4,6 +4,7 @@ import engine.cards.Card;
 import engine.cards.abilities.Cost;
 import engine.player.Player;
 import engine.cards.DonCard;
+import engine.cards.Leader;
 import engine.zones.Zone;
 
 public class GameState {
@@ -110,7 +111,7 @@ public class GameState {
             }
             DonCard drawnCard = player.getDonDeck().drawDon();
             if (drawnCard != null) {
-                moveCard(drawnCard, player.getHand());
+                moveCard(drawnCard, player.getCost());
             }
         }
     }
@@ -120,10 +121,10 @@ public class GameState {
      * 
      * @param player The player who is trashing the card. This is the player whose
      *               trash zone will receive the trashed card.
-     * @param card The card to be trashed. The card will be removed from its
-     *             current
-     *             zone
-     *             and added to the trash zone.
+     * @param card   The card to be trashed. The card will be removed from its
+     *               current
+     *               zone
+     *               and added to the trash zone.
      */
     public void trash(Player player, Card card) {
         moveCard(card, player.getTrash());
@@ -227,6 +228,28 @@ public class GameState {
     }
 
     /**
+     * Detach all Don cards from a target card. This method will check if the
+     * specified
+     * target card has any attached Don cards and if the player has enough resources
+     * to pay the cost of detaching the Don cards. If the conditions are met,
+     * it will detach all Don cards from the target card and move them to the cost
+     * zone
+     * If the conditions are not met, it will print a message indicating that the
+     * Don
+     * cards cannot be detached.
+     * 
+     * @param card The target card from which all Don cards will be detached. This
+     *             is typically a Character card that has multiple Don cards
+     *             attached to it.
+     */
+    public void detachDonCards(Card card) {
+        int attachedDons = card.getAttachedDons().size();
+        for (int i = 0; i < attachedDons; i++) {
+            detachDon(card);
+        }
+    }
+
+    /**
      * Gain a life point. This method will increase the player's life points by one
      * and move a card from the hand to the life zone.
      * 
@@ -256,6 +279,39 @@ public class GameState {
         }
         Card cardToRemove = player.getLife().draw();
         moveCard(cardToRemove, player.getHand());
+        Leader leader = player.getLeader();
+        if (leader != null) leader.takeLife();
+    }
+
+    /**
+     * Remove a specified amount of life points from a player. This method will
+     * decrease the player's life points by the specified amount and move the
+     * corresponding number of cards from the life zone to the hand. If the player
+     * has no more life points after the removal, it will print a message indicating
+     * that the player has been defeated.
+     * 
+     * @param player The player whose life points will be removed. This is the
+     *               player who will lose life points and have cards moved from
+     *               their life zone to their hand.
+     * @param amount The number of life points to be removed. This is the amount by
+     *               which the player's life points will be decreased, and it will
+     *               determine how many cards are moved from the life zone to the
+     *               hand.
+     */
+    public void removeLife(Player player, int amount) {
+        for (int i = 0; i < amount; i++) {
+            if (player.getLife().isEmpty()) {
+                System.out.println(player.getName() + " has no more life points and has been defeated.");
+                System.out.println((player == player1 ? player2.getName() : player1.getName()) + " wins the game!");
+                gameOver = true;
+                winner = (player == player1) ? player2 : player1;
+                return;
+            }
+            Card cardToRemove = player.getLife().draw();
+            moveCard(cardToRemove, player.getHand());
+        }
+        Leader leader = player.getLeader();
+        if (leader != null) leader.takeLife(amount);
     }
 
     /**
@@ -279,11 +335,33 @@ public class GameState {
             if (card.isRested()) {
                 card.activate();
             } else {
-                for (int i = 0; i < card.getAttachedDons().size(); i++) {
-                    detachDon(card);
-                }
+                detachDonCards(card);
             }
         }
+    }
+
+    /**
+     * Refresh the leader at the start of a turn by activating it if it is rested,
+     * or
+     * detaching all attached Don cards if it is already active. The leader is a
+     * special card that can have Don cards attached to it, and this method ensures
+     * that
+     * it is properly refreshed at the start of each turn. If the leader is rested,
+     * it will be activated. If the leader is already active, all attached Don cards
+     * will be detached and returned to the cost area. If the leader has no attached
+     * Don cards, it will simply be activated if necessary.
+     * 
+     * @param player The player whose leader will be refreshed. This is the player
+     *               whose leader card will be checked and refreshed at the start of
+     *               their turn.
+     */
+    public void refreshLeader(Player player) {
+        Leader leader = player.getLeader();
+        if (leader == null) return;
+        if (leader.isRested()) {
+            leader.activate();
+        }
+        detachDonCards(leader);
     }
 
     public void resolveBattle(Card attacker, Card defender) {

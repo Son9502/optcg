@@ -29,8 +29,9 @@ public class TurnManager {
         switch (currentPhase) {
             case REFRESH:
                 // Implement REFRESH phase logic (e.g., refresh characters, reset abilities, etc.)
-                state.refreshDon(activePlayer);
+                state.refreshLeader(activePlayer);
                 state.refreshField(activePlayer);
+                state.refreshDon(activePlayer);
                 currentPhase = Phase.DRAW;
                 break;
             case DRAW:
@@ -54,6 +55,7 @@ public class TurnManager {
     private void endTurn() {
         // Implement any end-of-turn cleanup or effects here
         firstTurn = false; // After the first turn, set this to false
+        
         activePlayer = (activePlayer == state.getPlayer1()) ? state.getPlayer2() : state.getPlayer1();
         turnCount++;
         currentPhase = Phase.REFRESH; // Start the next player's turn with the REFRESH phase

@@ -22,6 +22,7 @@ public class Card {
     public Card(String card_id, CardData data, Player owner) {
         this(card_id, data, owner, null);
     }
+
     public Card(String card_id, CardData data, Player owner, Zone zone) {
         this.card_id = card_id;
         this.data = data;
@@ -70,6 +71,7 @@ public class Card {
     public void setZone(Zone zone) {
         this.zone = zone;
     }
+
     public void setController(Player controller) {
         this.controller = controller;
     }
@@ -130,7 +132,35 @@ public class Card {
             System.out.println("No Don cards to detach from " + card_id);
             return null;
         }
-        return attachedDons.remove(attachedDons.size() - 1);
+        DonCard don = attachedDons.remove(attachedDons.size() - 1);
+        don.rest(); // Rest the Don card as it is detached
+        return don;
+    }
+
+    /**
+     * Detach all Don cards from this card.
+     */
+    public void detachDonCards() {
+        if (attachedDons.isEmpty()) {
+            System.out.println("No Don cards to detach from " + card_id);
+            return;
+        }
+        for (DonCard don : attachedDons) {
+            don.rest(); // Rest the Don card as it is detached
+        }
+        attachedDons.clear();
+    }
+
+
+    /**
+     * Get the base power of this card, which is defined in its CardData. This does
+     * not include any power boosts from attached Don cards. For the total power
+     * including attached Don cards, use getTotalPower() instead.
+     * 
+     * @return The base power of this card.
+     */
+    public int getBasePower() {
+        return data.power();
     }
 
     /**
@@ -147,9 +177,11 @@ public class Card {
         }
         return totalPower;
     }
+
     /**
      * Count the number of rested Don cards attached to this card. This is used for
      * cards that can have Don cards attached to them, such as monsters.
+     * 
      * @return The number of rested Don cards attached to this card.
      */
     public int countRestedDon() {
@@ -161,18 +193,22 @@ public class Card {
         }
         return count;
     }
+
     /**
      * Count the total number of Don cards attached to this card. This is used for
      * cards that can have Don cards attached to them, such as monsters.
+     * 
      * @return The total number of Don cards attached to this card.
      */
     public int countDon() {
         return attachedDons.size();
     }
+
     @Override
     public String toString() {
-        String card = "Card: [Name=" + data.name() + "\n" +  "Power=" + getTotalPower() + "\n" + "Cost=" + data.cost() + "\n" + "Description=" + data.description();
-        if (zone.getType() == ZoneType.CHARACTER) {
+        String card = "Card: [Name=" + data.name() + "\n" + "Power=" + getTotalPower() + "\n" + "Cost=" + data.cost()
+                + "\n" + "Description=" + data.description();
+        if (zone != null && zone.getType() == ZoneType.CHARACTER) {
             card += "\n" + "Rested=" + rested;
             if (!attachedDons.isEmpty()) {
                 card += "\n" + "Attached Dons: " + attachedDons.size();
