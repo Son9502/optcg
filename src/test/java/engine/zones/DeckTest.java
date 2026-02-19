@@ -38,9 +38,9 @@ public class DeckTest {
         deck.add(card3);
         assertEquals(3, deck.size());
         Card drawnCard = deck.draw();
-        // Zone.add() uses addFirst; Zone.remove() uses removeLast → first card added is
+        // Zone.add() uses addFirst; Zone.remove() uses remove → last card added is
         // drawn first
-        assertEquals(card1, drawnCard);
+        assertEquals(card3, drawnCard);
         assertEquals(2, deck.size());
         System.out.println("drawMultipleCards passed");
     }

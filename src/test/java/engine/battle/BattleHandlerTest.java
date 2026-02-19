@@ -6,11 +6,11 @@ import engine.cards.CardData;
 import engine.cards.Leader;
 import engine.core.GameState;
 import engine.player.Player;
+import engine.core.TurnManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 public class BattleHandlerTest {
@@ -19,6 +19,7 @@ public class BattleHandlerTest {
     private Player p2;
     private GameState gameState;
     private BattleSystem battleSystem;
+    private TurnManager turnManager;
 
     @BeforeEach
     void setUp() {
@@ -31,7 +32,8 @@ public class BattleHandlerTest {
         p2.setLeader(new Leader("l2", leaderData, p2));
 
         gameState = new GameState(p1, p2);
-        battleSystem = new BattleSystem(gameState);
+        turnManager = new TurnManager(gameState);
+        battleSystem = new BattleSystem(gameState, turnManager);
     }
 
     // --- canAttack ---
@@ -150,24 +152,26 @@ public class BattleHandlerTest {
     }
 
     @Test
-    void resolve_tiedPower_attackFails() {
+    void resolve_tiedPower_attackerWins() {
+        // Rule: attacker wins if power >= defender power, so a tie goes to the attacker
         Card attacker = TestUtils.makeCard(p1, 5000);
         Card target = TestUtils.makeCard(p2, 5000);
         p2.getField().add(target);
         target.rest();
         battleSystem.resolve(attacker, target, 0);
-        assertTrue(p2.getField().contains(target));
-        assertFalse(p2.getTrash().contains(target));
+        assertTrue(p2.getTrash().contains(target));
+        assertFalse(p2.getField().contains(target));
     }
 
     @Test
     void resolve_counterBoostSavesDefender() {
+        // Counter must push the defender's power strictly above the attacker's to save them
         Card attacker = TestUtils.makeCard(p1, 6000);
         Card target = TestUtils.makeCard(p2, 5000);
         p2.getField().add(target);
         target.rest();
-        // 1000 counter ties the power — attacker needs strictly greater, so attack fails
-        battleSystem.resolve(attacker, target, 1000);
+        // 2000 counter: 5000 + 2000 = 7000 > 6000 — attack fails, defender saved
+        battleSystem.resolve(attacker, target, 2000);
         assertTrue(p2.getField().contains(target));
         assertFalse(p2.getTrash().contains(target));
     }

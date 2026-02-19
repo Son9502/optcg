@@ -54,9 +54,9 @@ public class GameStateTest {
         Player p2 = new Player();
         GameState gameState = new GameState(p1, p2);
         p1.getDonDeck().add(donCard);
-        assertEquals(0, p1.getHand().size());
+        assertEquals(0, p1.getCost().size());
         gameState.drawDon(p1, 1);
-        assertTrue(p1.getHand().contains(donCard));
+        assertTrue(p1.getCost().contains(donCard)); // Don cards go to cost zone, not hand
         assertFalse(p1.getDonDeck().contains(donCard));
     }
 
@@ -221,7 +221,7 @@ public class GameStateTest {
         }
         assertEquals(5, p1.getLife().size());
         for (int i = 0; i < 5; i++) {
-            Card lifeCard = p1.getLife().getCards().getLast();
+            Card lifeCard = p1.getLife().getCards().get(0); // add() uses addFirst; remove() uses removeFirst → index 0 is drawn
             gameState.removeLife(p1);
             assertEquals(5 - (i + 1), p1.getLife().size());
             assertTrue(p1.getHand().contains(lifeCard));

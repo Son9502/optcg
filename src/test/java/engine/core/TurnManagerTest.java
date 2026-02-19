@@ -102,7 +102,7 @@ public class TurnManagerTest {
         turnManager.advancePhase(); // DON → MAIN, draws 1 Don for p1
 
         assertEquals(Phase.MAIN, turnManager.getCurrentPhase());
-        assertEquals(1, player1.getHand().size());
+        assertEquals(1, player1.getCost().size()); // Don cards go to the cost zone, not hand
     }
 
     @Test
