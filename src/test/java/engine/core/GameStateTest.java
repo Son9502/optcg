@@ -12,6 +12,7 @@ public class GameStateTest {
     /**
      * Test that drawing a card moves it from the deck to the hand
      */
+    @Test
     void testdrawCard() {
         Player p1 = new Player();
         Player p2 = new Player();
@@ -42,7 +43,7 @@ public class GameStateTest {
         assertTrue(p1.getHand().contains(card));
         assertFalse(p1.getDeck().contains(card));
     }
-    
+
     @Test
     /**
      * Test that drawing a Don card moves it from the Don deck to the hand
@@ -267,20 +268,12 @@ public class GameStateTest {
         assertFalse(card.getAttachedDons().contains(donCard));
     }
 
-    @Test
     /**
      * Test that refreshing the game state at the end of a turn correctly resets the
      * state of cards (e.g., untapping, refreshing abilities) and updates any
      * relevant game variables
      */
     void testRefreshBehavior() {
-        // Player p1 = new Player();
-        // Player p2 = new Player();
-        // GameState gameState = new GameState(p1, p2);
-        // // Setup initial conditions (e.g., tap some cards, use abilities)
-        // // Call the refresh method
-        // // Assert that the cards are untapped and abilities are refreshed
-
 
     }
 
@@ -318,7 +311,6 @@ public class GameStateTest {
     }
 
     // Future tests to consider:
-    @Test
     void testCostReduction() {
 
     }
