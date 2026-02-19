@@ -200,32 +200,48 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 - Field limit enforcement (5 characters max)
 - Real card data pipeline: raw JSON → compiled JSON → `CardDatabase`
 
-### Phase 2 — Abilities and Effects
-- Implement keyword effects: Rush, Blocker, Trigger, Counter
-- Wire `Ability` / `Effect` / `Condition` / `Trigger` system
-- Event card resolution
+### Phase 2 — Abilities, Effects, and Keywords
+- Implement the `Keyword` system as the first deliverable of the ability framework: **Rush**, **Blocker**, **Trigger**, **Counter**
+  - Rush: character can attack the turn it is played
+  - Blocker: card can intercept an attack targeting another card
+  - Trigger: activates when a life card is revealed, at no DON cost
+  - Counter: played from hand during the opponent's attack; card goes to trash afterward
+- Wire the full `Ability` / `Effect` / `Condition` / `Trigger` / `Cost` system so arbitrary card text can be modeled
+- Event card resolution (play, resolve effect, move to trash)
 
-### Phase 3 — Training Mode
+### Phase 3 — Graphics / GUI
+- Replace `CliController` with a graphical UI layer; the rules engine beneath stays unchanged
+- Render the board: character area, hand, life zone, cost zone, trash, stage
+- Card display with images, power, cost, and rest/active state
+- Animated zone transitions (play card, attack, draw, life reveal)
+- Design target: JavaFX or equivalent; `CliController` kept as a fallback / debug mode
+
+### Phase 4 — Training Mode
 - **Tutorial**: guided walkthrough of rules and actions
 - **Self vs Self**: control both sides from one machine
 - **Self vs AI**: automated opponent with configurable difficulty and playstyle
 
-### Phase 4 — Battle Mode
+### Phase 5 — Battle Mode
 - **Local play**: two players on one machine
 - **Online play**: vs friend (gamer tag), vs local (region matchmaking), vs global
 - **Tournament mode**: bracket-style matchups
 
-### Phase 5 — Simulation and Replay *(TCG TV)*
-- Record full game history; replay any previous match
-- Pause replay at any moment and take over either side
-- AI reconstruction: analyze opponent playstyle and simulate their decision-making
-- Observe live or recorded games from other players
+### Phase 6 — Simulation
+- AI reconstruction: analyze a recorded opponent's playstyle and simulate their decision-making
+- Take over either side of a saved game at any point in time
+- AI plays as the opponent from that point forward (analyzes and reconstructs behavior)
 
-### Phase 6 — Story Mode *(future)*
+### Phase 7 — Story Mode *(future)*
 - Choose a leader (Luffy, Zoro, …) and run a campaign
 - Visual novel-style plot progression
 - Progressive AI difficulty following the story arc
 - Potential card unlocks through campaign progress
+
+### Phase 8 — Replay & TCG TV *(future)*
+- Record and replay any previous match in full
+- Pause replay at any moment and take over either side manually
+- Observe live or recorded games from other players (on-air and off-air)
+- Broadcast infrastructure for tournament coverage
 
 ---
 
