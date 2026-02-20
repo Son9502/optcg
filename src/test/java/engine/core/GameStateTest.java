@@ -157,6 +157,55 @@ public class GameStateTest {
     }
 
     @Test
+    void testPlayCard_fieldFull_characterRejected() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData charData = new CardData("C", "SET", "Char", "", "Set",
+                null, CardType.Character, null, null, 1, 1000, null, null, 0.0);
+
+        // Fill the field to the 5-card limit
+        for (int i = 0; i < 5; i++) {
+            Card c = new Card("c" + i, charData, p1);
+            p1.getHand().add(c);
+            gameState.playCard(p1, c);
+        }
+        assertEquals(5, p1.getField().size());
+
+        // Attempt to play a 6th character — should be rejected
+        Card sixth = new Card("c6", charData, p1);
+        p1.getHand().add(sixth);
+        gameState.playCard(p1, sixth);
+
+        assertEquals(5, p1.getField().size());        // field unchanged
+        assertTrue(p1.getHand().contains(sixth));     // card stays in hand
+    }
+
+    @Test
+    void testPlayCard_stageOccupied_secondStageRejected() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData stageData = new CardData("S", "SET", "Stage", "", "Set",
+                null, CardType.Stage, null, null, 1, 0, null, null, 0.0);
+
+        Card stage1 = new Card("s1", stageData, p1);
+        Card stage2 = new Card("s2", stageData, p1);
+        p1.getHand().add(stage1);
+        p1.getHand().add(stage2);
+
+        gameState.playCard(p1, stage1);
+        assertTrue(p1.getStage().contains(stage1));
+
+        // Attempt to play a second stage — should be rejected
+        gameState.playCard(p1, stage2);
+
+        assertEquals(1, p1.getStage().size());        // still only 1 stage
+        assertTrue(p1.getStage().contains(stage1));   // original unchanged
+        assertTrue(p1.getHand().contains(stage2));    // second stays in hand
+    }
+
+    @Test
     /**
      * Test adding a life to the player increases their life total correctly and
      * handles edge cases (e.g., exceeding maximum life)

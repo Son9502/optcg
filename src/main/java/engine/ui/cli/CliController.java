@@ -13,6 +13,7 @@ import java.util.List;
 import engine.cards.Card;
 import engine.cards.DonCard;
 import engine.cards.Leader;
+import engine.cards.types.CardType;
 import engine.cards.types.Color;
 import engine.battle.BattleSystem;
 
@@ -257,6 +258,42 @@ public class CliController {
                         name, type, power, rested, dons);
             }
         }
+        // Stage 
+        List<Card> stageCards = player.getStage().getCards();
+        System.out.println("  Stage (" + stageCards.size() + "/1):");
+        if (stageCards.isEmpty()) {
+            System.out.println("    (none)");
+        } else {
+            for (Card card : stageCards) {
+                if (card.getData() == null) { System.out.println("    - Unknown Card"); continue; }
+                String name   = boldColorize(card.getData().name(), card.getData().color());
+                String type   = (card.getData().cardType() != null) ? " [" + card.getData().cardType() + "]" : "";
+                int power = (turnManager.getActivePlayer() == player) ? card.getTotalPower() : card.getBasePower();
+                String rested = card.isRested() ? "Rested" : "Active";
+                String dons   = card.countDon() > 0 ? " | Dons: " + card.countDon() : "";
+                System.out.printf("    - %s%s  |  Power: %d | %s%s%n",
+                        name, type, power, rested, dons);
+            }
+        }
+        // Trash (top card only)
+        List<Card> trashCards = player.getTrash().getCards();
+        System.out.println("  Trash (" + trashCards.size() + " cards, top):");
+        if (trashCards.isEmpty()) {
+            System.out.println("    (none)");
+        } else {
+            Card topCard = trashCards.get(0); // Zone.add() uses addFirst → index 0 is top
+            if (topCard.getData() == null) {
+                System.out.println("    - Unknown Card");
+            } else {
+                String name   = boldColorize(topCard.getData().name(), topCard.getData().color());
+                String type   = (topCard.getData().cardType() != null) ? " [" + topCard.getData().cardType() + "]" : "";
+                int power = (turnManager.getActivePlayer() == player) ? topCard.getTotalPower() : topCard.getBasePower();
+                String rested = topCard.isRested() ? "Rested" : "Active";
+                String dons   = topCard.countDon() > 0 ? " | Dons: " + topCard.countDon() : "";
+                System.out.printf("    - %s%s  |  Power: %d | %s%s%n",
+                        name, type, power, rested, dons);
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -422,8 +459,8 @@ public class CliController {
             int cost  = card.getData().cost();
             int power = card.getData().power();
             String stats = (availableDon >= cost)
-                    ? GREEN + "(Cost: " + cost + ", Power: " + power + ")" + RESET
-                    : RED   + "(Cost: " + cost + ", Power: " + power + ")" + RESET;
+                    ? GREEN + "(Type: " + card.getData().cardType() + ", Cost: " + cost + ", Power: " + power + ")" + RESET
+                    : RED   + "(Type: " + card.getData().cardType() + ", Cost: " + cost + ", Power: " + power + ")" + RESET;
             System.out.printf("%d. %s %s%n", i + 1, name, stats);
         }
         System.out.println("0. Cancel");
@@ -431,6 +468,31 @@ public class CliController {
         if (choice == 0) return;
 
         Card selected = playable.get(choice - 1);
+        CardType selectedType = selected.getData().cardType();
+
+        // Handle zone capacity: prompt for replacement before playing
+        if (selectedType == CardType.Character && currentPlayer.getField().getCards().size() >= 5) {
+            System.out.println("Your field is full (5/5). Choose a character to send to trash, or 0 to cancel:");
+            List<Card> fieldCards = new ArrayList<>(currentPlayer.getField().getCards());
+            Card toTrash = selectCard(fieldCards, "Replace: ");
+            if (toTrash == null) {
+                System.out.println("Play cancelled.");
+                return;
+            }
+            gameState.trash(currentPlayer, toTrash);
+            System.out.println(colorize(toTrash.getData().name(), toTrash.getData().color()) + " sent to trash.");
+        } else if (selectedType == CardType.Stage && !currentPlayer.getStage().isEmpty()) {
+            Card existing = currentPlayer.getStage().getCards().get(0);
+            boolean confirm = inputHandler.confirm(
+                    colorize(existing.getData().name(), existing.getData().color()) + " will be sent to trash. Replace?");
+            if (!confirm) {
+                System.out.println("Play cancelled.");
+                return;
+            }
+            gameState.trash(currentPlayer, existing);
+            System.out.println(colorize(existing.getData().name(), existing.getData().color()) + " sent to trash.");
+        }
+
         gameState.playCard(currentPlayer, selected);
         System.out.println("Played: " + colorize(selected.getData().name(), selected.getData().color()));
     }
