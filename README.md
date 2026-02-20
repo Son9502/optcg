@@ -278,7 +278,7 @@ This phase also builds the **local socket IPC layer** that the Phase 3 GUI will 
 │  ╠══════════ Your Side ════════════╣ │                  │
 │  ║ Leader [GRN 5000] Life:5 Don:6  ║ │                  │
 │  ║ [Luffy 4k] [Usopp 2k]           ║ │                  │
-│  ╚════════════════════════════════╝ │                  │
+│  ╚═════════════════════════════════╝ │                  │
 ├──────────────────────────────────────┴──────────────────┤
 │  PANE 1 — ACTIONS (interactive)                         │
 │  Hand: [Chopper(2)] [Robin(4)] [Franky(5)]              │
