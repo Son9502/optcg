@@ -261,12 +261,73 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 - Event card resolution (play, resolve effect, move to trash)
 - `[Activate:Main]` effects: player-activated abilities during the Main Phase
 
+### Phase 2.5 — Enhanced CMU (Tmux UI)
+
+A purely terminal-based upgrade that gives the CMU a persistent, multi-pane layout using **Tmux** — no graphics, no framework, no new runtime dependencies. The rules engine is completely unchanged; only the presentation layer is extended.
+
+This phase also builds the **local socket IPC layer** that the Phase 3 GUI will reuse. Since the GUI and CLI will have identical capabilities in different formats, the state-broadcast infrastructure built here is not throwaway work — Phase 3 simply swaps the Tmux board renderer for a JavaFX one connected to the same socket.
+
+**Layout (3 panes):**
+```
+┌──────────────────────────────────────┬──────────────────┐
+│  PANE 0 — BOARD (read-only)          │  PANE 2 — CHAT   │
+│                                      │                  │
+│  ╔══════════ Opponent ═════════════╗ │  P1: gg          │
+│  ║ Leader [RED 5000] Life:4 Don:3  ║ │  P2: nice game   │
+│  ║ [Zoro 5k] [Nami 3k/REST]        ║ │                  │
+│  ╠══════════ Your Side ════════════╣ │                  │
+│  ║ Leader [GRN 5000] Life:5 Don:6  ║ │                  │
+│  ║ [Luffy 4k] [Usopp 2k]           ║ │                  │
+│  ╚════════════════════════════════╝ │                  │
+├──────────────────────────────────────┴──────────────────┤
+│  PANE 1 — ACTIONS (interactive)                         │
+│  Hand: [Chopper(2)] [Robin(4)] [Franky(5)]              │
+│  > 1) Attack  2) Play Card  3) Attach Don  4) End Phase │
+└─────────────────────────────────────────────────────────┘
+```
+
+**IPC architecture (local socket):**
+
+The game process runs a `GameStateServer` on a local socket. After every state mutation, it pushes a serialized snapshot to all connected clients. Each pane (and later the GUI) is a client that connects and renders what it receives:
+
+```
+GameEngine ──► GameState ──► GameStateServer (local socket)
+                                    │
+                    ┌───────────────┼─────────────────┐
+                    ▼               ▼                 ▼
+             BoardRenderer     ChatLog.java      [Phase 3]
+             (ANSI/Tmux)      (chat.log tail)   JavaFX GUI
+```
+
+- **Board pane**: `BoardRenderer` connects to the socket, receives state snapshots, and redraws the ANSI board on each update
+- **Actions pane**: `CliController` runs here unchanged — normal stdin/stdout
+- **Chat pane**: an append-only `chat.log` that both players write to via `/say` from the actions pane; chat pane tails the file
+- **State snapshots**: `GameState` is serialized to JSON (Jackson, already a dependency) and broadcast on the socket after each mutation — the same format `CardDatabase` already uses
+
+**Why it's constructive:**
+- The board stays visible at all times while the active player is typing — no scrolling past game state
+- Opponent's field is always in view during decision-making
+- Card colors are visually scannable (ANSI codes — Red/Green/Blue/Purple/Black/Yellow) rather than plain text labels
+- Chat is persistent and kept separate from game output
+- The socket layer is the foundation both the Tmux board renderer and the Phase 3 GUI connect to — building it here means Phase 3 is purely a renderer swap, not a re-architecture
+
+**What it cannot do vs. a GUI:**
+- No card images, drag-and-drop, or mouse interaction
+- No animations
+
+**New files this phase would add:**
+- `engine/ui/GameStateServer.java` — local socket server; broadcasts serialized `GameState` snapshots to all connected clients
+- `engine/ui/GameStateClient.java` — base client; connects to socket, receives and deserializes snapshots
+- `engine/ui/cli/BoardRenderer.java` — `GameStateClient` subclass; renders `GameState` as ANSI/Unicode text to the board pane
+- `engine/ui/cli/TmuxLauncher.java` — programmatically creates and configures the tmux session on startup
+- `engine/ui/cli/ChatLog.java` — append-only shared chat file writer/tailer
+
 ### Phase 3 — Graphics / GUI
-- Replace `CliController` with a graphical UI layer; the rules engine beneath stays unchanged
+- `GameStateClient` subclass in JavaFX: connects to the same local socket as the Tmux board renderer and renders game state graphically
 - Render the board: character area, hand, life zone, cost zone, trash, stage
-- Card display with images, power, cost, and rest/active state
+- Card display with images (`card_image` / `card_image_id` already in compiled JSON), power, cost, and rest/active state
 - Animated zone transitions (play card, attack, draw, life reveal)
-- Design target: JavaFX or equivalent; `CliController` kept as a fallback / debug mode
+- `CliController` + Tmux layout kept as a fallback / debug mode; the socket layer means both can run simultaneously
 
 ### Phase 4 — Training Mode
 - **Tutorial**: guided walkthrough of rules and actions
@@ -297,4 +358,4 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 
 ---
 
-*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 begins wiring individual card effects using a custom deterministic template parser.*
+*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 begins wiring individual card effects. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*
