@@ -7,6 +7,9 @@ import engine.cards.DonCard;
 import engine.cards.Leader;
 import engine.zones.Zone;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class GameState {
     private Player player1;
     private Player player2;
@@ -145,6 +148,16 @@ public class GameState {
                     + " because it is not in their hand.");
             return;
         }
+        // Pay the Don cost before moving the card
+        int cardCost = card.getData().cost();
+        if (cardCost > 0) {
+            Cost cost = new Cost();
+            cost.type = Cost.CostType.DON;
+            cost.amount = cardCost;
+            if (!payCost(player, cost)) {
+                return;
+            }
+        }
         // Determine the target zone based on the card type
         Zone targetZone;
         switch (card.getData().cardType()) {
@@ -189,8 +202,26 @@ public class GameState {
      * 
      * @return true if the cost was successfully paid, false otherwise.
      */
-    public void payCost(Player player, Cost cost) {
-
+    public boolean payCost(Player player, Cost cost) {
+        if (cost.type != Cost.CostType.DON) {
+            System.out.println("Unsupported cost type: " + cost.type);
+            return false;
+        }
+        List<DonCard> available = new ArrayList<>();
+        for (Card c : player.getCost().getCards()) {
+            if (c instanceof DonCard don && !don.isRested() && !don.isAttached()) {
+                available.add(don);
+            }
+        }
+        if (available.size() < cost.amount) {
+            System.out.println(player.getName() + " cannot afford this card (needs " + cost.amount
+                    + " Don, has " + available.size() + " available).");
+            return false;
+        }
+        for (int i = 0; i < cost.amount; i++) {
+            available.get(i).rest();
+        }
+        return true;
     }
 
     /**

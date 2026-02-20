@@ -98,7 +98,7 @@ public class GameStateTest {
                 CardType.Character, // cardType
                 null, // attribute
                 null, // color
-                1, // cost
+                0, // cost
                 1000, // power
                 null, // life
                 null, // counter
@@ -114,7 +114,7 @@ public class GameStateTest {
                 CardType.Event, // cardType
                 null, // attribute
                 null, // color
-                1, // cost
+                0, // cost
                 1000, // power
                 null, // life
                 null, // counter
@@ -130,7 +130,7 @@ public class GameStateTest {
                 CardType.Stage, // cardType
                 null, // attribute
                 null, // color
-                1, // cost
+                0, // cost
                 1000, // power
                 null, // life
                 null, // counter
@@ -162,7 +162,7 @@ public class GameStateTest {
         Player p2 = new Player();
         GameState gameState = new GameState(p1, p2);
         CardData charData = new CardData("C", "SET", "Char", "", "Set",
-                null, CardType.Character, null, null, 1, 1000, null, null, 0.0);
+                null, CardType.Character, null, null, 0, 1000, null, null, 0.0);
 
         // Fill the field to the 5-card limit
         for (int i = 0; i < 5; i++) {
@@ -187,7 +187,7 @@ public class GameStateTest {
         Player p2 = new Player();
         GameState gameState = new GameState(p1, p2);
         CardData stageData = new CardData("S", "SET", "Stage", "", "Set",
-                null, CardType.Stage, null, null, 1, 0, null, null, 0.0);
+                null, CardType.Stage, null, null, 0, 0, null, null, 0.0);
 
         Card stage1 = new Card("s1", stageData, p1);
         Card stage2 = new Card("s2", stageData, p1);
@@ -357,6 +357,97 @@ public class GameStateTest {
         gameState.trash(p1, card);
         assertFalse(p1.getField().contains(card));
         assertTrue(p1.getTrash().contains(card));
+    }
+
+    // -------------------------------------------------------------------------
+    // Cost enforcement tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testPlayCard_insufficientDon_cardStaysInHand() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData charData = new CardData("C", "SET", "Char", "", "Set",
+                null, CardType.Character, null, null, 2, 1000, null, null, 0.0);
+        Card card = new Card("c1", charData, p1);
+        p1.getHand().add(card);
+
+        // Add only 1 active Don, but card costs 2
+        DonCard don = new DonCard("don1", null, p1);
+        p1.getCost().add(don);
+
+        gameState.playCard(p1, card);
+
+        assertTrue(p1.getHand().contains(card),   "Card should stay in hand when Don is insufficient");
+        assertFalse(p1.getField().contains(card),  "Card should not reach field when Don is insufficient");
+        assertFalse(don.isRested(),                "Don should not be rested when play is rejected");
+    }
+
+    @Test
+    void testPlayCard_exactDon_cardPlaysAndDonsRested() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData charData = new CardData("C", "SET", "Char", "", "Set",
+                null, CardType.Character, null, null, 2, 1000, null, null, 0.0);
+        Card card = new Card("c1", charData, p1);
+        p1.getHand().add(card);
+
+        // Add exactly 2 active Dons
+        DonCard don1 = new DonCard("don1", null, p1);
+        DonCard don2 = new DonCard("don2", null, p1);
+        p1.getCost().add(don1);
+        p1.getCost().add(don2);
+
+        gameState.playCard(p1, card);
+
+        assertTrue(p1.getField().contains(card),  "Card should be on field after cost is paid");
+        assertFalse(p1.getHand().contains(card),  "Card should leave hand after being played");
+        assertTrue(don1.isRested(),               "First Don should be rested after payment");
+        assertTrue(don2.isRested(),               "Second Don should be rested after payment");
+    }
+
+    @Test
+    void testPlayCard_surplusDon_onlyExactAmountRested() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData charData = new CardData("C", "SET", "Char", "", "Set",
+                null, CardType.Character, null, null, 1, 1000, null, null, 0.0);
+        Card card = new Card("c1", charData, p1);
+        p1.getHand().add(card);
+
+        // Add 3 Dons but card only costs 1
+        DonCard don1 = new DonCard("don1", null, p1);
+        DonCard don2 = new DonCard("don2", null, p1);
+        DonCard don3 = new DonCard("don3", null, p1);
+        p1.getCost().add(don1);
+        p1.getCost().add(don2);
+        p1.getCost().add(don3);
+
+        gameState.playCard(p1, card);
+
+        assertTrue(p1.getField().contains(card), "Card should be on field");
+        long restedCount = p1.getCost().getCards().stream()
+                .filter(DonCard.class::isInstance).filter(c -> ((DonCard) c).isRested()).count();
+        assertEquals(1, restedCount, "Exactly 1 Don should be rested for a cost-1 card");
+    }
+
+    @Test
+    void testPlayCard_zeroCost_playsWithoutDon() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData charData = new CardData("C", "SET", "Char", "", "Set",
+                null, CardType.Character, null, null, 0, 1000, null, null, 0.0);
+        Card card = new Card("c1", charData, p1);
+        p1.getHand().add(card);
+
+        // No Dons available — should still play for free
+        gameState.playCard(p1, card);
+
+        assertTrue(p1.getField().contains(card), "Zero-cost card should play without any Don");
     }
 
     // Future tests to consider:
