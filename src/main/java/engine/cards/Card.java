@@ -16,6 +16,7 @@ public class Card {
     protected Player controller;
     protected Zone zone;
     protected boolean rested;
+    protected boolean summonSick;
     protected List<DonCard> attachedDons;
     protected List<Ability> abilities;
 
@@ -30,6 +31,7 @@ public class Card {
         this.controller = owner;
         this.zone = zone;
         this.rested = false;
+        this.summonSick = false;
         this.attachedDons = new ArrayList<DonCard>();
         this.abilities = new ArrayList<Ability>();
     }
@@ -57,6 +59,19 @@ public class Card {
 
     public boolean isRested() {
         return rested;
+    }
+
+    /**
+     * Returns true if this card was played this turn and cannot yet attack.
+     * Cleared automatically during the REFRESH phase of the next turn.
+     * Note: the Rush keyword bypasses this flag (not yet implemented).
+     */
+    public boolean isSummonSick() {
+        return summonSick;
+    }
+
+    public void setSummonSick(boolean summonSick) {
+        this.summonSick = summonSick;
     }
 
     public List<DonCard> getAttachedDons() {

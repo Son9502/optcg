@@ -26,7 +26,7 @@ public class BattleSystem {
      * @return true if the card can attack, false otherwise.
      */
     public boolean canAttack(Card attacker) {
-        return !attacker.isRested();
+        return !attacker.isRested() && !attacker.isSummonSick();
     }
 
     /**
