@@ -1,7 +1,6 @@
 package engine.cards.effects;
 
-import java.lang.annotation.Target;
-import java.util.concurrent.locks.Condition;
+import engine.cards.abilities.Condition;
 
 public record EffectData(
     EffectType type,
