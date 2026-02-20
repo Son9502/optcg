@@ -150,6 +150,7 @@ public class GameState {
         switch (card.getData().cardType()) {
             case Character:
                 targetZone = player.getField();
+                card.setSummonSick(true); // Cannot attack the turn it is played (Rush bypasses this)
                 break;
             case Event:
                 targetZone = player.getTrash();
@@ -332,6 +333,7 @@ public class GameState {
      */
     public void refreshField(Player player) {
         for (Card card : player.getField().getCards()) {
+            card.setSummonSick(false); // Clear summon sickness at the start of each new turn
             if (card.isRested()) {
                 card.activate();
             } else {

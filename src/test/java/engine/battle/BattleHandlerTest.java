@@ -52,6 +52,21 @@ public class BattleHandlerTest {
         assertFalse(battleSystem.canAttack(card));
     }
 
+    @Test
+    void canAttack_summonSickCard_returnsFalse() {
+        Card card = TestUtils.makeCard(p1, 3000);
+        card.setSummonSick(true);
+        assertFalse(battleSystem.canAttack(card));
+    }
+
+    @Test
+    void canAttack_afterSummonSickCleared_returnsTrue() {
+        Card card = TestUtils.makeCard(p1, 3000);
+        card.setSummonSick(true);
+        card.setSummonSick(false); // simulates REFRESH clearing the flag
+        assertTrue(battleSystem.canAttack(card));
+    }
+
     // --- getValidAttackers ---
 
     @Test
@@ -73,6 +88,15 @@ public class BattleHandlerTest {
         p1.getField().add(card);
         List<Card> attackers = battleSystem.getValidAttackers(p1);
         assertTrue(attackers.contains(card));
+    }
+
+    @Test
+    void getValidAttackers_excludesSummonSickFieldCard() {
+        Card card = TestUtils.makeCard(p1, 3000);
+        p1.getField().add(card);
+        card.setSummonSick(true);
+        List<Card> attackers = battleSystem.getValidAttackers(p1);
+        assertFalse(attackers.contains(card));
     }
 
     @Test
