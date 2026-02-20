@@ -13,6 +13,7 @@ import java.util.List;
 import engine.cards.Card;
 import engine.cards.DonCard;
 import engine.cards.Leader;
+import engine.cards.types.CardType;
 import engine.cards.types.Color;
 import engine.battle.BattleSystem;
 
@@ -467,6 +468,31 @@ public class CliController {
         if (choice == 0) return;
 
         Card selected = playable.get(choice - 1);
+        CardType selectedType = selected.getData().cardType();
+
+        // Handle zone capacity: prompt for replacement before playing
+        if (selectedType == CardType.Character && currentPlayer.getField().getCards().size() >= 5) {
+            System.out.println("Your field is full (5/5). Choose a character to send to trash, or 0 to cancel:");
+            List<Card> fieldCards = new ArrayList<>(currentPlayer.getField().getCards());
+            Card toTrash = selectCard(fieldCards, "Replace: ");
+            if (toTrash == null) {
+                System.out.println("Play cancelled.");
+                return;
+            }
+            gameState.trash(currentPlayer, toTrash);
+            System.out.println(colorize(toTrash.getData().name(), toTrash.getData().color()) + " sent to trash.");
+        } else if (selectedType == CardType.Stage && !currentPlayer.getStage().isEmpty()) {
+            Card existing = currentPlayer.getStage().getCards().get(0);
+            boolean confirm = inputHandler.confirm(
+                    colorize(existing.getData().name(), existing.getData().color()) + " will be sent to trash. Replace?");
+            if (!confirm) {
+                System.out.println("Play cancelled.");
+                return;
+            }
+            gameState.trash(currentPlayer, existing);
+            System.out.println(colorize(existing.getData().name(), existing.getData().color()) + " sent to trash.");
+        }
+
         gameState.playCard(currentPlayer, selected);
         System.out.println("Played: " + colorize(selected.getData().name(), selected.getData().color()));
     }
