@@ -2,8 +2,12 @@ package engine.data;
 
 import java.io.File;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.cfg.CoercionAction;
+import com.fasterxml.jackson.databind.cfg.CoercionInputShape;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 
 import engine.cards.CardData;
 
@@ -14,16 +18,22 @@ import java.util.HashMap;
 public class CardDatabase {
 
     private final Map<String, CardData> cardCache = new HashMap<>();
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper;
     private final String[] directories = { "sets", "decks", "promos" };
 
-    public CardDatabase(String compiledDir) {
-        loadAllCards(compiledDir);
+    public CardDatabase(String dataDir) {
+        mapper = new ObjectMapper();
+        // Handle "NULL" strings and string-encoded numbers (cost/power/life)
+        SimpleModule intModule = new SimpleModule();
+        intModule.addDeserializer(Integer.class, new NullableIntDeserializer());
+        mapper.registerModule(intModule);
+        // Return null instead of throwing for unknown enum values (dirty promo data)
+        mapper.configure(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL, true);
+        loadAllCards(dataDir);
     }
 
     public CardDatabase() {
-        // Default constructor
-        this("src/main/resources/compiled/data/");
+        this("src/main/resources/raw/data/");
     }
 
     public void loadAllCards(String compiledDir) {
@@ -48,8 +58,14 @@ public class CardDatabase {
                     JsonNode rootNode = mapper.readTree(file);
                     if (rootNode.isArray()) {
                         for (JsonNode node : rootNode) {
-                            CardData cardData = mapper.treeToValue(node, CardData.class);
-                            cardCache.put(cardData.getId(), cardData);
+                            try {
+                                CardData cardData = mapper.treeToValue(node, CardData.class);
+                                if (cardData.getId() != null) {
+                                    cardCache.put(cardData.getId(), cardData);
+                                }
+                            } catch (Exception e) {
+                                System.out.println("Skipping malformed card entry: " + e.getMessage());
+                            }
                         }
                     }
                 }
