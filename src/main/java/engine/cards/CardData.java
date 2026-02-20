@@ -7,6 +7,7 @@ import engine.cards.types.Rarity;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CardData(
@@ -18,6 +19,7 @@ public record CardData(
         Rarity rarity,
         @JsonProperty("card_type") CardType cardType,
         Attribute attribute,
+        @JsonDeserialize(using = ColorDeserializer.class)
         @JsonProperty("card_color") Color color,
         @JsonProperty("card_cost") Integer cost,
         @JsonProperty("card_power") Integer power,
