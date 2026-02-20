@@ -149,6 +149,10 @@ public class GameState {
         Zone targetZone;
         switch (card.getData().cardType()) {
             case Character:
+                if (player.getField().getCards().size() >= 5) {
+                    System.out.println("Field is full (5/5). " + card.getData().name() + " cannot be played.");
+                    return;
+                }
                 targetZone = player.getField();
                 card.setSummonSick(true); // Cannot attack the turn it is played (Rush bypasses this)
                 break;
@@ -156,6 +160,10 @@ public class GameState {
                 targetZone = player.getTrash();
                 break;
             case Stage:
+                if (!player.getStage().isEmpty()) {
+                    System.out.println("Stage zone is occupied. " + card.getData().name() + " cannot be played.");
+                    return;
+                }
                 targetZone = player.getStage();
                 break;
             default:
