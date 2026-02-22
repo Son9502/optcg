@@ -116,7 +116,7 @@ public class TurnManagerTest {
         player1.getDonDeck().add(new DonCard(player1));
 
         // p2 needs a deck card for the DRAW phase in turn 2
-        CardData deckData = new CardData("D1", "SET", "DeckCard", "", "Set",
+        CardData deckData = new CardData("D1", "SET", "DeckCard", "", "", "Set",
                 null, null, null, null, 0, 0, 0, null, 0.0);
         player2.getDeck().add(new Card("dc1", deckData, player2));
 

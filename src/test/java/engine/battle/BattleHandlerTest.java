@@ -26,7 +26,7 @@ public class BattleHandlerTest {
         p1 = new Player("p1");
         p2 = new Player("p2");
 
-        CardData leaderData = new CardData("L-001", "SET", "Leader", "", "Set",
+        CardData leaderData = new CardData("L-001", "SET", "Leader", "", "", "Set",
                 null, null, null, null, 0, 5000, 4, null, 0.0);
         p1.setLeader(new Leader("l1", leaderData, p1));
         p2.setLeader(new Leader("l2", leaderData, p2));

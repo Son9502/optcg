@@ -22,7 +22,10 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 - Two pre-built test decks via `GameFactory` (Luffy/Red and Zoro/Green)
 - Card data pipeline: raw scraped JSON → `CardCompiler` → compiled JSON → `CardDatabase`
 - `Parser`: structured ability extraction from card text into `{trigger, condition, cost, character, effect}` records
-- 93 unit tests — all passing
+- `CardData` record carries a `subTypes` field (normalized from API `sub_types` strings)
+- `CardDatabase` secondary index: `getByName()` (O(1)), `getBySubtype()` (O(n)), `getAllCards()`
+- `CsvGenerator`: offline tool that rebuilds `card_names_subtypes.csv` from compiled (or raw) JSON with name normalization and deduplication
+- 102 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty)
 
 ---
 
@@ -115,7 +118,22 @@ mvn exec:java -Dexec.mainClass="tools.CardCompiler"
 
 `CardCompiler` deduplicates cards by `card_set_id` (keeping the base version over SP/Parallel variants), strips fields unused by the engine, and appends a structured `abilities[]` array to each card using `Parser`.
 
-`CardDatabase` loads compiled JSON at startup. Cards are keyed by `card_set_id`.
+`CardDatabase` loads compiled JSON at startup. Cards are indexed by `card_set_id` (primary) and by `name` (secondary, case-insensitive, multi-result). Three query methods are provided:
+
+| Method | Returns | Notes |
+|---|---|---|
+| `getCardData(id)` | `CardData` | O(1); throws `IllegalArgumentException` if not found |
+| `getByName(name)` | `List<CardData>` | O(1); case-insensitive; multiple results for reprints |
+| `getBySubtype(subtype)` | `List<CardData>` | O(n) `contains()` scan (multi-word subtype names cannot be tokenised on whitespace) |
+| `getAllCards()` | `Collection<CardData>` | Unmodifiable view of the full index |
+
+Multi-color leaders (e.g., `"Red Green"` in the API) are stored as their primary color only for CMU; full multi-color support (requiring `List<Color>` and deck validation changes) is deferred to Phase 2.
+
+`CsvGenerator` is a standalone offline tool that rebuilds `card_names_subtypes.csv` from compiled data (or falls back to raw), strips parenthetical variant suffixes and trailing ` - SETID` patterns from card names, deduplicates on `(name, cardType)`, and writes a sorted CSV. Run it after compiling:
+
+```bash
+mvn exec:java -Dexec.mainClass="tools.CsvGenerator"
+```
 
 ---
 
@@ -125,21 +143,22 @@ mvn exec:java -Dexec.mainClass="tools.CardCompiler"
 mvn test
 ```
 
-**Current test suite: 93 tests, 0 failures.**
+**Current test suite: 102 tests, 0 failures, 0 errors.**
+10 `CardDatabaseTest` cases are data-dependent and skip automatically (via `assumeTrue`) when `raw/data/` is empty — run `CardScraper` first to populate.
 
-| Test class | Coverage area |
-|---|---|
-| `BattleHandlerTest` | `canAttack`, `getValidAttackers`, `getValidTargets`, `resolve` |
-| `TurnManagerTest` | Phase transitions, turn count, Don draw counts |
-| `GameStateTest` | Draw, trash, play card, remove life, refresh, cost payment |
-| `GameSetupTest` | Initialization, mulligan, life setup |
-| `CardTest` | Rest/activate, Don attachment and detach, summoning sickness |
-| `DeckTest` | Draw, draw from empty, search |
-| `ZoneTest` | Add, remove, draw top, move card, shuffle |
-| `PlayerTest` | Zone initialization, leader assignment |
-| `CardDatabaseTest` | Real card data loading, Leader/Character deserialization, CardFactory |
-| `ParserTest` | Ability parsing: triggers, conditions, costs, keywords, multi-ability blocks |
-| `GameFactoryTest` | Pre-built test deck construction |
+| Test class | Tests | Coverage area |
+|---|---|---|
+| `BattleHandlerTest` | 4 | `canAttack`, `getValidAttackers`, `getValidTargets`, `resolve` |
+| `TurnManagerTest` | 4 | Phase transitions, turn count, Don draw counts |
+| `GameStateTest` | 14 | Draw, trash, play card, remove life, refresh, cost payment, field/stage limits |
+| `GameSetupTest` | 4 | Initialization, mulligan, life setup |
+| `CardTest` | 6 | Rest/activate, Don attachment and detach, summoning sickness |
+| `DeckTest` | 4 | Draw, draw from empty, search |
+| `ZoneTest` | 9 | Add, remove, draw top, move card, shuffle |
+| `PlayerTest` | 2 | Zone initialization, leader assignment |
+| `CardDatabaseTest` | 16 (10 skipped without data) | Card loading, deserialization, `getByName`, `getBySubtype`, `getAllCards`, `CardFactory` |
+| `ParserTest` | 17 | Ability parsing: triggers, conditions, costs, keywords, multi-ability blocks |
+| `GameFactoryTest` | 6 | Pre-built test deck construction, field/stage/don counts |
 
 ---
 
@@ -170,7 +189,7 @@ src/
 │   │   │   │   ├── Phase.java                   ← Turn phase enum
 │   │   │   │   └── TurnManager.java             ← Phase transitions, active player
 │   │   │   ├── data/
-│   │   │   │   ├── CardDatabase.java            ← Loads compiled card JSON into memory
+│   │   │   │   ├── CardDatabase.java            ← Primary (id) + secondary (name) indexes; getByName, getBySubtype, getAllCards
 │   │   │   │   └── NullableIntDeserializer.java ← Handles "NULL" string / string-encoded ints
 │   │   │   ├── history/
 │   │   │   │   ├── GameHistory.java
@@ -193,6 +212,7 @@ src/
 │   │   └── tools/                               ← Offline data pipeline (not part of game runtime)
 │   │       ├── CardScraper.java                 ← Fetches raw card data from API
 │   │       ├── CardCompiler.java                ← raw JSON → compiled JSON + abilities[]
+│   │       ├── CsvGenerator.java                ← Rebuilds card_names_subtypes.csv from compiled/raw data
 │   │       ├── Parser.java                      ← Parses card text into structured abilities
 │   │       └── ParsedAbility.java               ← Record: trigger, condition, cost, character, effect
 │   └── resources/
@@ -230,7 +250,8 @@ src/
 - `[DON!! xX]` is a **condition** (§8-3-2-3), not a cost — the card must have ≥X DON attached
 - `DON!! −X` (§8-3-1-6) is a separate cost type: return X DON to the DON deck
 - `Zone` uses a `Deque` internally: `add()` = addFirst (top), `draw()` = removeFirst (top), `addBottom()` = addLast — supports top and bottom card placement for card effects
-- `tools/` is an offline pipeline; `CardScraper`, `CardCompiler`, and `Parser` run once at data-prep time and are not part of the game runtime
+- `tools/` is an offline pipeline; `CardScraper`, `CardCompiler`, `CsvGenerator`, and `Parser` run once at data-prep time and are not part of the game runtime
+- `CardData.color` stores the **primary** color only for CMU — multi-color leaders (e.g., Red/Green) store the first color token; full `List<Color>` support is deferred to Phase 2
 
 ---
 
@@ -245,6 +266,10 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 - Field character limit (5 characters max); stage limit (1 stage, replaced on play)
 - Card data pipeline: raw scraped JSON → `CardCompiler` → compiled JSON → `CardDatabase`
 - `Parser` producing structured `{trigger, condition, cost, character, effect}` ability records
+- `CardData.subTypes` field mapped from API `sub_types`; normalized at load time (`null`/`"null"` → `""`)
+- `CardDatabase` secondary indexes: `getByName()` (O(1), case-insensitive), `getBySubtype()` (O(n)), `getAllCards()`
+- `CsvGenerator` tool: rebuilds `card_names_subtypes.csv` with name normalization and deduplication
+- `asText()` deprecation resolved in `CardCompiler` and `CsvGenerator` (`asText(null)` → `textValue()`)
 - Rulebook-correct keyword list: Rush, Rush: Character, Blocker, Double Attack, Banish, Unblockable, Trigger, Counter
 
 ### Phase 2 — Abilities, Effects, and Keywords
@@ -358,4 +383,4 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
 
 ---
 
-*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 begins wiring individual card effects. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*
+*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline (including `CardData.subTypes`, `CardDatabase` secondary indexes, and `CsvGenerator`), and ability parser are all in place. Phase 2 begins wiring individual card effects. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*

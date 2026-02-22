@@ -15,6 +15,7 @@ public record CardData(
         @JsonProperty("set_id") String setId,
         @JsonProperty("card_name") String name,
         @JsonProperty("card_text") String description,
+        @JsonProperty("sub_types") String subTypes,
         @JsonProperty("set_name") String setName,
         Rarity rarity,
         @JsonProperty("card_type") CardType cardType,
@@ -31,6 +32,9 @@ public record CardData(
         // Validate and set default values for optional fields
         if (description == null) {
             description = "";
+        }
+        if (subTypes == null || subTypes.equalsIgnoreCase("null")) {
+            subTypes = "";
         }
         if (cost == null) {
             cost = 0;
@@ -52,9 +56,8 @@ public record CardData(
         return id;
     }
     public String toString() {
-        return "CardData [id=" + id + ", setId=" + setId + ", name=" + name + ", description=" + description
-                + ", setName=" + setName + ", rarity=" + rarity + ", cardType=" + cardType + ", attribute="
-                + attribute + ", color=" + color + ", cost=" + cost + ", power=" + power + ", life=" + life
-                + ", counter=" + counter + ", marketPrice=" + marketPrice + "]";
+        return "CardData [id=" + id + ", name=" + name + ", cardType=" + cardType + ", color=" + color
+                + ", cost=" + cost + ", power=" + power + ", life=" + life + ", counter=" + counter
+                + ", subTypes=" + subTypes + ", marketPrice=" + marketPrice + "]";
     }
 }

@@ -22,13 +22,13 @@ public class DeckTest {
         Player player = new Player();
         Deck deck = new Deck(player);
         CardData cardData1 = new CardData(
-                "TEST-001", "TEST-SET", "Test Card 1", "Test description 1", "Test Set",
+                "TEST-001", "TEST-SET", "Test Card 1", "Test description 1", "", "Test Set",
                 null, null, null, null, 1, 1000, null, null, 0.0);
         CardData cardData2 = new CardData(
-                "TEST-002", "TEST-SET", "Test Card 2", "Test description 2", "Test Set",
+                "TEST-002", "TEST-SET", "Test Card 2", "Test description 2", "", "Test Set",
                 null, null, null, null, 2, 2000, null, null, 0.0);
         CardData cardData3 = new CardData(
-                "TEST-003", "TEST-SET", "Test Card 3", "Test description 3", "Test Set",
+                "TEST-003", "TEST-SET", "Test Card 3", "Test description 3", "", "Test Set",
                 null, null, null, null, 3, 3000, null, null, 0.0);
         Card card1 = new Card("card1", cardData1, player);
         Card card2 = new Card("card2", cardData2, player);
@@ -57,13 +57,13 @@ public class DeckTest {
         Player player = new Player();
         Deck deck = new Deck(player);
         CardData cardData1 = new CardData(
-                "TEST-001", "TEST-SET", "Test Card 1", "Test description 1", "Test Set",
+                "TEST-001", "TEST-SET", "Test Card 1", "Test description 1", "", "Test Set",
                 null, null, null, null, 1, 1000, null, null, 0.0);
         CardData cardData2 = new CardData(
-                "TEST-002", "TEST-SET", "Test Card 2", "Test description 2", "Test Set",
+                "TEST-002", "TEST-SET", "Test Card 2", "Test description 2", "", "Test Set",
                 null, null, null, null, 2, 2000, null, null, 0.0);
         CardData cardData3 = new CardData(
-                "TEST-003", "TEST-SET", "Test Card 3", "Test description 3", "Test Set",
+                "TEST-003", "TEST-SET", "Test Card 3", "Test description 3", "", "Test Set",
                 null, null, null, null, 3, 3000, null, null, 0.0);
         Card card1 = new Card("card1", cardData1, player);
         Card card2 = new Card("card2", cardData2, player);
@@ -92,7 +92,7 @@ public class DeckTest {
         Player player = new Player();
         Deck deck = new Deck(player);
         CardData cardData = new CardData(
-                "TEST-001", "TEST-SET", "Test Card", "Test description", "Test Set",
+                "TEST-001", "TEST-SET", "Test Card", "Test description", "", "Test Set",
                 null, null, null, null, 1, 1000, null, null, 0.0);
         Card card = new Card("card1", cardData, player);
         deck.add(card);

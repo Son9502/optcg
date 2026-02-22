@@ -62,7 +62,7 @@ public class CardCompiler {
                 // Deduplicate by card_set_id (keep lowest market_price = base version)
                 Map<String, ObjectNode> deduped = new LinkedHashMap<>();
                 for (JsonNode node : root) {
-                    String id = node.path("card_set_id").asText(null);
+                    String id = node.path("card_set_id").textValue();
                     if (id == null || id.isBlank()) continue;
 
                     ObjectNode compiled = buildCompiledCard(mapper, node);
@@ -80,7 +80,7 @@ public class CardCompiler {
 
                 // Sort by card_set_id
                 List<ObjectNode> sorted = new ArrayList<>(deduped.values());
-                sorted.sort(Comparator.comparing(n -> n.path("card_set_id").asText("")));
+                sorted.sort(Comparator.comparing(n -> n.path("card_set_id").asText()));
 
                 ArrayNode output = mapper.createArrayNode();
                 sorted.forEach(output::add);
@@ -113,7 +113,7 @@ public class CardCompiler {
             }
         }
 
-        String cardText = raw.path("card_text").asText(null);
+        String cardText = raw.path("card_text").textValue();
         List<ParsedAbility> abilities = Parser.parse(cardText);
         ArrayNode abilitiesNode = mapper.createArrayNode();
         for (ParsedAbility ability : abilities) {
