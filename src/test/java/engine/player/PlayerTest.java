@@ -33,6 +33,7 @@ public class PlayerTest {
                 "LEADER-SET", // setId
                 "Test Leader", // name
                 "Test leader description", // description
+                "", // subTypes
                 "Test Leader Set", // setName
                 null, // rarity
                 null, // cardType

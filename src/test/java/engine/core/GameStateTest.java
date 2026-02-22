@@ -25,6 +25,7 @@ public class GameStateTest {
                 "TEST-SET", // setId
                 "Test Card", // name
                 "Test description", // description
+                "", // subTypes
                 "Test Set", // setName
                 null, // rarity
                 null, // cardType
@@ -93,6 +94,7 @@ public class GameStateTest {
                 "TEST-SET", // setId
                 "Test Card", // name
                 "Test description", // description
+                "", // subTypes
                 "Test Set", // setName
                 null, // rarity
                 CardType.Character, // cardType
@@ -109,6 +111,7 @@ public class GameStateTest {
                 "TEST-SET", // setId
                 "Test Card", // name
                 "Test description", // description
+                "", // subTypes
                 "Test Set", // setName
                 null, // rarity
                 CardType.Event, // cardType
@@ -125,6 +128,7 @@ public class GameStateTest {
                 "TEST-SET", // setId
                 "Test Card", // name
                 "Test description", // description
+                "", // subTypes
                 "Test Set", // setName
                 null, // rarity
                 CardType.Stage, // cardType
@@ -161,7 +165,7 @@ public class GameStateTest {
         Player p1 = new Player();
         Player p2 = new Player();
         GameState gameState = new GameState(p1, p2);
-        CardData charData = new CardData("C", "SET", "Char", "", "Set",
+        CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
                 null, CardType.Character, null, null, 0, 1000, null, null, 0.0);
 
         // Fill the field to the 5-card limit
@@ -186,7 +190,7 @@ public class GameStateTest {
         Player p1 = new Player();
         Player p2 = new Player();
         GameState gameState = new GameState(p1, p2);
-        CardData stageData = new CardData("S", "SET", "Stage", "", "Set",
+        CardData stageData = new CardData("S", "SET", "Stage", "", "", "Set",
                 null, CardType.Stage, null, null, 0, 0, null, null, 0.0);
 
         Card stage1 = new Card("s1", stageData, p1);
@@ -220,6 +224,7 @@ public class GameStateTest {
                 "TEST-SET", // setId
                 "Test", // name
                 "Test description", // description
+                "", // subTypes
                 "Test Set", // setName
                 null, // rarity
                 null, // cardType
@@ -253,6 +258,7 @@ public class GameStateTest {
                 "TEST-SET", // setId
                 "Test", // name
                 "Test description", // description
+                "", // subTypes
                 "Test Set", // setName
                 null, // rarity
                 null, // cardType
@@ -296,6 +302,7 @@ public class GameStateTest {
                 "TEST-SET", // setId
                 "Test Card", // name
                 "Test description", // description
+                "", // subTypes
                 "Test Set", // setName
                 null, // rarity
                 null, // cardType
@@ -340,6 +347,7 @@ public class GameStateTest {
                 "TEST-SET", // setId
                 "Test Card", // name
                 "Test description", // description
+                "", // subTypes
                 "Test Set", // setName
                 null, // rarity
                 null, // cardType
@@ -368,7 +376,7 @@ public class GameStateTest {
         Player p1 = new Player();
         Player p2 = new Player();
         GameState gameState = new GameState(p1, p2);
-        CardData charData = new CardData("C", "SET", "Char", "", "Set",
+        CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
                 null, CardType.Character, null, null, 2, 1000, null, null, 0.0);
         Card card = new Card("c1", charData, p1);
         p1.getHand().add(card);
@@ -389,7 +397,7 @@ public class GameStateTest {
         Player p1 = new Player();
         Player p2 = new Player();
         GameState gameState = new GameState(p1, p2);
-        CardData charData = new CardData("C", "SET", "Char", "", "Set",
+        CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
                 null, CardType.Character, null, null, 2, 1000, null, null, 0.0);
         Card card = new Card("c1", charData, p1);
         p1.getHand().add(card);
@@ -413,7 +421,7 @@ public class GameStateTest {
         Player p1 = new Player();
         Player p2 = new Player();
         GameState gameState = new GameState(p1, p2);
-        CardData charData = new CardData("C", "SET", "Char", "", "Set",
+        CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
                 null, CardType.Character, null, null, 1, 1000, null, null, 0.0);
         Card card = new Card("c1", charData, p1);
         p1.getHand().add(card);
@@ -439,7 +447,7 @@ public class GameStateTest {
         Player p1 = new Player();
         Player p2 = new Player();
         GameState gameState = new GameState(p1, p2);
-        CardData charData = new CardData("C", "SET", "Char", "", "Set",
+        CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
                 null, CardType.Character, null, null, 0, 1000, null, null, 0.0);
         Card card = new Card("c1", charData, p1);
         p1.getHand().add(card);

@@ -11,7 +11,7 @@ public final class TestUtils {
     }
 
     public static CardData makeCardData(int power) {
-        return new CardData("TEST-001", "TEST-SET", "TestCard", "", "TestSet",
+        return new CardData("TEST-001", "TEST-SET", "TestCard", "", "", "TestSet",
                 null, null, null, null, 0, power, 0, null, 0.0);
     }
 

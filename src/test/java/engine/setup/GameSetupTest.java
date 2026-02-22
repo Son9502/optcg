@@ -26,7 +26,7 @@ public class GameSetupTest {
     }
 
     private Leader makeLeader(Player owner) {
-        CardData leaderData = new CardData("L-001", "SET", "Leader", "", "Set",
+        CardData leaderData = new CardData("L-001", "SET", "Leader", "", "", "Set",
                 null, null, null, null, 0, 5000, 4, null, 0.0);
         return new Leader("l1", leaderData, owner);
     }

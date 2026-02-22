@@ -14,6 +14,7 @@ public class ZoneTest {
             "TEST-SET", // setId
             "Test Card", // name
             "Test description", // description
+            "", // subTypes
             "Test Set", // setName
             null, // rarity
             null, // cardType

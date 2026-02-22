@@ -40,7 +40,7 @@ public class GameFactory {
     private static Leader makeLeader(String id, String name, int power, int life,
                                      Color color, Player owner) {
         CardData data = new CardData(
-                id, "OP-TEST", name, "Test leader for local play.", "Test Set",
+                id, "OP-TEST", name, "Test leader for local play.", "", "Test Set",
                 null, CardType.Leader, Attribute.Strike, color,
                 0, power, life, null, 0.0);
         return new Leader(id, data, owner);
@@ -80,7 +80,7 @@ public class GameFactory {
                                  String name, int cost, int power, CardType type, int count) {
         for (int i = 1; i <= count; i++) {
             CardData data = new CardData(
-                    idPrefix + "-" + i, "OP-TEST", name, "", "Test Set",
+                    idPrefix + "-" + i, "OP-TEST", name, "", "", "Test Set",
                     null, type, null, null,
                     cost, power, null, null, 0.0);
             deck.add(new Card(idPrefix + "-" + i, data, owner));
@@ -95,7 +95,7 @@ public class GameFactory {
         CardData donData = new CardData(
                 "DON", "OP-TEST", "DON!!",
                 "Attach to your Leader or a Character card. (+1000 power during your turn)",
-                "Test Set", null, CardType.Don, null, null,
+                "", "Test Set", null, CardType.Don, null, null,
                 0, 0, null, null, 0.0);
 
         List<Card> dons = new ArrayList<>();
