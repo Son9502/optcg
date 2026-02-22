@@ -383,4 +383,6 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
 
 ---
 
+See [DEVLOG.md](DEVLOG.md) for a full account of what was built manually, what was AI-assisted, the key prompts used, and what changed through iteration.
+
 *This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline (including `CardData.subTypes`, `CardDatabase` secondary indexes, and `CsvGenerator`), and ability parser are all in place. Phase 2 begins wiring individual card effects. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*
