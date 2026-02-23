@@ -1,14 +1,465 @@
 package engine.core;
 
+import engine.cards.CardData;
+import engine.cards.DonCard;
+import engine.cards.types.CardType;
+import engine.player.Player;
+import engine.cards.Card;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 public class GameStateTest {
-    /*draw moves cards correctly
+    /**
+     * Test that drawing a card moves it from the deck to the hand
+     */
+    @Test
+    void testdrawCard() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        // Setup initial conditions (e.g., add cards to the deck)
+        // Call the method to draw a card
+        // Assert that the card is now in the hand and removed from the deck
+        CardData cardData = new CardData(
+                "TEST-001", // id
+                "TEST-SET", // setId
+                "Test Card", // name
+                "Test description", // description
+                "", // subTypes
+                "Test Set", // setName
+                null, // rarity
+                null, // cardType
+                null, // attribute
+                null, // color
+                1, // cost
+                1000, // power
+                null, // life
+                null, // counter
+                0.0 // marketPrice
+        );
+        Card card = new engine.cards.Card("card1", cardData, p1);
+        p1.getDeck().add(card);
+        assertEquals(0, p1.getHand().size());
+        gameState.draw(p1);
+        assertTrue(p1.getHand().contains(card));
+        assertFalse(p1.getDeck().contains(card));
+    }
 
-playCard moves zones correctly
+    @Test
+    /**
+     * Test that drawing a Don card moves it from the Don deck to the hand
+     */
+    void testdrawDon() {
+        DonCard donCard = new DonCard("don1", null, null);
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        p1.getDonDeck().add(donCard);
+        assertEquals(0, p1.getCost().size());
+        gameState.drawDon(p1, 1);
+        assertTrue(p1.getCost().contains(donCard)); // Don cards go to cost zone, not hand
+        assertFalse(p1.getDonDeck().contains(donCard));
+    }
 
-attach/detach Don
+    @Test
+    /**
+     * Test that attempting to draw a card from an empty deck results in the correct
+     * game state change
+     * (e.g., player loses the game, takes damage, etc.)
+     */
+    void testdrawEmpty() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        assertEquals(0, p1.getDeck().size());
+        gameState.draw(p1);
+        // Assert the expected outcome (e.g., player loses, takes damage)
+        assertTrue(gameState.isGameOver());
+        assertEquals(p2, gameState.getWinner());
+        gameState.drawDon(p1, 0);
+    }
 
-life add/remove
+    @Test
+    /**
+     * Test that playing a card moves it from the hand to the field and updates the
+     * game state accordingly
+     * (e.g., reduces resources, triggers effects)
+     */
+    void testPlayCard() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData cardDataOne = new CardData(
+                "TEST-001", // id
+                "TEST-SET", // setId
+                "Test Card", // name
+                "Test description", // description
+                "", // subTypes
+                "Test Set", // setName
+                null, // rarity
+                CardType.Character, // cardType
+                null, // attribute
+                null, // color
+                0, // cost
+                1000, // power
+                null, // life
+                null, // counter
+                0.0 // marketPrice
+        );
+        CardData cardDataTwo = new CardData(
+                "TEST-002", // id
+                "TEST-SET", // setId
+                "Test Card", // name
+                "Test description", // description
+                "", // subTypes
+                "Test Set", // setName
+                null, // rarity
+                CardType.Event, // cardType
+                null, // attribute
+                null, // color
+                0, // cost
+                1000, // power
+                null, // life
+                null, // counter
+                0.0 // marketPrice
+        );
+        CardData cardDataThree = new CardData(
+                "TEST-003", // id
+                "TEST-SET", // setId
+                "Test Card", // name
+                "Test description", // description
+                "", // subTypes
+                "Test Set", // setName
+                null, // rarity
+                CardType.Stage, // cardType
+                null, // attribute
+                null, // color
+                0, // cost
+                1000, // power
+                null, // life
+                null, // counter
+                0.0 // marketPrice
+        );
+        Card card = new engine.cards.Card("card1", cardDataOne, p1);
+        Card card2 = new engine.cards.Card("card2", cardDataTwo, p1);
+        Card card3 = new engine.cards.Card("card3", cardDataThree, p1);
+        p1.getHand().add(card);
+        p1.getHand().add(card2);
+        p1.getHand().add(card3);
+        assertTrue(p1.getHand().contains(card));
+        assertTrue(p1.getHand().contains(card2));
+        assertTrue(p1.getHand().contains(card3));
+        gameState.playCard(p1, card);
+        assertTrue(p1.getField().contains(card));
+        assertFalse(p1.getHand().contains(card));
+        gameState.playCard(p1, card2);
+        assertTrue(p1.getTrash().contains(card2));
+        assertFalse(p1.getHand().contains(card2));
+        gameState.playCard(p1, card3);
+        assertTrue(p1.getStage().contains(card3));
+        assertFalse(p1.getHand().contains(card3));
+    }
 
-refresh behavior */
-    
+    @Test
+    void testPlayCard_fieldFull_characterRejected() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
+                null, CardType.Character, null, null, 0, 1000, null, null, 0.0);
+
+        // Fill the field to the 5-card limit
+        for (int i = 0; i < 5; i++) {
+            Card c = new Card("c" + i, charData, p1);
+            p1.getHand().add(c);
+            gameState.playCard(p1, c);
+        }
+        assertEquals(5, p1.getField().size());
+
+        // Attempt to play a 6th character — should be rejected
+        Card sixth = new Card("c6", charData, p1);
+        p1.getHand().add(sixth);
+        gameState.playCard(p1, sixth);
+
+        assertEquals(5, p1.getField().size());        // field unchanged
+        assertTrue(p1.getHand().contains(sixth));     // card stays in hand
+    }
+
+    @Test
+    void testPlayCard_stageOccupied_secondStageRejected() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData stageData = new CardData("S", "SET", "Stage", "", "", "Set",
+                null, CardType.Stage, null, null, 0, 0, null, null, 0.0);
+
+        Card stage1 = new Card("s1", stageData, p1);
+        Card stage2 = new Card("s2", stageData, p1);
+        p1.getHand().add(stage1);
+        p1.getHand().add(stage2);
+
+        gameState.playCard(p1, stage1);
+        assertTrue(p1.getStage().contains(stage1));
+
+        // Attempt to play a second stage — should be rejected
+        gameState.playCard(p1, stage2);
+
+        assertEquals(1, p1.getStage().size());        // still only 1 stage
+        assertTrue(p1.getStage().contains(stage1));   // original unchanged
+        assertTrue(p1.getHand().contains(stage2));    // second stays in hand
+    }
+
+    @Test
+    /**
+     * Test adding a life to the player increases their life total correctly and
+     * handles edge cases (e.g., exceeding maximum life)
+     */
+    void testaddLife() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        int initialLife = p1.getLife().size();
+        CardData cardData = new CardData(
+                "TEST-001", // id
+                "TEST-SET", // setId
+                "Test", // name
+                "Test description", // description
+                "", // subTypes
+                "Test Set", // setName
+                null, // rarity
+                null, // cardType
+                null, // attribute
+                null, // color
+                0, // cost
+                0, // power
+                5, // life
+                null, // counter
+                0.0 // marketPrice
+        );
+        Card lifeCard = new Card("lifeCard", cardData, p1, p1.getHand());
+        gameState.addLife(p1, lifeCard);
+        assertEquals(initialLife + 1, p1.getLife().size());
+        assertTrue(lifeCard.getZone() == p1.getLife());
+        assertTrue(p1.getLife().contains(lifeCard));
+        assertFalse(p1.getHand().contains(lifeCard));
+    }
+
+    @Test
+    /**
+     * Test that removing life points decreases the player's life total correctly
+     * and handles edge cases (e.g., going to zero or negative)
+     */
+    void testremoveLife() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData cardData = new CardData(
+                "TEST-001", // id
+                "TEST-SET", // setId
+                "Test", // name
+                "Test description", // description
+                "", // subTypes
+                "Test Set", // setName
+                null, // rarity
+                null, // cardType
+                null, // attribute
+                null, // color
+                0, // cost
+                0, // power
+                5, // life
+                null, // counter
+                0.0 // marketPrice
+        );
+        for (int i = 0; i < 5; i++) {
+            Card lifeCard = new Card("lifeCard" + i, cardData, p1, p1.getHand());
+            gameState.addLife(p1, lifeCard);
+        }
+        assertEquals(5, p1.getLife().size());
+        for (int i = 0; i < 5; i++) {
+            Card lifeCard = p1.getLife().getCards().get(0); // add() uses addFirst; remove() uses removeFirst → index 0 is drawn
+            gameState.removeLife(p1);
+            assertEquals(5 - (i + 1), p1.getLife().size());
+            assertTrue(p1.getHand().contains(lifeCard));
+            assertFalse(p1.getLife().contains(lifeCard));
+        }
+        assertEquals(0, p1.getLife().size());
+        gameState.removeLife(p1);
+        assertTrue(gameState.isGameOver());
+        assertEquals(p2, gameState.getWinner());
+    }
+
+    @Test
+    /**
+     * Test that attaching a Don card to a card updates the game state correctly and
+     * that detaching it reverses those changes
+     */
+    void testAttachandDetachDon() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData cardData = new CardData(
+                "TEST-001", // id
+                "TEST-SET", // setId
+                "Test Card", // name
+                "Test description", // description
+                "", // subTypes
+                "Test Set", // setName
+                null, // rarity
+                null, // cardType
+                null, // attribute
+                null, // color
+                1, // cost
+                1000, // power
+                null, // life
+                null, // counter
+                0.0 // marketPrice
+        );
+        Card card = new engine.cards.Card("card1", cardData, p1);
+        DonCard donCard = new DonCard("don1", null, p1);
+        p1.getField().add(card);
+        p1.getHand().add(donCard);
+        gameState.attachDon(card, donCard);
+        assertTrue(card.getAttachedDons().contains(donCard));
+        gameState.detachDon(card);
+        assertFalse(card.getAttachedDons().contains(donCard));
+    }
+
+    /**
+     * Test that refreshing the game state at the end of a turn correctly resets the
+     * state of cards (e.g., untapping, refreshing abilities) and updates any
+     * relevant game variables
+     */
+    void testRefreshBehavior() {
+
+    }
+
+    @Test
+    /**
+     * Test that trashing a card moves it to the correct zone and updates the game
+     * state accordingly (e.g., triggers effects, updates resources)
+     */
+    void testTrashCard() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData cardData = new CardData(
+                "TEST-001", // id
+                "TEST-SET", // setId
+                "Test Card", // name
+                "Test description", // description
+                "", // subTypes
+                "Test Set", // setName
+                null, // rarity
+                null, // cardType
+                null, // attribute
+                null, // color
+                1, // cost
+                1000, // power
+                null, // life
+                null, // counter
+                0.0 // marketPrice
+        );
+        Card card = new engine.cards.Card("card1", cardData, p1);
+        p1.getField().add(card);
+        assertTrue(p1.getField().contains(card));
+        gameState.trash(p1, card);
+        assertFalse(p1.getField().contains(card));
+        assertTrue(p1.getTrash().contains(card));
+    }
+
+    // -------------------------------------------------------------------------
+    // Cost enforcement tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testPlayCard_insufficientDon_cardStaysInHand() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
+                null, CardType.Character, null, null, 2, 1000, null, null, 0.0);
+        Card card = new Card("c1", charData, p1);
+        p1.getHand().add(card);
+
+        // Add only 1 active Don, but card costs 2
+        DonCard don = new DonCard("don1", null, p1);
+        p1.getCost().add(don);
+
+        gameState.playCard(p1, card);
+
+        assertTrue(p1.getHand().contains(card),   "Card should stay in hand when Don is insufficient");
+        assertFalse(p1.getField().contains(card),  "Card should not reach field when Don is insufficient");
+        assertFalse(don.isRested(),                "Don should not be rested when play is rejected");
+    }
+
+    @Test
+    void testPlayCard_exactDon_cardPlaysAndDonsRested() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
+                null, CardType.Character, null, null, 2, 1000, null, null, 0.0);
+        Card card = new Card("c1", charData, p1);
+        p1.getHand().add(card);
+
+        // Add exactly 2 active Dons
+        DonCard don1 = new DonCard("don1", null, p1);
+        DonCard don2 = new DonCard("don2", null, p1);
+        p1.getCost().add(don1);
+        p1.getCost().add(don2);
+
+        gameState.playCard(p1, card);
+
+        assertTrue(p1.getField().contains(card),  "Card should be on field after cost is paid");
+        assertFalse(p1.getHand().contains(card),  "Card should leave hand after being played");
+        assertTrue(don1.isRested(),               "First Don should be rested after payment");
+        assertTrue(don2.isRested(),               "Second Don should be rested after payment");
+    }
+
+    @Test
+    void testPlayCard_surplusDon_onlyExactAmountRested() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
+                null, CardType.Character, null, null, 1, 1000, null, null, 0.0);
+        Card card = new Card("c1", charData, p1);
+        p1.getHand().add(card);
+
+        // Add 3 Dons but card only costs 1
+        DonCard don1 = new DonCard("don1", null, p1);
+        DonCard don2 = new DonCard("don2", null, p1);
+        DonCard don3 = new DonCard("don3", null, p1);
+        p1.getCost().add(don1);
+        p1.getCost().add(don2);
+        p1.getCost().add(don3);
+
+        gameState.playCard(p1, card);
+
+        assertTrue(p1.getField().contains(card), "Card should be on field");
+        long restedCount = p1.getCost().getCards().stream()
+                .filter(DonCard.class::isInstance).filter(c -> ((DonCard) c).isRested()).count();
+        assertEquals(1, restedCount, "Exactly 1 Don should be rested for a cost-1 card");
+    }
+
+    @Test
+    void testPlayCard_zeroCost_playsWithoutDon() {
+        Player p1 = new Player();
+        Player p2 = new Player();
+        GameState gameState = new GameState(p1, p2);
+        CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
+                null, CardType.Character, null, null, 0, 1000, null, null, 0.0);
+        Card card = new Card("c1", charData, p1);
+        p1.getHand().add(card);
+
+        // No Dons available — should still play for free
+        gameState.playCard(p1, card);
+
+        assertTrue(p1.getField().contains(card), "Zero-cost card should play without any Don");
+    }
+
+    // Future tests to consider:
+    void testCostReduction() {
+
+    }
 }

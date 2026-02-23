@@ -4,68 +4,24 @@ import engine.cards.Card;
 import engine.cards.abilities.Cost;
 import engine.player.Player;
 import engine.cards.DonCard;
+import engine.cards.Leader;
 import engine.zones.Zone;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class GameState {
     private Player player1;
     private Player player2;
 
-    private Player activePlayer;
-    private Phase phase;
+    private boolean gameOver;
+    private Player winner;
 
     public GameState(Player player1, Player player2) {
         this.player1 = player1;
         this.player2 = player2;
-        this.activePlayer = player1; // Player 1 starts first
-        this.phase = Phase.START;
-    }
-
-    /**
-     * Switches the active player and refreshes the field at the start of the new
-     * player's turn. This method will toggle the active player between player1 and
-     * player2, reset the phase to the START phase, and call the refreshField method
-     * to refresh any cards on the field for the new active player.
-     */
-    public void switchTurn() {
-        activePlayer = (activePlayer == player1) ? player2 : player1;
-    }
-
-    /**
-     * Switches the game phase to the next phase in the sequence. This method will
-     * update the current phase of the game according to the defined order of phases
-     * (e.g., START -> DON -> MAIN -> BATTLE -> END -> REFRESH -> DRAW -> DON ->
-     * ...).
-     * It will handle any necessary actions or state changes that should occur when
-     * transitioning between phases.
-     * The specific actions taken during each phase transition can be implemented
-     * within the switch statement, allowing for customized behavior based on the
-     * current phase of the game.
-     */
-    public void switchPhase() {
-        switch (phase) {
-            case START:
-                phase = Phase.DON;
-                break;
-            case REFRESH:
-                phase = Phase.DRAW;
-                break;
-            case DRAW:
-                phase = Phase.DON;
-                break;
-            case DON:
-                phase = Phase.MAIN;
-                break;
-            case MAIN:
-                phase = Phase.BATTLE;
-                break;
-            case BATTLE:
-                phase = Phase.END;
-                break;
-            case END:
-                switchTurn();
-                phase = Phase.REFRESH;
-                break;
-        }
+        this.gameOver = false;
+        this.winner = null;
     }
 
     /**
@@ -94,35 +50,71 @@ public class GameState {
      * 
      * be drawn from and whose hand will receive the drawn card.
      * 
-     * @param n The number of cards to draw.
+     * @param player The player who is drawing the card. This is the player whose
+     *               deck will
+     *               be drawn from and whose hand will receive the drawn card.
      */
-    public void draw(int count) {
+    public void draw(Player player) {
+        if (player.getDeck().getCards().isEmpty()) {
+            System.out.println(player.getName() + " has no more cards to draw.");
+            System.out.println((player == player1 ? player2.getName() : player1.getName()) + " wins the game!");
+            gameOver = true;
+            winner = (player == player1) ? player2 : player1;
+            return;
+        }
+        Card drawnCard = player.getDeck().draw();
+        if (drawnCard != null) {
+            moveCard(drawnCard, player.getHand());
+        }
+
+    }
+
+    /**
+     * Draws multiple cards from the top of the deck and adds them to the player's
+     * hand.
+     * 
+     * @param player The player who is drawing the cards. This is the player whose
+     *               deck will be drawn from and whose hand will receive the drawn
+     *               cards.
+     * @param count  The number of cards to draw.
+     */
+    public void draw(Player player, int count) {
         for (int i = 0; i < count; i++) {
-            if (activePlayer.getDeck().getCards().isEmpty()) {
-                System.out.println(activePlayer.getName() + " has no more cards to draw.");
-                break;
-            }
-            Card drawnCard = activePlayer.getDeck().draw();
-            if (drawnCard != null) {
-                moveCard(drawnCard, activePlayer.getHand());
+            draw(player);
+            if (gameOver) {
+                break; // Stop drawing if the game is over
             }
         }
     }
 
     /**
+     * Shuffles the player's deck. This method will randomize the order of the cards
+     * in the player's deck.
+     *
+     * @param player The player whose deck will be shuffled. This is the player
+     *               whose deck will be randomized.
+     */
+    public void shuffle(Player player) {
+        player.getDeck().shuffle();
+    }
+
+    /**
      * Draws a card from the top of the don deck and adds it to the player's hand.
      * 
-     * @param count The number of cards to draw.
+     * @param player The player who is drawing the Don cards. This is the player
+     *               whose Don deck will be drawn from and whose hand will receive
+     *               the drawn cards.
+     * @param count  The number of Don cards to draw.
      */
-    public void drawDon(int count) {
+    public void drawDon(Player player, int count) {
         for (int i = 0; i < count; i++) {
-            if (activePlayer.getDonDeck().getCards().isEmpty()) {
-                System.out.println(activePlayer.getName() + " has no more Don cards to draw.");
+            if (player.getDonDeck().getCards().isEmpty()) {
+                System.out.println(player.getName() + " has no more Don cards to draw.");
                 break;
             }
-            Card drawnCard = activePlayer.getDonDeck().draw();
+            DonCard drawnCard = player.getDonDeck().drawDon();
             if (drawnCard != null) {
-                moveCard(drawnCard, activePlayer.getHand());
+                moveCard(drawnCard, player.getCost());
             }
         }
     }
@@ -130,15 +122,15 @@ public class GameState {
     /**
      * Trashes a card. This method will move the specified card to the trash zone.
      * 
-     * will receive the trashed card.
-     * 
-     * @param card The card to be trashed. The card will be removed from its
-     *             current
-     *             zone
-     *             and added to the trash zone.
+     * @param player The player who is trashing the card. This is the player whose
+     *               trash zone will receive the trashed card.
+     * @param card   The card to be trashed. The card will be removed from its
+     *               current
+     *               zone
+     *               and added to the trash zone.
      */
-    public void trash(Card card) {
-        moveCard(card, activePlayer.getTrash());
+    public void trash(Player player, Card card) {
+        moveCard(card, player.getTrash());
     }
 
     /**
@@ -150,23 +142,42 @@ public class GameState {
      *             and
      *             will be moved to the appropriate zone based on its type.
      */
-    public void playCard(Card card) {
-        if (!activePlayer.getHand().getCards().contains(card)) {
-            System.out.println(activePlayer.getName() + " cannot play " + card.getData().name()
+    public void playCard(Player player, Card card) {
+        if (!player.getHand().getCards().contains(card)) {
+            System.out.println(player.getName() + " cannot play " + card.getData().name()
                     + " because it is not in their hand.");
             return;
+        }
+        // Pay the Don cost before moving the card
+        int cardCost = card.getData().cost();
+        if (cardCost > 0) {
+            Cost cost = new Cost();
+            cost.type = Cost.CostType.DON;
+            cost.amount = cardCost;
+            if (!payCost(player, cost)) {
+                return;
+            }
         }
         // Determine the target zone based on the card type
         Zone targetZone;
         switch (card.getData().cardType()) {
             case Character:
-                targetZone = activePlayer.getField();
+                if (player.getField().getCards().size() >= 5) {
+                    System.out.println("Field is full (5/5). " + card.getData().name() + " cannot be played.");
+                    return;
+                }
+                targetZone = player.getField();
+                card.setSummonSick(true); // Cannot attack the turn it is played (Rush bypasses this)
                 break;
             case Event:
-                targetZone = activePlayer.getTrash();
+                targetZone = player.getTrash();
                 break;
             case Stage:
-                targetZone = activePlayer.getStage();
+                if (!player.getStage().isEmpty()) {
+                    System.out.println("Stage zone is occupied. " + card.getData().name() + " cannot be played.");
+                    return;
+                }
+                targetZone = player.getStage();
                 break;
             default:
                 System.out.println("Unknown card type for " + card.getData().name());
@@ -191,8 +202,26 @@ public class GameState {
      * 
      * @return true if the cost was successfully paid, false otherwise.
      */
-    public void payCost(Cost cost) {
-
+    public boolean payCost(Player player, Cost cost) {
+        if (cost.type != Cost.CostType.DON) {
+            System.out.println("Unsupported cost type: " + cost.type);
+            return false;
+        }
+        List<DonCard> available = new ArrayList<>();
+        for (Card c : player.getCost().getCards()) {
+            if (c instanceof DonCard don && !don.isRested() && !don.isAttached()) {
+                available.add(don);
+            }
+        }
+        if (available.size() < cost.amount) {
+            System.out.println(player.getName() + " cannot afford this card (needs " + cost.amount
+                    + " Don, has " + available.size() + " available).");
+            return false;
+        }
+        for (int i = 0; i < cost.amount; i++) {
+            available.get(i).rest();
+        }
+        return true;
     }
 
     /**
@@ -215,7 +244,7 @@ public class GameState {
      */
     public void attachDon(Card card, DonCard don) {
         card.attachDonCard(don);
-
+        don.setAttached(true);
     }
 
     /**
@@ -232,7 +261,32 @@ public class GameState {
      *             to it.
      */
     public void detachDon(Card card) {
-        card.detachDonCard();
+        DonCard don = card.detachDonCard();
+        if (don != null) {
+            don.setAttached(false);
+        }
+    }
+
+    /**
+     * Detach all Don cards from a target card. This method will check if the
+     * specified
+     * target card has any attached Don cards and if the player has enough resources
+     * to pay the cost of detaching the Don cards. If the conditions are met,
+     * it will detach all Don cards from the target card and move them to the cost
+     * zone
+     * If the conditions are not met, it will print a message indicating that the
+     * Don
+     * cards cannot be detached.
+     * 
+     * @param card The target card from which all Don cards will be detached. This
+     *             is typically a Character card that has multiple Don cards
+     *             attached to it.
+     */
+    public void detachDonCards(Card card) {
+        int attachedDons = card.getAttachedDons().size();
+        for (int i = 0; i < attachedDons; i++) {
+            detachDon(card);
+        }
     }
 
     /**
@@ -244,8 +298,8 @@ public class GameState {
      * @param card The card to be moved from the hand to the life zone.
      * 
      */
-    public void addLife(Card card) {
-        moveCard(card, activePlayer.getLife());
+    public void addLife(Player player, Card card) {
+        moveCard(card, player.getLife());
     }
 
     /**
@@ -255,21 +309,57 @@ public class GameState {
      * it will print a message indicating that the player has been defeated.
      * 
      */
-    public void removeLife() {
-        if (activePlayer.getLife().isEmpty()) {
-            System.out.println(activePlayer.getName() + " has no more life points and has been defeated.");
+    public void removeLife(Player player) {
+        if (player.getLife().isEmpty()) {
+            System.out.println(player.getName() + " has no more life points and has been defeated.");
+            System.out.println((player == player1 ? player2.getName() : player1.getName()) + " wins the game!");
+            gameOver = true;
+            winner = (player == player1) ? player2 : player1;
             return;
         }
-        Card cardToRemove = activePlayer.getLife().draw();
-        moveCard(cardToRemove, activePlayer.getHand());
+        Card cardToRemove = player.getLife().draw();
+        moveCard(cardToRemove, player.getHand());
+        Leader leader = player.getLeader();
+        if (leader != null) leader.takeLife();
+    }
+
+    /**
+     * Remove a specified amount of life points from a player. This method will
+     * decrease the player's life points by the specified amount and move the
+     * corresponding number of cards from the life zone to the hand. If the player
+     * has no more life points after the removal, it will print a message indicating
+     * that the player has been defeated.
+     * 
+     * @param player The player whose life points will be removed. This is the
+     *               player who will lose life points and have cards moved from
+     *               their life zone to their hand.
+     * @param amount The number of life points to be removed. This is the amount by
+     *               which the player's life points will be decreased, and it will
+     *               determine how many cards are moved from the life zone to the
+     *               hand.
+     */
+    public void removeLife(Player player, int amount) {
+        for (int i = 0; i < amount; i++) {
+            if (player.getLife().isEmpty()) {
+                System.out.println(player.getName() + " has no more life points and has been defeated.");
+                System.out.println((player == player1 ? player2.getName() : player1.getName()) + " wins the game!");
+                gameOver = true;
+                winner = (player == player1) ? player2 : player1;
+                return;
+            }
+            Card cardToRemove = player.getLife().draw();
+            moveCard(cardToRemove, player.getHand());
+        }
+        Leader leader = player.getLeader();
+        if (leader != null) leader.takeLife(amount);
     }
 
     /**
      * Refresh the Dons card in the cost area by refreshing them.
      * 
      */
-    public void refreshDon() {
-        for (Card don : activePlayer.getCost().getCards()) {
+    public void refreshDon(Player player) {
+        for (Card don : player.getCost().getCards()) {
             don.activate();
         }
     }
@@ -280,16 +370,63 @@ public class GameState {
      * If the target card has no attached
      * Don cards, it will simply be activated if necessary.
      */
-    public void refreshField() {
-        for (Card card : activePlayer.getField().getCards()) {
+    public void refreshField(Player player) {
+        for (Card card : player.getField().getCards()) {
+            card.setSummonSick(false); // Clear summon sickness at the start of each new turn
             if (card.isRested()) {
                 card.activate();
             } else {
-                for (DonCard don : card.getAttachedDons()) {
-                    detachDon(don);
-                }
+                detachDonCards(card);
             }
         }
     }
 
+    /**
+     * Refresh the leader at the start of a turn by activating it if it is rested,
+     * or
+     * detaching all attached Don cards if it is already active. The leader is a
+     * special card that can have Don cards attached to it, and this method ensures
+     * that
+     * it is properly refreshed at the start of each turn. If the leader is rested,
+     * it will be activated. If the leader is already active, all attached Don cards
+     * will be detached and returned to the cost area. If the leader has no attached
+     * Don cards, it will simply be activated if necessary.
+     * 
+     * @param player The player whose leader will be refreshed. This is the player
+     *               whose leader card will be checked and refreshed at the start of
+     *               their turn.
+     */
+    public void refreshLeader(Player player) {
+        Leader leader = player.getLeader();
+        if (leader == null) return;
+        if (leader.isRested()) {
+            leader.activate();
+        }
+        detachDonCards(leader);
+    }
+
+    public void resolveBattle(Card attacker, Card defender) {
+        // Implement battle resolution logic (e.g., compare power, apply effects)
+    }
+
+    public void playCounter(Player player, Card counterCard, Card targetCard) {
+        // Implement counter play logic (e.g., check if counter can be played, apply
+        // effects)
+    }
+
+    public boolean isGameOver() {
+        return gameOver;
+    }
+
+    public Player getWinner() {
+        return winner;
+    }
+
+    public Player getPlayer1() {
+        return player1;
+    }
+
+    public Player getPlayer2() {
+        return player2;
+    }
 }
