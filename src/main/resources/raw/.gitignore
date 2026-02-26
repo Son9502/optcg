@@ -1,0 +1,3 @@
+# Ignore all scraped raw card data — never commit
+*
+!.gitignore
