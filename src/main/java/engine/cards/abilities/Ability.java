@@ -1,6 +1,7 @@
 package engine.cards.abilities;
 
 import engine.cards.effects.EffectData;
+import engine.cards.keywords.Keyword;
 import java.util.List;
 
 /**
@@ -62,6 +63,14 @@ public class Ability {
     /** The ordered list of effects this ability produces when it resolves. */
     public List<EffectData> getEffects() {
         return data.effects();
+    }
+
+    /**
+     * The keyword this ability represents.
+     * Non-null only when {@link #getTriggerType()} == {@link Trigger#KEYWORD}.
+     */
+    public Keyword getKeyword() {
+        return data.keyword();
     }
 
     /** The underlying static descriptor. */

@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 import engine.cards.abilities.Ability;
+import engine.cards.abilities.Trigger;
+import engine.cards.keywords.Keyword;
 
 public class Card {
     protected String card_id;
@@ -80,6 +82,20 @@ public class Card {
 
     public List<Ability> getAbilities() {
         return Collections.unmodifiableList(abilities);
+    }
+
+    public void addAbility(Ability ability) {
+        abilities.add(ability);
+    }
+
+    public void addAbilities(List<Ability> newAbilities) {
+        abilities.addAll(newAbilities);
+    }
+
+    /** Returns true if this card has a KEYWORD ability matching {@code k}. */
+    public boolean hasKeyword(Keyword k) {
+        return abilities.stream()
+                .anyMatch(a -> a.getTriggerType() == Trigger.KEYWORD && k == a.getKeyword());
     }
 
     // Mutator methods

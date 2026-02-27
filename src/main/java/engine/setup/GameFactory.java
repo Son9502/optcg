@@ -42,7 +42,7 @@ public class GameFactory {
         CardData data = new CardData(
                 id, "OP-TEST", name, "Test leader for local play.", "", "Test Set",
                 null, CardType.Leader, Attribute.Strike, color,
-                0, power, life, null, 0.0);
+                0, power, life, null, 0.0, null);
         return new Leader(id, data, owner);
     }
 
@@ -82,7 +82,7 @@ public class GameFactory {
             CardData data = new CardData(
                     idPrefix + "-" + i, "OP-TEST", name, "", "", "Test Set",
                     null, type, null, null,
-                    cost, power, null, null, 0.0);
+                    cost, power, null, null, 0.0, null);
             deck.add(new Card(idPrefix + "-" + i, data, owner));
         }
     }
@@ -96,7 +96,7 @@ public class GameFactory {
                 "DON", "OP-TEST", "DON!!",
                 "Attach to your Leader or a Character card. (+1000 power during your turn)",
                 "", "Test Set", null, CardType.Don, null, null,
-                0, 0, null, null, 0.0);
+                0, 0, null, null, 0.0, null);
 
         List<Card> dons = new ArrayList<>();
         for (int i = 1; i <= 10; i++) {

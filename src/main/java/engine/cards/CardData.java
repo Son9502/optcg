@@ -1,5 +1,6 @@
 package engine.cards;
 
+import engine.cards.abilities.AbilityData;
 import engine.cards.types.CardType;
 import engine.cards.types.Attribute;
 import engine.cards.types.Color;
@@ -8,6 +9,8 @@ import engine.cards.types.Rarity;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import java.util.Collections;
+import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CardData(
@@ -26,8 +29,9 @@ public record CardData(
         @JsonProperty("card_power") Integer power,
         Integer life,
         @JsonProperty("counter_amount") Integer counter,
-        // Set<Keyword> keywords, --- IGNORE ---
-        @JsonProperty("market_price") Double marketPrice) {
+        
+        @JsonProperty("market_price") Double marketPrice,
+        @JsonProperty("abilities")    List<AbilityData> abilities) {
     public CardData {
         // Validate and set default values for optional fields
         if (description == null) {
@@ -50,6 +54,9 @@ public record CardData(
         }
         if (marketPrice == null) {
             marketPrice = 0.0;
+        }
+        if (abilities == null) {
+            abilities = Collections.emptyList();
         }
     }
     public String getId() {

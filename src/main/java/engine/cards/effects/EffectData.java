@@ -1,13 +1,12 @@
 package engine.cards.effects;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import engine.cards.abilities.Condition;
 
 public record EffectData(
-    EffectType type,
-    int value,
-    Target target,
-    Condition condition,
-    int duration
-) {
-    
-}
+    @JsonProperty("type")      EffectType type,
+    @JsonProperty("value")     int        value,
+    @JsonProperty("target")    Target     target,
+    @JsonProperty("condition") Condition  condition,
+    @JsonProperty("duration")  int        duration
+) {}

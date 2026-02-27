@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Compiles raw scraped JSON into clean, engine-ready compiled JSON.
@@ -99,7 +101,8 @@ public class CardCompiler {
 
     /**
      * Builds a compiled card ObjectNode from a raw API node.
-     * Keeps only engine-relevant fields and appends a parsed abilities array.
+     * Keeps only engine-relevant fields and appends a parsed abilities array
+     * in AbilityData-format JSON (typed enum names, not raw strings).
      */
     static ObjectNode buildCompiledCard(ObjectMapper mapper, JsonNode raw) {
         ObjectNode out = mapper.createObjectNode();
@@ -114,24 +117,145 @@ public class CardCompiler {
         }
 
         String cardText = raw.path("card_text").textValue();
-        List<ParsedAbility> abilities = Parser.parse(cardText);
+        List<ParsedAbility> parsed = Parser.parse(cardText);
         ArrayNode abilitiesNode = mapper.createArrayNode();
-        for (ParsedAbility ability : abilities) {
-            ObjectNode abilityNode = mapper.createObjectNode();
-            putNullable(abilityNode, "trigger",   ability.trigger());
-            putNullable(abilityNode, "condition", ability.condition());
-            putNullable(abilityNode, "cost",      ability.cost());
-            putNullable(abilityNode, "character", ability.character());
-            putNullable(abilityNode, "effect",    ability.effect());
-            abilitiesNode.add(abilityNode);
+        for (ParsedAbility pa : parsed) {
+            ObjectNode node = toAbilityJson(mapper, pa);
+            if (node != null) abilitiesNode.add(node);
         }
         out.set("abilities", abilitiesNode);
 
         return out;
     }
 
-    private static void putNullable(ObjectNode node, String key, String value) {
-        if (value != null) node.put(key, value);
-        else node.putNull(key);
+    // ── ParsedAbility → AbilityData-format JSON ───────────────────────────────
+
+    /**
+     * Converts a ParsedAbility to an ObjectNode whose field names match the
+     * @JsonProperty annotations on AbilityData. Returns null for unknown triggers
+     * so the caller can skip them.
+     */
+    private static ObjectNode toAbilityJson(ObjectMapper mapper, ParsedAbility pa) {
+        String triggerName = mapTrigger(pa.trigger());
+        if (triggerName == null) return null;
+
+        ObjectNode node = mapper.createObjectNode();
+        node.put("triggerType",   triggerName);
+        node.put("donRequired",   parseDonRequired(pa.condition()));
+        node.put("isOncePerTurn", isOncePerTurn(pa.condition()));
+
+        ObjectNode costNode = parseCostNode(mapper, pa.cost());
+        if (costNode != null) node.set("cost", costNode);
+        else                  node.putNull("cost");
+
+        String conditionName = mapCondition(pa.condition());
+        if (conditionName != null) node.put("condition", conditionName);
+        else                       node.putNull("condition");
+
+        if ("KEYWORD".equals(triggerName)) {
+            String kwName = mapKeyword(pa.effect());
+            if (kwName != null) node.put("keyword", kwName);
+            else                node.putNull("keyword");
+        } else {
+            node.putNull("keyword");
+        }
+
+        node.set("effects", mapper.createArrayNode()); // filled in Step 4
+        return node;
+    }
+
+    private static String mapTrigger(String trigger) {
+        if (trigger == null) return null;
+        return switch (trigger.trim()) {
+            case "On Play"                           -> "ON_PLAY";
+            case "When Attacking"                    -> "WHEN_ATTACKING";
+            case "Activate:Main", "Activate: Main"   -> "ACTIVATED_MAIN";
+            case "Main"                              -> "MAIN";
+            case "Counter"                           -> "COUNTER";
+            case "Trigger"                           -> "TRIGGER";
+            case "Keyword"                           -> "KEYWORD";
+            case "End of Turn", "End of Your Turn"   -> "END_OF_YOUR_TURN";
+            case "End of Opponent's Turn",
+                 "End of Your Opponent's Turn"       -> "END_OF_OPPONENTS_TURN";
+            case "On Your Opponent's Attack"         -> "OPPONENTS_ATTACK";
+            case "Passive"                           -> "PASSIVE";
+            case "On K.O."                           -> "ON_KO";
+            case "On Block"                          -> "ON_BLOCK";
+            default                                  -> null;
+        };
+    }
+
+    private static String mapKeyword(String effect) {
+        if (effect == null) return null;
+        return switch (effect.trim()) {
+            case "Rush"                              -> "RUSH";
+            case "Blocker"                           -> "BLOCKER";
+            case "Double Attack"                     -> "DOUBLE_ATTACK";
+            case "Banish"                            -> "BANISH";
+            case "Trigger"                           -> "TRIGGER";
+            case "Unblockable"                       -> "UNBLOCKABLE";
+            case "Rush: Character", "Rush:Character" -> "RUSH_CHARACTER";
+            default                                  -> null;
+        };
+    }
+
+    private static String mapCondition(String condition) {
+        if (condition == null || condition.isBlank()) return null;
+        String c = condition.trim();
+        if (c.contains("Your Turn") && !c.contains("Opponent")) return "YOUR_TURN";
+        if (c.contains("Opponent's Turn"))                       return "OPPONENTS_TURN";
+        if (c.contains("Life"))                                  return "IF_LIFE_COUNT";
+        if (c.contains("hand") || c.contains("Hand"))           return "IF_HAND_COUNT";
+        if (c.contains("Character") && !c.contains("Leader"))   return "IF_CHARACTER_COUNT";
+        if (c.contains("rested") || c.contains("Rested"))       return "IF_RESTED";
+        if (c.contains("Leader") && c.contains("type"))         return "IF_LEADER_TYPE";
+        return null;
+    }
+
+    private static boolean isOncePerTurn(String condition) {
+        return condition != null && condition.contains("Once Per Turn");
+    }
+
+    private static final Pattern DON_REQUIRED_PATTERN =
+            Pattern.compile("DON!!\\s*x\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
+
+    private static int parseDonRequired(String condition) {
+        if (condition == null) return 0;
+        Matcher m = DON_REQUIRED_PATTERN.matcher(condition);
+        return m.find() ? Integer.parseInt(m.group(1)) : 0;
+    }
+
+    private static final Pattern DON_COST_PATTERN =
+            Pattern.compile("\\((\\d+)\\)\\s*DON", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DON_MINUS_PATTERN =
+            Pattern.compile("DON!!\\s*[-\u2212](\\d+)", Pattern.CASE_INSENSITIVE);
+
+    private static ObjectNode parseCostNode(ObjectMapper mapper, String cost) {
+        if (cost == null || cost.isBlank()) return null;
+
+        Matcher m = DON_COST_PATTERN.matcher(cost);
+        if (m.find()) {
+            ObjectNode n = mapper.createObjectNode();
+            n.put("type", "DON");
+            n.put("amount", Integer.parseInt(m.group(1)));
+            return n;
+        }
+
+        m = DON_MINUS_PATTERN.matcher(cost);
+        if (m.find()) {
+            ObjectNode n = mapper.createObjectNode();
+            n.put("type", "DON_MINUS");
+            n.put("amount", Integer.parseInt(m.group(1)));
+            return n;
+        }
+
+        if (cost.toLowerCase().contains("rest this")) {
+            ObjectNode n = mapper.createObjectNode();
+            n.put("type", "REST");
+            n.put("amount", 0);
+            return n;
+        }
+
+        return null;
     }
 }
