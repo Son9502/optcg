@@ -2,13 +2,21 @@ package engine.player;
 
 import engine.cards.Leader;
 import engine.cards.CardData;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class PlayerTest {
+
+    private Player player;
+
+    @BeforeEach
+    void setUp() {
+        player = new Player();
+    }
+
     @Test
     void startWithEmptyZones() {
-        Player player = new Player();
         assertTrue(player.getDeck().isEmpty());
         assertTrue(player.getHand().isEmpty());
         assertTrue(player.getField().isEmpty());
@@ -26,7 +34,6 @@ public class PlayerTest {
       * If all assertions pass, it prints a success message.
      */
     void setLeaderWorks() {
-        Player player = new Player();
         assertNull(player.getLeader());
         CardData leaderData = new CardData(
                 "LEADER-001", // id
@@ -43,7 +50,8 @@ public class PlayerTest {
                 0, // power
                 4000, // life
                 null, // counter
-                0.0 // marketPrice
+                0.0, // marketPrice
+                null // abilities
         );
         Leader leader = new Leader("leader1", leaderData, player);
         player = new Player("player1", leader);

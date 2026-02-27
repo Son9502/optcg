@@ -5,18 +5,28 @@ import engine.cards.DonCard;
 import engine.cards.types.CardType;
 import engine.player.Player;
 import engine.cards.Card;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class GameStateTest {
+
+    private Player p1;
+    private Player p2;
+    private GameState gameState;
+
+    @BeforeEach
+    void setUp() {
+        p1 = new Player();
+        p2 = new Player();
+        gameState = new GameState(p1, p2);
+    }
+
     /**
      * Test that drawing a card moves it from the deck to the hand
      */
     @Test
     void testdrawCard() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         // Setup initial conditions (e.g., add cards to the deck)
         // Call the method to draw a card
         // Assert that the card is now in the hand and removed from the deck
@@ -35,7 +45,8 @@ public class GameStateTest {
                 1000, // power
                 null, // life
                 null, // counter
-                0.0 // marketPrice
+                0.0, // marketPrice
+                null // abilities
         );
         Card card = new engine.cards.Card("card1", cardData, p1);
         p1.getDeck().add(card);
@@ -51,9 +62,6 @@ public class GameStateTest {
      */
     void testdrawDon() {
         DonCard donCard = new DonCard("don1", null, null);
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         p1.getDonDeck().add(donCard);
         assertEquals(0, p1.getCost().size());
         gameState.drawDon(p1, 1);
@@ -68,9 +76,6 @@ public class GameStateTest {
      * (e.g., player loses the game, takes damage, etc.)
      */
     void testdrawEmpty() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         assertEquals(0, p1.getDeck().size());
         gameState.draw(p1);
         // Assert the expected outcome (e.g., player loses, takes damage)
@@ -86,9 +91,6 @@ public class GameStateTest {
      * (e.g., reduces resources, triggers effects)
      */
     void testPlayCard() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         CardData cardDataOne = new CardData(
                 "TEST-001", // id
                 "TEST-SET", // setId
@@ -104,7 +106,8 @@ public class GameStateTest {
                 1000, // power
                 null, // life
                 null, // counter
-                0.0 // marketPrice
+                0.0, // marketPrice
+                null // abilities
         );
         CardData cardDataTwo = new CardData(
                 "TEST-002", // id
@@ -121,7 +124,8 @@ public class GameStateTest {
                 1000, // power
                 null, // life
                 null, // counter
-                0.0 // marketPrice
+                0.0, // marketPrice
+                null // abilities
         );
         CardData cardDataThree = new CardData(
                 "TEST-003", // id
@@ -138,7 +142,8 @@ public class GameStateTest {
                 1000, // power
                 null, // life
                 null, // counter
-                0.0 // marketPrice
+                0.0, // marketPrice
+                null // abilities
         );
         Card card = new engine.cards.Card("card1", cardDataOne, p1);
         Card card2 = new engine.cards.Card("card2", cardDataTwo, p1);
@@ -162,11 +167,8 @@ public class GameStateTest {
 
     @Test
     void testPlayCard_fieldFull_characterRejected() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
-                null, CardType.Character, null, null, 0, 1000, null, null, 0.0);
+                null, CardType.Character, null, null, 0, 1000, null, null, 0.0, null);
 
         // Fill the field to the 5-card limit
         for (int i = 0; i < 5; i++) {
@@ -187,11 +189,8 @@ public class GameStateTest {
 
     @Test
     void testPlayCard_stageOccupied_secondStageRejected() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         CardData stageData = new CardData("S", "SET", "Stage", "", "", "Set",
-                null, CardType.Stage, null, null, 0, 0, null, null, 0.0);
+                null, CardType.Stage, null, null, 0, 0, null, null, 0.0, null);
 
         Card stage1 = new Card("s1", stageData, p1);
         Card stage2 = new Card("s2", stageData, p1);
@@ -215,9 +214,6 @@ public class GameStateTest {
      * handles edge cases (e.g., exceeding maximum life)
      */
     void testaddLife() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         int initialLife = p1.getLife().size();
         CardData cardData = new CardData(
                 "TEST-001", // id
@@ -234,7 +230,8 @@ public class GameStateTest {
                 0, // power
                 5, // life
                 null, // counter
-                0.0 // marketPrice
+                0.0, // marketPrice
+                null // abilities
         );
         Card lifeCard = new Card("lifeCard", cardData, p1, p1.getHand());
         gameState.addLife(p1, lifeCard);
@@ -250,9 +247,6 @@ public class GameStateTest {
      * and handles edge cases (e.g., going to zero or negative)
      */
     void testremoveLife() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         CardData cardData = new CardData(
                 "TEST-001", // id
                 "TEST-SET", // setId
@@ -268,7 +262,8 @@ public class GameStateTest {
                 0, // power
                 5, // life
                 null, // counter
-                0.0 // marketPrice
+                0.0, // marketPrice
+                null // abilities
         );
         for (int i = 0; i < 5; i++) {
             Card lifeCard = new Card("lifeCard" + i, cardData, p1, p1.getHand());
@@ -294,9 +289,6 @@ public class GameStateTest {
      * that detaching it reverses those changes
      */
     void testAttachandDetachDon() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         CardData cardData = new CardData(
                 "TEST-001", // id
                 "TEST-SET", // setId
@@ -312,7 +304,8 @@ public class GameStateTest {
                 1000, // power
                 null, // life
                 null, // counter
-                0.0 // marketPrice
+                0.0, // marketPrice
+                null // abilities
         );
         Card card = new engine.cards.Card("card1", cardData, p1);
         DonCard donCard = new DonCard("don1", null, p1);
@@ -339,9 +332,6 @@ public class GameStateTest {
      * state accordingly (e.g., triggers effects, updates resources)
      */
     void testTrashCard() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         CardData cardData = new CardData(
                 "TEST-001", // id
                 "TEST-SET", // setId
@@ -357,7 +347,8 @@ public class GameStateTest {
                 1000, // power
                 null, // life
                 null, // counter
-                0.0 // marketPrice
+                0.0, // marketPrice
+                null // abilities
         );
         Card card = new engine.cards.Card("card1", cardData, p1);
         p1.getField().add(card);
@@ -373,11 +364,8 @@ public class GameStateTest {
 
     @Test
     void testPlayCard_insufficientDon_cardStaysInHand() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
-                null, CardType.Character, null, null, 2, 1000, null, null, 0.0);
+                null, CardType.Character, null, null, 2, 1000, null, null, 0.0, null);
         Card card = new Card("c1", charData, p1);
         p1.getHand().add(card);
 
@@ -394,11 +382,8 @@ public class GameStateTest {
 
     @Test
     void testPlayCard_exactDon_cardPlaysAndDonsRested() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
-                null, CardType.Character, null, null, 2, 1000, null, null, 0.0);
+                null, CardType.Character, null, null, 2, 1000, null, null, 0.0, null);
         Card card = new Card("c1", charData, p1);
         p1.getHand().add(card);
 
@@ -418,11 +403,8 @@ public class GameStateTest {
 
     @Test
     void testPlayCard_surplusDon_onlyExactAmountRested() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
-                null, CardType.Character, null, null, 1, 1000, null, null, 0.0);
+                null, CardType.Character, null, null, 1, 1000, null, null, 0.0, null);
         Card card = new Card("c1", charData, p1);
         p1.getHand().add(card);
 
@@ -444,11 +426,8 @@ public class GameStateTest {
 
     @Test
     void testPlayCard_zeroCost_playsWithoutDon() {
-        Player p1 = new Player();
-        Player p2 = new Player();
-        GameState gameState = new GameState(p1, p2);
         CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
-                null, CardType.Character, null, null, 0, 1000, null, null, 0.0);
+                null, CardType.Character, null, null, 0, 1000, null, null, 0.0, null);
         Card card = new Card("c1", charData, p1);
         p1.getHand().add(card);
 

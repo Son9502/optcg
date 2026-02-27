@@ -3,26 +3,33 @@ import engine.cards.Card;
 import engine.cards.CardData;
 import engine.cards.DonCard;
 import engine.player.Player;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 public class TurnManagerTest {
-    @Test 
+
+    private Player player1;
+    private Player player2;
+    private GameState gameState;
+    private TurnManager turnManager;
+
+    @BeforeEach
+    void setUp() {
+        player1 = new Player("player_1", null);
+        player2 = new Player("player_2", null);
+        gameState = new GameState(player1, player2);
+        turnManager = new TurnManager(gameState);
+    }
+
+    @Test
     public void testInitialPhase() {
         // Create a mock GameState for testing
-        Player player1 = new Player("player_1", null);
-        Player player2 = new Player("player_2", null);
-        GameState mockGameState = new GameState(player1, player2);
-        TurnManager turnManager = new TurnManager(mockGameState);
         // Test initial phase is DON
         assertEquals(Phase.DON, turnManager.getCurrentPhase());
     }
     @Test 
     public void testAdvancePhase() {
         // Create a mock GameState and TurnManager for testing
-        Player player1 = new Player("player_1", null);
-        Player player2 = new Player("player_2", null);
-        GameState mockGameState = new GameState(player1, player2);
-        TurnManager turnManager = new TurnManager(mockGameState);
 
         // Test initial phase is DON
         assertEquals(Phase.DON, turnManager.getCurrentPhase());
@@ -50,10 +57,6 @@ public class TurnManagerTest {
     @Test
     public void testEndTurn() {
         // Create a mock GameState and TurnManager for testing
-        Player player1 = new Player("player_1", null);
-        Player player2 = new Player("player_2", null);
-        GameState mockGameState = new GameState(player1, player2);
-        TurnManager turnManager = new TurnManager(mockGameState);
         // Test initial active player is player1
         assertEquals(player1, turnManager.getActivePlayer());
         // Advance to END phase to trigger endTurn
@@ -66,10 +69,6 @@ public class TurnManagerTest {
 
     @Test
     public void testTurnCount_incrementsAfterEndPhase() {
-        Player player1 = new Player("player_1", null);
-        Player player2 = new Player("player_2", null);
-        GameState gameState = new GameState(player1, player2);
-        TurnManager turnManager = new TurnManager(gameState);
 
         assertEquals(1, turnManager.getTurnCount());
 
@@ -87,10 +86,6 @@ public class TurnManagerTest {
 
     @Test
     public void testFirstTurnDonDraws1() {
-        Player player1 = new Player("player_1", null);
-        Player player2 = new Player("player_2", null);
-        GameState gameState = new GameState(player1, player2);
-        TurnManager turnManager = new TurnManager(gameState);
 
         // Load 5 Don cards into p1's Don deck
         for (int i = 0; i < 5; i++) {
@@ -107,17 +102,13 @@ public class TurnManagerTest {
 
     @Test
     public void testSubsequentTurnDrawsTwoDon() {
-        Player player1 = new Player("player_1", null);
-        Player player2 = new Player("player_2", null);
-        GameState gameState = new GameState(player1, player2);
-        TurnManager turnManager = new TurnManager(gameState);
 
         // p1 needs 1 Don for the first-turn DON phase
         player1.getDonDeck().add(new DonCard(player1));
 
         // p2 needs a deck card for the DRAW phase in turn 2
         CardData deckData = new CardData("D1", "SET", "DeckCard", "", "", "Set",
-                null, null, null, null, 0, 0, 0, null, 0.0);
+                null, null, null, null, 0, 0, 0, null, 0.0, null);
         player2.getDeck().add(new Card("dc1", deckData, player2));
 
         // p2 needs Don cards for the turn-2 DON phase
