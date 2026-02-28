@@ -8,4 +8,5 @@ public enum Keyword {
     BANISH,
     UNBLOCKABLE,
     TRIGGER,
+    COUNTER
 }

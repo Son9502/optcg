@@ -148,7 +148,101 @@ This produced a test suite of 102 tests with 0 failures where every test reflect
 
 ## Phase 2 — Abilities, Effects, and Keywords *(in progress)*
 
-*Entries will be added as this phase progresses.*
+**Goal:** Wire structured ability data end-to-end: from compiled JSON through `CardData` into runtime `Ability` objects, then enforce keyword semantics (Rush, Blocker, Double Attack, Banish) in `BattleSystem`.
+
+### Ability data model — one-pass wiring (collab)
+
+**Problem:** `AbilityData` and `EffectData` existed as stubs with no Jackson annotations. `CardData` had no `abilities` field. `AbilityFactory` was unimplemented. `CardCompiler` dumped `ParsedAbility` as unstructured strings rather than typed JSON.
+
+**Design decision (developer):** Rather than a gradual rollout, the developer specified a single coordinated change across all layers to avoid intermediate states where the type system is inconsistent.
+
+**Prompt pattern:**
+> "In one pass: add `@JsonProperty` to every `AbilityData` and `EffectData` component, add `List<AbilityData> abilities` as the 16th field of `CardData` with null-to-empty normalization, rewrite `CardCompiler.toAbilityJson()` to emit typed AbilityData JSON, implement `AbilityFactory`, add `Card.hasKeyword()`, add `TestUtils.makeCardWithKeyword()`, and update every `new CardData(...)` call site to pass `null` as the 16th arg."
+
+**What changed through iteration:**
+- Jackson requires `@JsonProperty` on each record component for the canonical constructor to be used during deserialization; the first attempt omitted these annotations and deserialization silently produced empty lists
+- `CardCompiler` lives in the `tools` package and must not import engine classes — the solution was to write JSON nodes manually using string field names matching the `@JsonProperty` values rather than calling `mapper.valueToTree(abilityData)`
+- `BattleHandlerTest` had a pre-existing brace error in a stub method that surfaced only once the file was touched for the `CardData` constructor fix; corrected as part of the same pass
+
+**Key design ruling (developer):** `Keyword` is stored directly on `AbilityData` (non-null only when `triggerType == KEYWORD`). Encoding the keyword as a string and parsing it at runtime was rejected — the engine should never re-parse data it already parsed at compile time.
+
+**Result:** `CardDatabase.getCardData()` returns fully hydrated `CardData` with deserialized `List<AbilityData>`; `CardFactory` calls `AbilityFactory` on every card; `Card.hasKeyword(Keyword.RUSH)` works as a single-line predicate in `BattleSystem`.
+
+### Test infrastructure — @BeforeEach refactoring (collab)
+
+**Prompt:**
+> "Check each test file and add a `@BeforeEach setUp()` function where applicable, so future test additions don't require repeating shared setup."
+
+**Developer constraint:** `@BeforeEach` not `@BeforeAll` — every test in the suite touches mutable state (`Player`, `GameState`, `TurnManager`). Sharing instances across tests would cause order-dependent failures. `CardDatabaseTest` correctly keeps `@BeforeAll` for the expensive DB load.
+
+**Files refactored:** `GameStateTest` (removed 3-line boilerplate from 14 tests), `TurnManagerTest` (4-line boilerplate from 6 tests, standardised `mockGameState` → `gameState`), `CardTest`, `DeckTest`, `ZoneTest` (converted field initialisers to explicit `@BeforeEach`), `PlayerTest`.
+
+**Result:** 102 tests, 0 failures. New tests in any of these files require only `@Test void myTest() { ... }` — shared state is already wired.
+
+### Keyword semantics — implementation (collab + manual tests)
+
+**Keywords implemented:** RUSH, BLOCKER, DOUBLE_ATTACK, BANISH, UNBLOCKABLE. TRIGGER and RUSH_CHARACTER deferred to Phase 3 (require the effect execution system).
+
+**Implementation split:**
+- `GameState.playCard()` — RUSH skips `setSummonSick(true)` when the played card has the keyword (collab)
+- `GameState.removeLifeBanished()` — new method routing the top life card to trash instead of hand when BANISH is active (collab)
+- `BattleSystem.resolve()` — BANISH and DOUBLE_ATTACK logic wired into the leader-hit path (collab)
+- `BattleSystem.getValidBlockers()` / `getValidCounters()` — new query methods for the defend window (collab)
+- `TestUtils.attack()` — helper updated with BLOCKER redirect and UNBLOCKABLE bypass; `makeCardWithKeyword()` given `CardType.Character` so `playCard()` routes it correctly (collab, fixing bugs found by reviewer)
+
+**Tests:** The keyword test stubs in `BattleHandlerTest` were written manually by the developer first. Several had logical errors (wrong player zones checked in `testBanishKeyword`, attacker power too low in `testDoubleAttackKeyword`, no life cards seeded in `testUnblockableKeyword`, UNBLOCKABLE check applied to the wrong card in `TestUtils.attack`). These were identified through review and corrected iteratively.
+
+**RUSH vs RUSH_CHARACTER clarification (developer):** The developer identified that both values are needed in the `Keyword` enum despite appearing similar. `RUSH` is a self-keyword on Character cards. `RUSH_CHARACTER` maps to the card text "Rush: Character" which appears on Leader cards as a triggered effect that grants RUSH to characters played that turn — a different concept requiring the Phase 3 effect system.
+
+**Result:** 107 tests, 0 failures (BattleHandlerTest grew from 20 → 25).
+
+### GameFactory keyword distribution (collab)
+
+**Problem:** The test deck had no keyword-bearing cards, making CLI keyword testing impossible without manually constructing edge cases.
+
+**Change:** Added `addCardsWithKeyword()` helper to `GameFactory`. Keyword spread across the character tiers:
+
+| Card | Cost | Keyword |
+|---|---|---|
+| Pirate Grunt | 1 | RUSH |
+| Pirate Captain | 3 | BLOCKER |
+| Pirate Admiral | 5 | DOUBLE_ATTACK |
+| Yonko Officer | 6 | BANISH |
+| Yonko | 7 | UNBLOCKABLE |
+
+Each keyword card has the `AbilityData` set in both `CardData.abilities()` and the card's runtime ability list so `hasKeyword()` works correctly.
+
+### defend() — CliController (manual + collab review)
+
+**Initial implementation (manual):** The developer wrote the `defend()` method from scratch — a dynamic numbered menu covering three options (take attack / block / counter) built from runtime availability checks.
+
+**Review findings (collab):** Six bugs identified in the draft:
+1. `opponent` variable undefined in scope — should be `otherPlayer`
+2. `case 2` missing `break` — fell through to `case 3`, calling `battleSystem.resolve()` twice
+3. Dynamic option numbers (1/2/3) did not match hardcoded switch cases when some options were absent
+4. Double card selection in `case 2` — `selectCard()` then a second `readInt()` discarded the first choice
+5. Chosen blocker was never rested
+6. UNBLOCKABLE not checked before offering the blocker menu
+
+**Restructure (collab):** Replaced the menu-based switch with a sequential confirm-based flow:
+1. UNBLOCKABLE check → offer blocker via `confirm()` if available → rest chosen blocker, redirect `target`
+2. Counter loop: repeat `confirm()` while counters remain, accumulate `counterBoost`
+3. Single `battleSystem.resolve()` against the final target
+
+**Developer judgment:** The sequential confirm design was preferred over a renumbered dynamic menu because it eliminates the numbering mismatch class of bug entirely and mirrors how the defend window actually plays out at a real table (blocker decision first, then counters).
+
+### Counter resolution — applyCounter() and playCounter() (collab)
+
+**Initial implementation (manual):** The developer wrote the Counter changes across `BattleSystem` and `GameState`:
+- `getValidCounters()` changed from two separate `if` blocks (could double-add a card with both `counter > 0` and a KEYWORD) to `if/else if`, with the TRIGGER check replaced by `Keyword.COUNTER`
+- `applyCounter()` rewritten with a `switch` on `cardType` — Character returns `counterCard.getData().counter()`, Event delegates to `gameState.playCounter()`, with `gameState.trash(defender, counterCard)` called after the switch for both paths
+- `GameState.playCounter()` changed from `void` to `int` (returns 0 placeholder) to support the Event counter return path
+
+**Review finding (collab):** `TestUtils.makeCard()` creates cards with `null` cardType. Java's `switch` on an enum throws NPE on null, causing `resolve_counterBoostSavesDefender` to fail.
+
+**Fix:** Replaced the `switch` with an if-else chain that guards for null — a null cardType falls through to the Character path and uses `counterCard.getData().counter()`. This is safe because generic test cards represent Characters and will always have a `counter()` field value.
+
+**Result:** 107 tests, 0 failures. Character counter value is now fully resolved at runtime; Event counter value is correctly deferred to `gameState.playCounter()` (stub, pending Phase 3 effect system).
 
 ---
 

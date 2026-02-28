@@ -1,13 +1,17 @@
 package engine.cards.abilities;
-import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 import engine.cards.effects.EffectData;
+import engine.cards.keywords.Keyword;
+import java.util.List;
+
 public record AbilityData(
-    Trigger triggerType,
-    int donRequired,
-    Cost cost,
-    boolean isOncePerTurn,
-    Condition condition,
-    List<EffectData> effects
-) {
-    
-}
+    @JsonProperty("triggerType")   Trigger          triggerType,
+    @JsonProperty("donRequired")   int              donRequired,
+    @JsonProperty("cost")          Cost             cost,
+    @JsonProperty("isOncePerTurn") boolean          isOncePerTurn,
+    @JsonProperty("condition")     Condition        condition,
+    /** Non-null only when triggerType == KEYWORD. */
+    @JsonProperty("keyword")       Keyword          keyword,
+    @JsonProperty("effects")       List<EffectData> effects
+) {}

@@ -4,29 +4,39 @@ import engine.cards.Card;
 import engine.player.Player;
 import engine.cards.CardData;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class ZoneTest {
-    Player player = new Player();
-    CardData cardData = new CardData(
-            "TEST-001", // id
-            "TEST-SET", // setId
-            "Test Card", // name
-            "Test description", // description
-            "", // subTypes
-            "Test Set", // setName
-            null, // rarity
-            null, // cardType
-            null, // attribute
-            null, // color
-            1, // cost
-            1000, // power
-            null, // life
-            null, // counter
-            0.0 // marketPrice
-    );
-    Card card = new Card("card1", cardData, player);
+
+    private Player player;
+    private CardData cardData;
+    private Card card;
+
+    @BeforeEach
+    void setUp() {
+        player = new Player();
+        cardData = new CardData(
+                "TEST-001", // id
+                "TEST-SET", // setId
+                "Test Card", // name
+                "Test description", // description
+                "", // subTypes
+                "Test Set", // setName
+                null, // rarity
+                null, // cardType
+                null, // attribute
+                null, // color
+                1, // cost
+                1000, // power
+                null, // life
+                null, // counter
+                0.0, // marketPrice
+                null // abilities
+        );
+        card = new Card("card1", cardData, player);
+    }
 
     @Test
     /**

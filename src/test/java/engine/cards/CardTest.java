@@ -2,15 +2,22 @@ package engine.cards;
 
 import engine.TestUtils;
 import engine.player.Player;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 public class CardTest {
 
+    private Player player;
+
+    @BeforeEach
+    void setUp() {
+        player = new Player();
+    }
+
     @Test
     void testCardCreation() {
-        Player player = new Player();
         CardData cardData = TestUtils.makeCardData(1000);
         Card card = new Card("card1", cardData, player);
         assertEquals("card1", card.getCardId());
@@ -30,7 +37,6 @@ public class CardTest {
 
     @Test
     void testDonCardWorks() {
-        Player player = new Player();
         Card card = new Card("card1", TestUtils.makeCardData(500), player);
         DonCard donCard = new DonCard(player);
         card.attachDonCard(donCard);
@@ -42,7 +48,6 @@ public class CardTest {
 
     @Test
     void attachAndDetachDon() {
-        Player player = new Player();
         Card card = new Card("card1", TestUtils.makeCardData(500), player);
         DonCard donCard = new DonCard(player);
         card.attachDonCard(donCard);
