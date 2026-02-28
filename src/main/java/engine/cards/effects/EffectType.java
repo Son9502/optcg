@@ -14,7 +14,7 @@ public enum EffectType {
     // ── Power and cost modification ───────────────────────────────────────────
     POWER_BOOST,        // Give +N power to a Leader or Character (until end of turn or permanent)
     POWER_REDUCE,       // Give -N power to an opponent's Character
-    COST_REDUCE,        // Give -N cost to an opponent's Character during this turn
+    COST_MODIFY,        // Change a Character's cost by ±N; negative = harder to target, positive = easier
 
     // ── Card movement ─────────────────────────────────────────────────────────
     RETURN_TO_HAND,     // Return N card(s) to a player's hand
