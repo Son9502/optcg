@@ -2,6 +2,7 @@ package engine.battle;
 
 import engine.cards.Card;
 import engine.cards.Leader;
+import engine.cards.keywords.Keyword;
 import engine.core.GameState;
 import engine.core.TurnManager;
 import engine.player.Player;
@@ -66,6 +67,53 @@ public class BattleSystem {
     }
 
     /**
+     * Returns all valid blockers for the given player: any non-rested characters on
+     * their field with the BLOCKER keyword.
+     *
+     * @param player The defending player.
+     * @return List of cards that can legally block an attack. If the list is empty,
+     *         the defender has no valid blockers and the attacker can target the
+     *         leader directly.
+     */
+    public List<Card> getValidBlockers(Player player) {
+        List<Card> blockers = new ArrayList<>();
+        for (Card card : player.getField().getCards()) {
+            if (card.hasKeyword(Keyword.BLOCKER) && !card.isRested()) {
+                blockers.add(card);
+            }
+        }
+        return blockers;
+    }
+
+    /**
+     * Returns all valid counter cards in the defender's hand that can be played in
+     * response to an attack. For now, this is any card with a KEYWORD ability or a
+     * non-zero counter value, but this will be refined once we implement specific
+     * counter mechanics based on card effects.
+     * 
+     * @param player The defending player.
+     * @return List of cards that can legally be played as counters.
+     */
+    public List<Card> getValidCounters(Player player) {
+        List<Card> counters = new ArrayList<>();
+        for (Card card : player.getHand().getCards()) {
+            // For now, we will consider any card with a KEYWORD ability or a non-zero
+            // counter value as a valid counter. This is a placeholder until we implement
+            // specific counter mechanics based on card effects.
+            if (card.hasKeyword(Keyword.TRIGGER)) {
+                counters.add(card);
+            }
+            // This check whether the card can be used as a counter for no specific reason
+            // other than to have some valid counter options for testing purposes. It can be
+            // removed once we have actual counter mechanics implemented.
+            if (card.getData().counter() > 0) {
+                counters.add(card);
+            }
+        }
+        return counters;
+    }
+
+    /**
      * Returns all valid attack targets for the given opponent per OP TCG rules:
      * the opponent's leader is always a valid target; rested characters are also
      * valid targets.
@@ -121,7 +169,19 @@ public class BattleSystem {
         if (attackerPower >= defenderPower) {
             Player targetOwner = target.getOwner();
             if (target instanceof Leader) {
-                gameState.removeLife(targetOwner);
+                boolean banish = attacker.hasKeyword(Keyword.BANISH);
+                if (banish) {
+                    gameState.removeLifeBanished(targetOwner);
+                } else {
+                    gameState.removeLife(targetOwner);
+                }
+                if (attacker.hasKeyword(Keyword.DOUBLE_ATTACK)) {
+                    if (banish) {
+                        gameState.removeLifeBanished(targetOwner);
+                    } else {
+                        gameState.removeLife(targetOwner);
+                    }
+                }
             } else {
                 gameState.trash(targetOwner, target);
                 // Detach any Dons from the target as it leaves the field
