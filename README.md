@@ -4,28 +4,29 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 
 ---
 
-## Current Status — CMU Prototype
+## Current Status — Phase 2 *(in progress)*
 
-> **CMU (Command-line Minimum UI)** is the first milestone: a fully playable single game via the terminal with no graphics. The prototype proves the core rules engine is correct before any UI or networking work begins.
+> **CMU (Command-line Minimum UI)** is the first milestone: a fully playable single game via the terminal with no graphics. Phase 1 is complete. Phase 2 is wiring keyword and effect semantics into the rules engine.
 
 **What works today:**
 - Full turn cycle: REFRESH → DRAW → DON → MAIN → END
 - MAIN phase menu: Attack, Play Card, Attach Don, View Hand/Field/Opponent Field, End Phase
 - Battle resolution: attacker vs. opponent's leader or rested characters
-- Counter window during battle
+- Defend window during battle: defender offered blocker selection (skipped if attacker is Unblockable), then counter card loop, then single resolve
 - Mulligan on game start
 - Life system: successful attack on leader removes a life card to opponent's hand; game ends when life is empty and leader is attacked
 - Cost payment enforcement: paying a card's DON cost by resting DON cards from the cost zone
 - Summoning sickness: characters cannot attack the turn they are played
+- Keyword enforcement: Rush (character can attack turn played), Blocker (can intercept attacks), Double Attack (deals 2 damage on hit), Banish (life card goes to trash instead of hand), Unblockable (opponent cannot activate Blocker)
 - Field character limit: 5 characters max per player; UI prompts to replace when full
 - Stage card limit: 1 stage card per player; new stage replaces the old one
-- Two pre-built test decks via `GameFactory` (Luffy/Red and Zoro/Green)
+- Two pre-built test decks via `GameFactory` (Luffy/Red and Zoro/Green), with keyword-bearing cards at each cost tier for manual testing
 - Card data pipeline: raw scraped JSON → `CardCompiler` → compiled JSON → `CardDatabase`
 - `Parser`: structured ability extraction from card text into `{trigger, condition, cost, character, effect}` records
 - `CardData` record carries a `subTypes` field (normalized from API `sub_types` strings)
 - `CardDatabase` secondary index: `getByName()` (O(1)), `getBySubtype()` (O(n)), `getAllCards()`
 - `CsvGenerator`: offline tool that rebuilds `card_names_subtypes.csv` from compiled (or raw) JSON with name normalization and deduplication
-- 102 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty)
+- 107 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty)
 
 ---
 
@@ -56,7 +57,7 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 
 **Key keywords:**
 - **Rush** — Character can attack on the turn it is played
-- **Rush: Character** (§10-1-6) — Character can attack opponent's characters (not just leader) on the turn it is played
+- **Rush: Character** (§10-1-6) — Leader ability that grants Rush to Character cards played that turn (Phase 3)
 - **Blocker** — Can intercept an attack targeting another card
 - **Double Attack** — This card deals 2 damage when it attacks
 - **Banish** — When this card deals damage, the target life card is trashed without activating its Trigger
@@ -143,22 +144,22 @@ mvn exec:java -Dexec.mainClass="tools.CsvGenerator"
 mvn test
 ```
 
-**Current test suite: 102 tests, 0 failures, 0 errors.**
+**Current test suite: 107 tests, 0 failures, 0 errors.**
 10 `CardDatabaseTest` cases are data-dependent and skip automatically (via `assumeTrue`) when `raw/data/` is empty — run `CardScraper` first to populate.
 
 | Test class | Tests | Coverage area |
 |---|---|---|
-| `BattleHandlerTest` | 4 | `canAttack`, `getValidAttackers`, `getValidTargets`, `resolve` |
-| `TurnManagerTest` | 4 | Phase transitions, turn count, Don draw counts |
+| `BattleHandlerTest` | 25 | `canAttack`, `getValidAttackers`, `getValidTargets`, `resolve`, keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable) |
+| `TurnManagerTest` | 6 | Phase transitions, turn count, Don draw counts |
 | `GameStateTest` | 14 | Draw, trash, play card, remove life, refresh, cost payment, field/stage limits |
 | `GameSetupTest` | 4 | Initialization, mulligan, life setup |
-| `CardTest` | 6 | Rest/activate, Don attachment and detach, summoning sickness |
+| `CardTest` | 4 | Rest/activate, Don attachment and detach, summoning sickness |
 | `DeckTest` | 4 | Draw, draw from empty, search |
-| `ZoneTest` | 9 | Add, remove, draw top, move card, shuffle |
+| `ZoneTest` | 6 | Add, remove, draw top, move card, shuffle |
 | `PlayerTest` | 2 | Zone initialization, leader assignment |
 | `CardDatabaseTest` | 16 (10 skipped without data) | Card loading, deserialization, `getByName`, `getBySubtype`, `getAllCards`, `CardFactory` |
 | `ParserTest` | 17 | Ability parsing: triggers, conditions, costs, keywords, multi-ability blocks |
-| `GameFactoryTest` | 6 | Pre-built test deck construction, field/stage/don counts |
+| `GameFactoryTest` | 9 | Pre-built test deck construction, card type breakdown, ownership, field/stage/don counts |
 
 ---
 
@@ -179,9 +180,9 @@ src/
 │   │   │   │   ├── ColorDeserializer.java       ← Handles space-separated multi-color API strings
 │   │   │   │   ├── DonCard.java
 │   │   │   │   ├── Leader.java
-│   │   │   │   ├── abilities/                   ← Trigger, Condition, Cost, AbilityData
+│   │   │   │   ├── abilities/                   ← Trigger, Condition, Cost, AbilityData, Ability, AbilityFactory
 │   │   │   │   ├── effects/                     ← EffectData, EffectType, EffectFactory (stubs)
-│   │   │   │   ├── keywords/                    ← Keyword (stub)
+│   │   │   │   ├── keywords/                    ← Keyword enum (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, Rush: Character)
 │   │   │   │   └── types/                       ← CardType, Color, Attribute, Rarity enums
 │   │   │   ├── core/
 │   │   │   │   ├── GameEngine.java              ← Main game loop
@@ -251,7 +252,7 @@ src/
 - `DON!! −X` (§8-3-1-6) is a separate cost type: return X DON to the DON deck
 - `Zone` uses a `Deque` internally: `add()` = addFirst (top), `draw()` = removeFirst (top), `addBottom()` = addLast — supports top and bottom card placement for card effects
 - `tools/` is an offline pipeline; `CardScraper`, `CardCompiler`, `CsvGenerator`, and `Parser` run once at data-prep time and are not part of the game runtime
-- `CardData.color` stores the **primary** color only for CMU — multi-color leaders (e.g., Red/Green) store the first color token; full `List<Color>` support is deferred to Phase 2
+- `CardData.color` stores the **primary** color only for CMU — multi-color leaders (e.g., Red/Green) store the first color token; full `List<Color>` support is deferred (requires deck validation changes not needed for CMU)
 
 ---
 
@@ -272,18 +273,25 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 - `asText()` deprecation resolved in `CardCompiler` and `CsvGenerator` (`asText(null)` → `textValue()`)
 - Rulebook-correct keyword list: Rush, Rush: Character, Blocker, Double Attack, Banish, Unblockable, Trigger, Counter
 
-### Phase 2 — Abilities, Effects, and Keywords
-- Custom effect template parser: map each unique card text pattern to a deterministic `EffectData` object using regex templates (no NLP / external dependencies — ensures offline play and reproducible results)
-- Implement the `Keyword` system as the first deliverable:
-  - **Rush** / **Rush: Character**: character can attack on the turn it is played
-  - **Blocker**: card can intercept an attack targeting another card
-  - **Trigger**: activates when a life card is revealed, at no DON cost
-  - **Counter**: played from hand during the opponent's attack; card goes to trash afterward
-  - **Double Attack**: deals 2 damage on attack
-  - **Banish**: target life card is trashed without activating its Trigger
-  - **Unblockable**: opponent cannot activate Blocker against this card
-- Wire the full `Ability` / `EffectData` / `Condition` / `Trigger` / `Cost` system
-- Event card resolution (play, resolve effect, move to trash)
+### Phase 2 — Abilities, Effects, and Keywords *(in progress)*
+
+**Complete:**
+- `AbilityData` wired end-to-end: `CardCompiler` emits typed ability JSON, `CardDatabase` deserializes into `List<AbilityData>`, `AbilityFactory` hydrates runtime `Ability` objects on every card, `Card.hasKeyword()` works as a single-line predicate
+- Keyword system implemented and tested:
+  - **Rush**: character can attack the turn it is played
+  - **Blocker**: can intercept attacks targeting another card (defend window)
+  - **Double Attack**: deals 2 life damage on a successful attack
+  - **Banish**: target life card goes to trash instead of opponent's hand
+  - **Unblockable**: opponent's blocker window is skipped entirely
+- CLI defend window: sequential blocker → counter loop → single `BattleSystem.resolve()`
+
+**Remaining:**
+- **Trigger**: activates when a life card is revealed, at no DON cost
+- **Counter**: actual boost value from `CardData.counter()` (currently a placeholder returning 0)
+- **Rush: Character**: Leader ability granting Rush to characters played that turn (requires effect system)
+- Custom effect template parser: map each unique card text pattern to a deterministic `EffectData` object using regex templates (no NLP / external dependencies)
+- Full `Condition` / `Cost` / `EffectData` evaluation system
+- Event card resolution: play → resolve effect → move to trash
 - `[Activate:Main]` effects: player-activated abilities during the Main Phase
 
 ### Phase 2.5 — Enhanced CMU (Tmux UI)
@@ -385,4 +393,4 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
 
 See [DEVLOG.md](DEVLOG.md) for a full account of what was built manually, what was AI-assisted, the key prompts used, and what changed through iteration.
 
-*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline (including `CardData.subTypes`, `CardDatabase` secondary indexes, and `CsvGenerator`), and ability parser are all in place. Phase 2 begins wiring individual card effects. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*
+*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is in progress: keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable) are implemented and tested; Counter resolution, Trigger, Event effects, and [Activate:Main] abilities remain. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*
