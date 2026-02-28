@@ -323,7 +323,8 @@ public class GameState {
         Card cardToRemove = player.getLife().draw();
         moveCard(cardToRemove, player.getHand());
         Leader leader = player.getLeader();
-        if (leader != null) leader.takeLife();
+        if (leader != null)
+            leader.takeLife();
     }
 
     /**
@@ -354,7 +355,8 @@ public class GameState {
             moveCard(cardToRemove, player.getHand());
         }
         Leader leader = player.getLeader();
-        if (leader != null) leader.takeLife(amount);
+        if (leader != null)
+            leader.takeLife(amount);
     }
 
     /**
@@ -370,7 +372,8 @@ public class GameState {
         Card cardToRemove = player.getLife().draw();
         moveCard(cardToRemove, player.getTrash());
         Leader leader = player.getLeader();
-        if (leader != null) leader.takeLife();
+        if (leader != null)
+            leader.takeLife();
     }
 
     /**
@@ -417,7 +420,8 @@ public class GameState {
      */
     public void refreshLeader(Player player) {
         Leader leader = player.getLeader();
-        if (leader == null) return;
+        if (leader == null)
+            return;
         if (leader.isRested()) {
             leader.activate();
         }
@@ -428,9 +432,15 @@ public class GameState {
         // Implement battle resolution logic (e.g., compare power, apply effects)
     }
 
-    public void playCounter(Player player, Card counterCard, Card targetCard) {
+    public int playCounter(Player player, Card counterCard, Card targetCard) {
         // Implement counter play logic (e.g., check if counter can be played, apply
         // effects)
+        // For now, this is a placeholder that simply returns 0 as the counter boost
+        // value.
+        // The actual implementation will depend on the specific mechanics of counter
+        // cards and their effects, which will be developed once we have the card
+        // effects system in place.
+        return 0; // Placeholder return value
     }
 
     public boolean isGameOver() {

@@ -194,10 +194,12 @@ public class BattleHandlerTest {
         // them
         Card attacker = TestUtils.makeCard(p1, 6000);
         Card target = TestUtils.makeCard(p2, 5000);
+        Card counterCard = TestUtils.makeCard(p2, 2000);
         p2.getField().add(target);
         target.rest();
         // 2000 counter: 5000 + 2000 = 7000 > 6000 — attack fails, defender saved
-        battleSystem.resolve(attacker, target, 2000);
+        int counterBoost = battleSystem.applyCounter(p2, counterCard, target);
+        battleSystem.resolve(attacker, target, counterBoost);
         assertTrue(p2.getField().contains(target));
         assertFalse(p2.getTrash().contains(target));
     }
@@ -228,7 +230,6 @@ public class BattleHandlerTest {
         assertTrue(gameState.isGameOver());
         assertEquals(p1, gameState.getWinner());
     }
-
     // --- KeyWords Tests ---
     @Test
     /**

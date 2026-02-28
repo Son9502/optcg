@@ -3,6 +3,7 @@ package engine.battle;
 import engine.cards.Card;
 import engine.cards.Leader;
 import engine.cards.keywords.Keyword;
+import engine.cards.types.CardType;
 import engine.core.GameState;
 import engine.core.TurnManager;
 import engine.player.Player;
@@ -97,16 +98,17 @@ public class BattleSystem {
     public List<Card> getValidCounters(Player player) {
         List<Card> counters = new ArrayList<>();
         for (Card card : player.getHand().getCards()) {
-            // For now, we will consider any card with a KEYWORD ability or a non-zero
-            // counter value as a valid counter. This is a placeholder until we implement
-            // specific counter mechanics based on card effects.
-            if (card.hasKeyword(Keyword.TRIGGER)) {
-                counters.add(card);
-            }
             // This check whether the card can be used as a counter for no specific reason
             // other than to have some valid counter options for testing purposes. It can be
             // removed once we have actual counter mechanics implemented.
             if (card.getData().counter() > 0) {
+                counters.add(card);
+            }
+            // Any card with a KEYWORD ability that could potentially be a counter (e.g. an
+            // Event card with a counter keyword) is included here for testing purposes, but
+            // this will be refined once we implement specific counter mechanics based on
+            // card effects.
+            else if (card.hasKeyword(Keyword.COUNTER)) {
                 counters.add(card);
             }
         }
@@ -144,8 +146,18 @@ public class BattleSystem {
      * @return The power boost granted to the defending card.
      */
     public int applyCounter(Player defender, Card counterCard, Card target) {
-        gameState.playCounter(defender, counterCard, target);
-        return 0; // Placeholder — counter value resolution pending card effects implementation
+        // For now, assume this is a Character counter card. Event counters and other
+        // types will be handled once we implement specific counter mechanics based on
+        // card effects.
+        int counterValue = 0;
+        CardType type = counterCard.getData().cardType();
+        if (type == null || type == CardType.Character) {
+            counterValue = counterCard.getData().counter();
+        } else if (type == CardType.Event) {
+            counterValue = gameState.playCounter(defender, counterCard, target);
+        }
+        gameState.trash(defender, counterCard);
+        return counterValue;
     }
 
     /**
