@@ -244,6 +244,48 @@ Each keyword card has the `AbilityData` set in both `CardData.abilities()` and t
 
 **Result:** 107 tests, 0 failures. Character counter value is now fully resolved at runtime; Event counter value is correctly deferred to `gameState.playCounter()` (stub, pending Phase 3 effect system).
 
+### Card text corpus analysis (collab)
+
+**Problem:** `CardCompiler` always writes `"effects": []`. Before implementing `EffectParser`, the full range of effect patterns across the card set needed to be understood so the grammar could be designed against real data rather than assumptions.
+
+**Approach:** Developer directed a Python analysis script that read all 48 compiled JSON files (2,836 cards, 3,326 ability blocks with body text), normalised effect bodies into generic templates, and classified them by effect type.
+
+**Key findings:**
+- 217 blocks are disclaimer/reprint noise — should be filtered before parsing
+- The first word of every effect body is one of ~15 action verbs — the vocabulary is small and closed
+- 1,294 blocks contain `and`/`then` (multi-effect chains); 724 start with `if` (conditional wrapper)
+- True unclassifiable rate: ~6% — the rest follow predictable templates
+
+**Output:** `effect_templates_generic.csv` (1,454 rows — parseable templates) and `effect_templates_unique.csv` (434 rows — complex/unique patterns) at project root. The generic CSV is the `EffectParser`'s spec; the unique CSV is the backlog of manual JSON overrides.
+
+### EffectType enum redesign (collab)
+
+**Developer reasoning:** The original 14-type enum included `DAMAGE` (belongs to the combat system, not card text) and `ADD_TO_HAND` (a result of other effects, not a standalone action). The corpus analysis revealed 9 missing types.
+
+**Changes:**
+- Removed: `DAMAGE`, `ADD_TO_HAND`
+- Added: `POWER_REDUCE`, `COST_MODIFY`, `ADD_DON`, `SET_DON_ACTIVE`, `ADD_LIFE`, `GRANT_KEYWORD`, `PREVENT_ATTACK`, `PREVENT_BLOCK`, `PREVENT_KO`, `NEGATE`, `MODAL`
+- Renamed: `COST_REDUCE` → `COST_MODIFY` (signed int: positive = cost increase, negative = cost decrease — both patterns exist in the card set)
+- Renamed: `PLAY_FROM_HAND` → `PLAY_CARD` (covers hand, deck, and trash as source zones)
+
+**Result:** 23 EffectTypes. 107 tests, 0 failures — neither removed type had references outside the enum itself.
+
+### Effect grammar definition (manual)
+
+**Developer observation:** All card effect text is built from the same small vocabulary joined by conjunctions and prepositions. Each effect body is one or more clauses sharing the shape: `[VERB] [QUANTITY?] [PLAYER?] [CARD_TYPE] [FILTER*] [ZONE?] [DURATION?]`. The action verb alone determines the `EffectType`; everything else fills `EffectData` fields.
+
+**Key grammar decisions (developer):**
+- `up to N` and `N or less` are synonymous in all contexts — both parse to `max=N`
+- `COST_MODIFY` uses a signed int covering both cost reduction (opponent's card easier to target) and cost increase (harder to target)
+- Color is a FILTER qualifier on targets, not a standalone condition: `"a purple {Big Mom Pirates} type Character"`
+- Leader color (`IF_LEADER_COLOR`) is a distinct condition from leader type (`IF_LEADER_TYPE`)
+- `IF_YOU_DO` is a follow-up condition token: the second clause fires only if the first resolved
+- `MODAL` wraps two sub-lists of effects; requires a future `EffectData.choices` field before it can be fully serialised — deferred
+
+**Output:** `EFFECT_GRAMMAR.md` at project root. Contains: full token vocabulary (9 token types), BNF grammar rules, verb → EffectType mapping with disambiguation, EffectData field mapping, and a catalogue of out-of-scope patterns.
+
+**Lexer architecture decision (developer):** The lexer operates on multi-word phrases, not characters — longest-match-first over word sequences. `TokenType` enum and `Token` record will be written manually; phrase lookup tables and regex patterns within the lexer are collab territory.
+
 ---
 
 ## Prompt Engineering Patterns Used
