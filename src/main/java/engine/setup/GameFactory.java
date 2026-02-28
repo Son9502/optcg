@@ -1,6 +1,10 @@
 package engine.setup;
 
 import engine.cards.*;
+import engine.cards.abilities.Ability;
+import engine.cards.abilities.AbilityData;
+import engine.cards.abilities.Trigger;
+import engine.cards.keywords.Keyword;
 import engine.cards.types.*;
 import engine.core.GameState;
 import engine.player.Player;
@@ -55,13 +59,13 @@ public class GameFactory {
         String pid = owner.getPlayerId();
 
         // Characters (42 total: 9+9+9+7+5+2+1)
-        addCards(deck, owner, pid + "-C1", "Pirate Grunt",      1, 1000, CardType.Character, 9);
-        addCards(deck, owner, pid + "-C2", "Pirate Lieutenant", 2, 2000, CardType.Character, 9);
-        addCards(deck, owner, pid + "-C3", "Pirate Captain",    3, 3000, CardType.Character, 9);
-        addCards(deck, owner, pid + "-C4", "Pirate Commander",  4, 4000, CardType.Character, 7);
-        addCards(deck, owner, pid + "-C5", "Pirate Admiral",    5, 5000, CardType.Character, 5);
-        addCards(deck, owner, pid + "-C6", "Yonko Officer",     6, 6000, CardType.Character, 2);
-        addCards(deck, owner, pid + "-C7", "Yonko",             7, 7000, CardType.Character, 1);
+        addCardsWithKeyword(deck, owner, pid + "-C1", "Pirate Grunt",      1, 1000, CardType.Character, 9, Keyword.RUSH);
+        addCards           (deck, owner, pid + "-C2", "Pirate Lieutenant", 2, 2000, CardType.Character, 9);
+        addCardsWithKeyword(deck, owner, pid + "-C3", "Pirate Captain",    3, 3000, CardType.Character, 9, Keyword.BLOCKER);
+        addCards           (deck, owner, pid + "-C4", "Pirate Commander",  4, 4000, CardType.Character, 7);
+        addCardsWithKeyword(deck, owner, pid + "-C5", "Pirate Admiral",    5, 5000, CardType.Character, 5, Keyword.DOUBLE_ATTACK);
+        addCardsWithKeyword(deck, owner, pid + "-C6", "Yonko Officer",     6, 6000, CardType.Character, 2, Keyword.BANISH);
+        addCardsWithKeyword(deck, owner, pid + "-C7", "Yonko",             7, 7000, CardType.Character, 1, Keyword.UNBLOCKABLE);
 
         // Events (5 total: 2+2+1)
         addCards(deck, owner, pid + "-E1", "Gomu Gomu no Pistol", 1, 0, CardType.Event, 2);
@@ -84,6 +88,22 @@ public class GameFactory {
                     null, type, null, null,
                     cost, power, null, null, 0.0, null);
             deck.add(new Card(idPrefix + "-" + i, data, owner));
+        }
+    }
+
+    private static void addCardsWithKeyword(List<Card> deck, Player owner, String idPrefix,
+                                            String name, int cost, int power, CardType type,
+                                            int count, Keyword keyword) {
+        AbilityData abilityData = new AbilityData(
+                Trigger.KEYWORD, 0, null, false, null, keyword, List.of());
+        for (int i = 1; i <= count; i++) {
+            CardData data = new CardData(
+                    idPrefix + "-" + i, "OP-TEST", name, "", "", "Test Set",
+                    null, type, null, null,
+                    cost, power, null, null, 0.0, List.of(abilityData));
+            Card card = new Card(idPrefix + "-" + i, data, owner);
+            card.addAbility(new Ability(abilityData));
+            deck.add(card);
         }
     }
 

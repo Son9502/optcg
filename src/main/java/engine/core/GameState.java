@@ -2,6 +2,7 @@ package engine.core;
 
 import engine.cards.Card;
 import engine.cards.abilities.Cost;
+import engine.cards.keywords.Keyword;
 import engine.player.Player;
 import engine.cards.DonCard;
 import engine.cards.Leader;
@@ -167,7 +168,9 @@ public class GameState {
                     return;
                 }
                 targetZone = player.getField();
-                card.setSummonSick(true); // Cannot attack the turn it is played (Rush bypasses this)
+                if (!card.hasKeyword(Keyword.RUSH)) {
+                    card.setSummonSick(true);
+                }
                 break;
             case Event:
                 targetZone = player.getTrash();
@@ -352,6 +355,22 @@ public class GameState {
         }
         Leader leader = player.getLeader();
         if (leader != null) leader.takeLife(amount);
+    }
+
+    /**
+     * Lose a life point with BANISH — the life card goes to trash instead of hand.
+     * Game-over logic is identical to removeLife().
+     */
+    public void removeLifeBanished(Player player) {
+        if (player.getLife().isEmpty()) {
+            gameOver = true;
+            winner = (player == player1) ? player2 : player1;
+            return;
+        }
+        Card cardToRemove = player.getLife().draw();
+        moveCard(cardToRemove, player.getTrash());
+        Leader leader = player.getLeader();
+        if (leader != null) leader.takeLife();
     }
 
     /**
