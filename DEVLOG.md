@@ -231,6 +231,19 @@ Each keyword card has the `AbilityData` set in both `CardData.abilities()` and t
 
 **Developer judgment:** The sequential confirm design was preferred over a renumbered dynamic menu because it eliminates the numbering mismatch class of bug entirely and mirrors how the defend window actually plays out at a real table (blocker decision first, then counters).
 
+### Counter resolution — applyCounter() and playCounter() (collab)
+
+**Initial implementation (manual):** The developer wrote the Counter changes across `BattleSystem` and `GameState`:
+- `getValidCounters()` changed from two separate `if` blocks (could double-add a card with both `counter > 0` and a KEYWORD) to `if/else if`, with the TRIGGER check replaced by `Keyword.COUNTER`
+- `applyCounter()` rewritten with a `switch` on `cardType` — Character returns `counterCard.getData().counter()`, Event delegates to `gameState.playCounter()`, with `gameState.trash(defender, counterCard)` called after the switch for both paths
+- `GameState.playCounter()` changed from `void` to `int` (returns 0 placeholder) to support the Event counter return path
+
+**Review finding (collab):** `TestUtils.makeCard()` creates cards with `null` cardType. Java's `switch` on an enum throws NPE on null, causing `resolve_counterBoostSavesDefender` to fail.
+
+**Fix:** Replaced the `switch` with an if-else chain that guards for null — a null cardType falls through to the Character path and uses `counterCard.getData().counter()`. This is safe because generic test cards represent Characters and will always have a `counter()` field value.
+
+**Result:** 107 tests, 0 failures. Character counter value is now fully resolved at runtime; Event counter value is correctly deferred to `gameState.playCounter()` (stub, pending Phase 3 effect system).
+
 ---
 
 ## Prompt Engineering Patterns Used
