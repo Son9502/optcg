@@ -286,6 +286,81 @@ Each keyword card has the `AbilityData` set in both `CardData.abilities()` and t
 
 **Lexer architecture decision (developer):** The lexer operates on multi-word phrases, not characters — longest-match-first over word sequences. `TokenType` enum and `Token` record will be written manually; phrase lookup tables and regex patterns within the lexer are collab territory.
 
+### TokenType and Token — manual
+
+**Developer wrote both files without AI involvement:**
+- `TokenType` — 9-value enum (VERB, QUANTITY, PLAYER, CARD_TYPE, FILTER, ZONE, DURATION, CONDITION, CONNECTOR). Comments use OP TCG-specific examples.
+- `Token` — Java record `(TokenType type, String raw, Object value)`. The `value` field is typed as `Object` to accommodate Integer (quantities, numeric filters), String (bracket keyword/subtype/attribute filters), and null (verbs, zones, connectors). The tradeoff — no compile-time type safety on `value` — was accepted because the downstream consumer (EffectParser) will always know the type from `type()`.
+
+### EffectLexer skeleton (collab)
+
+**Design constraints specified by developer before any AI prompting:**
+- Operate on a word index, not a character index — split input first, then scan the word array
+- Longest phrase first — pre-sort phrase keys by character length descending before the scan loop
+- Skip unknown words rather than throwing — log them to `unknowns` for post-session inspection
+- Bracket detection is word-array level — detect `[`, `{`, `(` as isolated array elements, find matching closer, join inner words
+
+**Guidance given (collab):** Each iteration of the lexer body was reviewed and specific bugs flagged without rewriting the code for the developer:
+1. `input.substring(position)` vs `words[position]` — position used as both a char offset and a word index; fix: match on word arrays with `matchesPhrase()`
+2. `LIST_PHRASES.indexOf(phrase)` — reference equality on arrays, always returns -1, causes O(n²) accidental fallback; fix: index-based `for (int i = ...)` so both parallel lists stay in sync
+3. `phrase.contains("N")` numeric extraction — phrase keys are real OP TCG text not templates; fix: handle QUANTITY digits with a separate `words[position].matches("\\d+")` guard before the phrase loop
+4. Missing `if (!matched)` guard — phrase loop ran even after a filter match; fix: wrap phrase loop in the flag check
+5. `new Matcher` stored as a field — Matcher is stateful and thread-unsafe; fix: store `Pattern` (compiled once, static final), create Matcher per `parseEffect()` call via `pattern.matcher(remainingText)`
+6. `findClosingBracket` returning -1 on unclosed bracket — `position = -1 + 1 = 0` reset the loop to the start causing an infinite loop; fix: return `words.length` as fallback
+
+**Input normalisation:** `"k.o."` contains periods that the split regex would shred into three tokens. Pre-normalised to `"ko"` before split; `"ko"` is the phrase table key. `isPunctuation` narrowed to `[.,;:]` only so `[`, `{`, `(` fall through to bracket detection.
+
+### EffectTables (collab)
+
+**Developer decision:** Rather than embedding the phrase table inline in EffectLexer, extracted all shared data to a separate `EffectTables` class. Motivation: EffectParser will need the same table without duplication, and keeping phrase definitions in one place makes additions and corrections easy.
+
+**EffectLexer delegates entirely:**
+```java
+static {
+    PHRASES_TABLE.putAll(EffectTables.PHRASES);
+    SORTED_PHRASES.addAll(EffectTables.SORTED_PHRASES);
+    LIST_PHRASES.addAll(EffectTables.LIST_PHRASES);
+    FILTER_PATTERNS.addAll(EffectTables.FILTER_PATTERNS);
+}
+```
+
+**Phrase table contents:** 9 token types, ~60 phrase entries covering all action verbs observed in the card corpus, QUANTITY modifiers, player references, all DON!! card type variants (multi-word preferred: "don!! cards" before "don!!", "your opponent's" before "your"), 15 source and destination zones, 6 durations, condition openers, and connectors. All entries use lowercased keys because `parseEffect()` normalises input to lowercase before scanning.
+
+**Static block ordering:** All `PHRASES.put()` calls must complete before `SORTED_PHRASES` and `LIST_PHRASES` are derived from the key set. A bug in the initial draft reversed this order, producing empty derived lists; corrected in the final version.
+
+**Filter patterns:** Seven regex Patterns for numeric FILTER clauses that cannot be expressed as literal phrase keys (cost and power thresholds with variable N). Longer/more-specific patterns listed first to prevent partial matches. `lookingAt()` used instead of `matches()` to anchor at the current position without requiring a full-string match.
+
+### Test suite — TokenTest and EffectLexerTest (collab)
+
+**Developer specified coverage requirements; AI generated the test code:**
+
+`TokenTest` (8 tests): record field access, integer and String value retrieval, record equality on same/different type/raw/value, toString not null or empty.
+
+`EffectLexerTest` (34 tests across 9 categories):
+- Empty/blank input guards
+- VERB detection (draw, K.O. normalisation, 2-word "choose one")
+- QUANTITY detection (bare digit with int value, "up to" phrase, "all")
+- PLAYER detection ("your opponent's" as single 2-word token, "your" in non-zone context)
+- CARD_TYPE detection (2-word "don!! card" preferred over "don!!")
+- FILTER — bracket detection for [keyword], {subtype}, (attribute) with String value
+- FILTER — regex patterns with numeric value extraction (cost=4, power=5000, color literal)
+- ZONE detection (from your deck, from your don!! deck preferred, as active)
+- DURATION detection (during this battle, until the end of this turn)
+- CONNECTOR detection
+- Unknown word logging, punctuation skip
+- 2 integration tests on full effect strings
+- **6 CSV-sourced tests** using verbatim card text from `effect_templates_generic.csv` and `effect_templates_unique.csv`:
+  - ADD_DON [Trigger]: "Add up to 1 DON!! card from your DON!! deck and set it as active."
+  - ADD_DON [Main] with Then-if-power-filter chain: "Add up to 1 DON!! card... Then, if your opponent has a Character with 6000 power or more..."
+  - DRAW + TRASH: "Draw 2 cards and trash 1 card from your hand."
+  - REST + DRAW with cost filter: "Rest up to 1 of your opponent's Characters with a cost of 5 or less. Then, draw 1 card."
+  - ADD_DON [On Play] two-verb chain: "Add up to 1 DON!! card from your DON!! deck and rest it."
+  - COST_REDUCE [Passive] with if-condition: "If the number of DON!! cards on your field is at least 2 less than the number on your opponent's field, give this card in your hand -3 cost."
+
+**One test failure during development (fixed):** `parseEffect_your_emitsPlayerSelf` initially used `"Draw 1 card from your deck."` — the "from your deck" ZONE phrase consumed "your" before a standalone PLAYER token could be emitted. Fixed by changing input to `"Rest your Characters."` where "your" appears in a targeting context with no competing zone phrase.
+
+**Result:** 42 tests (34 EffectLexerTest + 8 TokenTest), 0 failures.
+
 ---
 
 ## Prompt Engineering Patterns Used
