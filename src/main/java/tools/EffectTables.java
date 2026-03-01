@@ -68,6 +68,8 @@ public final class EffectTables {
         // ── PLAYER ───────────────────────────────────────────────────────────
         p.put("your opponent's", TokenType.PLAYER); // 2 words; must precede "your"
         p.put("your",            TokenType.PLAYER);
+        p.put("your opponent",   TokenType.PLAYER); // no apostrophe-s variant
+        p.put("you",             TokenType.PLAYER); // nominative; "your" handles possessive
 
         // ── CARD_TYPE ────────────────────────────────────────────────────────
         p.put("leader or character", TokenType.CARD_TYPE); // 3 words; compound target
@@ -96,6 +98,8 @@ public final class EffectTables {
         p.put("purple",  TokenType.FILTER);
         p.put("yellow",  TokenType.FILTER);
         p.put("black",   TokenType.FILTER);
+        p.put("multicolored",           TokenType.FILTER);
+        p.put("base power",             TokenType.FILTER);
 
         // ── ZONE ─────────────────────────────────────────────────────────────
         // Source zones
@@ -107,6 +111,8 @@ public final class EffectTables {
         p.put("from your deck",               TokenType.ZONE);
         p.put("from your trash",              TokenType.ZONE);
         p.put("from your field",              TokenType.ZONE);
+        p.put("from your opponent's hand",  TokenType.ZONE);
+        p.put("from your opponent's field", TokenType.ZONE);
         // Destination zones
         p.put("at the bottom of your deck",   TokenType.ZONE);
         p.put("at the top of your deck",      TokenType.ZONE);
@@ -115,6 +121,7 @@ public final class EffectTables {
         p.put("to your trash",                TokenType.ZONE);
         p.put("on your field",                TokenType.ZONE);
         p.put("as active",                    TokenType.ZONE); // DON!! placement state
+        p.put("to the owner's hand",    TokenType.ZONE);
 
         // ── DURATION ─────────────────────────────────────────────────────────
         p.put("until the end of your opponent's next end phase", TokenType.DURATION);
@@ -129,12 +136,50 @@ public final class EffectTables {
         // and will be added to a CONDITION_PATTERNS list when EffectParser is built.
         p.put("if you do", TokenType.CONDITION); // IF_YOU_DO; 3 words, precedes "if"
         p.put("if",        TokenType.CONDITION); // general condition opener
+        p.put("once per turn",          TokenType.CONDITION); // TRIGGER condition; must follow "if" conditions to avoid premature match
 
         // ── CONNECTOR ────────────────────────────────────────────────────────
         p.put("and",  TokenType.CONNECTOR);
         p.put("then", TokenType.CONNECTOR);
         p.put("also", TokenType.CONNECTOR);
+        p.put("or",   TokenType.CONNECTOR); // standalone "A or B"; "N or less/more" is FILTER_PATTERN
         p.put("/",    TokenType.CONNECTOR); // modal option separator
+
+        // ── SKIP (grammatical glue — matched and emitted but discarded by parser) ─
+        // Articles
+        p.put("the",   TokenType.SKIP);
+        p.put("a",     TokenType.SKIP);
+        p.put("an",    TokenType.SKIP);
+        // Prepositions
+        p.put("of",    TokenType.SKIP);
+        p.put("in",    TokenType.SKIP);
+        p.put("at",    TokenType.SKIP);
+        // Linking verbs
+        p.put("is",    TokenType.SKIP);
+        p.put("are",   TokenType.SKIP);
+        p.put("be",    TokenType.SKIP);
+        p.put("been",  TokenType.SKIP);
+        p.put("was",   TokenType.SKIP);
+        p.put("were",  TokenType.SKIP);
+        // Auxiliary have
+        p.put("has",   TokenType.SKIP);
+        p.put("have",  TokenType.SKIP);
+        p.put("had",   TokenType.SKIP);
+        // Modal
+        p.put("may",   TokenType.SKIP);
+        // Auxiliary do
+        p.put("do",    TokenType.SKIP);
+        p.put("does",  TokenType.SKIP);
+        p.put("did",   TokenType.SKIP);
+        // Pronouns (referent clear from context)
+        p.put("it",    TokenType.SKIP);
+        p.put("this",  TokenType.SKIP);
+        p.put("they",  TokenType.SKIP);
+        p.put("them",  TokenType.SKIP);
+        p.put("their", TokenType.SKIP);
+        // Relative pronouns
+        p.put("that",  TokenType.SKIP);
+        p.put("which", TokenType.SKIP);
 
         PHRASES = Collections.unmodifiableMap(p);
 

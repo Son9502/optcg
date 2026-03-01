@@ -9,7 +9,9 @@ public record Target(
     CardType cardType,
     int max,
     int maxCost,
-    int maxPower){
+    int minCost,
+    int maxPower,
+    int minPower){
         public enum TargetPlayer {
             SELF,OPPONENT,ALL
         }

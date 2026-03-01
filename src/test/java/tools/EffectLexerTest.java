@@ -1,6 +1,5 @@
 package tools;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -9,11 +8,6 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class EffectLexerTest {
-
-    @BeforeEach
-    void clearUnknowns() {
-        EffectLexer.unknowns.clear();
-    }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -255,15 +249,16 @@ public class EffectLexerTest {
     // ── Unknown word logging ──────────────────────────────────────────────────
 
     @Test
-    void parseEffect_unknownWord_addedToUnknownsList() {
-        EffectLexer.parseEffect("zzzunknownword");
-        assertTrue(EffectLexer.unknowns.contains("zzzunknownword"));
+    void parseEffect_unknownWord_emitsUnknownToken() {
+        List<Token> tokens = EffectLexer.parseEffect("zzzunknownword");
+        assertTrue(tokens.stream().anyMatch(t ->
+                t.type() == TokenType.UNKNOWN && "zzzunknownword".equals(t.raw())));
     }
 
     @Test
-    void parseEffect_punctuationOnly_noUnknowns() {
-        EffectLexer.parseEffect("...,;;");
-        assertTrue(EffectLexer.unknowns.isEmpty());
+    void parseEffect_punctuationOnly_noUnknownTokens() {
+        List<Token> tokens = EffectLexer.parseEffect("...,;;");
+        assertTrue(tokens.stream().noneMatch(t -> t.type() == TokenType.UNKNOWN));
     }
 
     // ── Integration: full effect strings ─────────────────────────────────────
@@ -271,8 +266,8 @@ public class EffectLexerTest {
     @Test
     void parseEffect_addDonAndSetActive_correctTypeSequence() {
         // "Add 5 DON!! card from your DON!! deck and set it as active."
-        // Expected typed tokens (ignoring unknowns like "it"):
-        //   VERB, QUANTITY, CARD_TYPE, ZONE, CONNECTOR, VERB, ZONE
+        // Expected typed tokens ("it" is now SKIP):
+        //   VERB, QUANTITY, CARD_TYPE, ZONE, CONNECTOR, VERB, SKIP, ZONE
         List<Token> tokens = EffectLexer.parseEffect(
                 "Add 5 DON!! card from your DON!! deck and set it as active.");
         List<TokenType> t = types(tokens);

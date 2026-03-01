@@ -14,7 +14,6 @@ public class EffectLexer {
                                                                          // first)
     public static final List<Pattern> FILTER_PATTERNS = new ArrayList<>(); // List of regex patterns for filters like
                                                                            // "with power 3000 or less"
-    public static List<String> unknowns = new ArrayList<>(); // List to store unknown words for debugging
 
     static {
         // Delegate to EffectTables — all phrase and filter data lives there
@@ -106,11 +105,11 @@ public class EffectLexer {
                 position = close + 1;
                 continue;
             }
-
-            // Check if the current word is a number (quantity)
-            if (words[position].matches("\\d+")) {
-                tokens.add(new Token(TokenType.QUANTITY, words[position], Integer.parseInt(words[position])));
-                System.out.println("Processed quantity: " + words[position]);
+            // Check for numbers (e.g., "-3, +1000, -2000, 1, 2, etc") 
+            if (words[position].matches("[+-]?\\d+")) { // Check for negative numbers as well (e.g., "-3 cost")
+                int val = Integer.parseInt(words[position]);
+                tokens.add(new Token(TokenType.QUANTITY, words[position], val));
+                //System.out.println("Processed quantity: " + words[position]);
                 position++;
                 continue;
             }
@@ -127,7 +126,7 @@ public class EffectLexer {
                     tokens.add(new Token(TokenType.FILTER, matcher.group(), value));
                     position += matcher.group().split(" ").length; // Advance position by the number of words in the
                                                                    // matched filter
-                    System.out.println("Processed filter: " + matcher.group() + " with value: " + value);
+                    //System.out.println("Processed filter: " + matcher.group() + " with value: " + value);
                     matched = true;
                     break;
                 }
@@ -142,7 +141,7 @@ public class EffectLexer {
 
                         Object value = null;
                         tokens.add(new Token(PHRASES_TABLE.get(phraseStr), phraseStr, value));
-                        System.out.println("Processed phrase: " + phraseStr + " with value: " + value);
+                        //System.out.println("Processed phrase: " + phraseStr + " with value: " + value);
                         position += phrase.length;
                         matched = true;
                         break;
@@ -150,10 +149,9 @@ public class EffectLexer {
                 }
             }
 
-            // If no known phrase matched, log the unknown word and move to the next one
+            // If no known phrase matched, emit an UNKNOWN token and advance
             if (!matched) {
-                unknowns.add(words[position]);
-                System.out.println("Processing word: " + words[position]);
+                tokens.add(new Token(TokenType.UNKNOWN, words[position], null));
                 position++;
             }
         }
@@ -287,27 +285,33 @@ public class EffectLexer {
         String effectTextFour = "Add up to 1 DON!! card from your DON!! deck and set it as active. Then, if your opponent has a Character with 6000 power or more, add up to 1 DON!! card from your DON!! deck and set it as active.";
         String effectTextFive = "DON!! -1 (You may return the specified number of DON!! cards from your field to your DON!! deck.): Draw 2 cards and trash 1 card from your hand.";
         String effectTextSix = "If your Leader is multicolored, draw 1 card. Then, return up to 1 Character with a cost of 5 or less to the owner's hand. [Trigger] If your Leader is multicolored, draw 2 cards.";
+        
         List<Token> tokensOne = parseEffect(effectTextOne);
+        System.out.println(effectTextOne);
         for (Token token : tokensOne) {
             System.out.println(token);
         }
 
         List<Token> tokensThree = parseEffect(effectTextThree);
+        System.out.println(effectTextThree);
         for (Token token : tokensThree) {
             System.out.println(token);
         }
 
         List<Token> tokensFour = parseEffect(effectTextFour);
+        System.out.println(effectTextFour);
         for (Token token : tokensFour) {
             System.out.println(token);
         }
 
         List<Token> tokensFive = parseEffect(effectTextFive);
+        System.out.println(effectTextFive);
         for (Token token : tokensFive) {
             System.out.println(token);
         }
 
         List<Token> tokensSix = parseEffect(effectTextSix);
+        System.out.println(effectTextSix);
         for (Token token : tokensSix) {
             System.out.println(token);
         }
