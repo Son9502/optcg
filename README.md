@@ -26,7 +26,7 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 - `CardData` record carries a `subTypes` field (normalized from API `sub_types` strings)
 - `CardDatabase` secondary index: `getByName()` (O(1)), `getBySubtype()` (O(n)), `getAllCards()`
 - `CsvGenerator`: offline tool that rebuilds `card_names_subtypes.csv` from compiled (or raw) JSON with name normalization and deduplication
-- 107 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty)
+- 149 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty)
 
 ---
 
@@ -144,7 +144,7 @@ mvn exec:java -Dexec.mainClass="tools.CsvGenerator"
 mvn test
 ```
 
-**Current test suite: 107 tests, 0 failures, 0 errors.**
+**Current test suite: 149 tests, 0 failures, 0 errors.**
 10 `CardDatabaseTest` cases are data-dependent and skip automatically (via `assumeTrue`) when `raw/data/` is empty — run `CardScraper` first to populate.
 
 | Test class | Tests | Coverage area |
@@ -160,6 +160,8 @@ mvn test
 | `CardDatabaseTest` | 16 (10 skipped without data) | Card loading, deserialization, `getByName`, `getBySubtype`, `getAllCards`, `CardFactory` |
 | `ParserTest` | 17 | Ability parsing: triggers, conditions, costs, keywords, multi-ability blocks |
 | `GameFactoryTest` | 9 | Pre-built test deck construction, card type breakdown, ownership, field/stage/don counts |
+| `TokenTest` | 8 | `Token` record field access, value types (int/String/null), record equality, toString |
+| `EffectLexerTest` | 34 | All 9 token types, bracket detection, regex filters, K.O. normalisation, phrase-length preference, 6 verbatim card text examples from CSV |
 
 ---
 
@@ -215,7 +217,11 @@ src/
 │   │       ├── CardCompiler.java                ← raw JSON → compiled JSON + abilities[]
 │   │       ├── CsvGenerator.java                ← Rebuilds card_names_subtypes.csv from compiled/raw data
 │   │       ├── Parser.java                      ← Parses card text into structured abilities
-│   │       └── ParsedAbility.java               ← Record: trigger, condition, cost, character, effect
+│   │       ├── ParsedAbility.java               ← Record: trigger, condition, cost, character, effect
+│   │       ├── TokenType.java                   ← 9-value enum (VERB, QUANTITY, PLAYER, CARD_TYPE, FILTER, ZONE, DURATION, CONDITION, CONNECTOR)
+│   │       ├── Token.java                       ← Record: (TokenType type, String raw, Object value)
+│   │       ├── EffectTables.java                ← All phrase→TokenType entries, sorted lists, regex filter Patterns (shared with future EffectParser)
+│   │       └── EffectLexer.java                 ← Word-level scanner; produces List<Token> from raw effect text
 │   └── resources/
 │       ├── compiled/data/                       ← Engine-ready JSON (CardDatabase reads this)
 │       │   ├── sets/                            ← One file per card set (e.g. OP01.json)
@@ -239,7 +245,9 @@ src/
         │   ├── setup/GameFactoryTest.java
         │   └── zones/DeckTest.java, ZoneTest.java
         └── tools/
-            └── ParserTest.java
+            ├── ParserTest.java
+            ├── TokenTest.java
+            └── EffectLexerTest.java
 ```
 
 **Key architectural rules:**
@@ -284,6 +292,8 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
   - **Banish**: target life card goes to trash instead of opponent's hand
   - **Unblockable**: opponent's blocker window is skipped entirely
 - CLI defend window: sequential blocker → counter loop → single `BattleSystem.resolve()`
+- Card text corpus analysed (2,836 cards, 3,326 ability blocks) → `effect_templates_generic.csv` (1,454 parseable templates) + `effect_templates_unique.csv` (434 complex patterns); `EffectType` enum redesigned to 23 types; `EFFECT_GRAMMAR.md` written
+- `EffectLexer` skeleton: word-level scanner with longest-phrase-first matching, bracket detection for `[Keyword]`/`{Type}`/`(Attribute)` filters, 7 regex patterns for numeric cost/power filters, K.O. normalisation; backed by `EffectTables` (shared phrase→TokenType map used by future `EffectParser`)
 
 **Remaining:**
 - **Trigger**: activates when a life card is revealed, at no DON cost
@@ -393,4 +403,4 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
 
 See [DEVLOG.md](DEVLOG.md) for a full account of what was built manually, what was AI-assisted, the key prompts used, and what changed through iteration.
 
-*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is in progress: keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable) are implemented and tested; Counter resolution, Trigger, Event effects, and [Activate:Main] abilities remain. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*
+*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is in progress: keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable) are implemented and tested; the card text corpus has been analysed and the EffectLexer skeleton is complete; Counter resolution, Trigger, Event effects, and [Activate:Main] abilities remain. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*
