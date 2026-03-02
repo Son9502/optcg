@@ -8,5 +8,5 @@ public record EffectData(
     @JsonProperty("value")     int        value,
     @JsonProperty("target")    Target     target,
     @JsonProperty("condition") Condition  condition,
-    @JsonProperty("duration")  int        duration
+    @JsonProperty("duration")  Duration   duration
 ) {}
