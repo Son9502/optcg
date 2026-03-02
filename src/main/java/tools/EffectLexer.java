@@ -58,6 +58,10 @@ public class EffectLexer {
         input = input.toLowerCase();
         // "k.o." contains periods that the split regex would shred — collapse to "ko"
         input = input.replace("k.o.", "ko");
+        // En-dash (–) and em-dash (—) appear in card text for negative costs/power.
+        // Normalize to hyphen-minus so the number regex [+-]?\d+ catches them.
+        input = input.replace("\u2013", "-"); // en-dash → hyphen-minus
+        input = input.replace("\u2014", "-"); // em-dash → hyphen-minus
 
         // Split input into words and punctuation and trim whitespace
         String[] words = input.split(" +|(?=[.,;:()\\[\\]{}])|(?<=[.,;:()\\[\\]{}])");
@@ -105,6 +109,23 @@ public class EffectLexer {
                 position = close + 1;
                 continue;
             }
+
+            // "TypeName" Filter — quoted type/subtype name that may span multiple words.
+            // The split regex does not break on '"', so "Straw Hat Pirates" becomes
+            // ["\"straw", "hat", "pirates\""] after splitting on spaces.
+            if (words[position].startsWith("\"")) {
+                int end = position;
+                // Scan forward until we hit the word that closes the quote.
+                while (end < words.length && !words[end].endsWith("\"")) end++;
+                // Guard against an unclosed quote (edge case — should not happen in valid card text).
+                if (end >= words.length) end = words.length - 1;
+                String raw   = joinWords(words, position, end + 1);
+                String inner = raw.replaceAll("^\"|\"$", ""); // strip surrounding quotes
+                tokens.add(new Token(TokenType.FILTER, raw, inner));
+                position = end + 1;
+                continue;
+            }
+
             // Check for numbers (e.g., "-3, +1000, -2000, 1, 2, etc") 
             if (words[position].matches("[+-]?\\d+")) { // Check for negative numbers as well (e.g., "-3 cost")
                 int val = Integer.parseInt(words[position]);
