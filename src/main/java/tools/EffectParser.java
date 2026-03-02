@@ -303,7 +303,7 @@ public final class EffectParser {
                  "reveals"                 -> "SEARCH_DECK";
             case "negate", "negated"       -> "NEGATE";
             case "choose one"              -> "MODAL";
-            case "shuffle", "shuffles"     -> null; // no SHUFFLE_DECK EffectType yet — deferred Phase 2
+            case "shuffle", "shuffles"     -> "SHUFFLE_DECK";
             // Context-dependent
             case "add", "adds"             -> resolveAdd(clause);
             case "give", "gain", "gains"   -> resolveGiveGain(clause);
@@ -464,7 +464,7 @@ public final class EffectParser {
     /** Returns true for effects that are always performed by/on the active player. */
     private static boolean isSelfTargetingEffect(String effectType) {
         return switch (effectType) {
-            case "DRAW", "ADD_DON", "SET_DON_ACTIVE", "ADD_LIFE", "SEARCH_DECK" -> true;
+            case "DRAW", "ADD_DON", "SET_DON_ACTIVE", "ADD_LIFE", "SEARCH_DECK", "SHUFFLE_DECK" -> true;
             default -> false;
         };
     }

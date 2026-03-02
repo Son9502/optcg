@@ -286,7 +286,8 @@ public final class EffectTables {
         put(p, "then", TokenType.CONNECTOR);
         put(p, "also", TokenType.CONNECTOR);
         put(p, "or",   TokenType.CONNECTOR); // standalone "A or B"; "N or less/more" is FILTER_PATTERN
-        put(p, "/",    TokenType.CONNECTOR); // modal option separator
+        put(p, "/",    TokenType.CONNECTOR); // trigger-notation separator; kept inside clauses by splitClauses
+        put(p, "•",    TokenType.CONNECTOR); // modal choice bullet; splits "Choose one: • A • B" into clauses
     }
 
     // ── MODIFIER ──────────────────────────────────────────────────────────────

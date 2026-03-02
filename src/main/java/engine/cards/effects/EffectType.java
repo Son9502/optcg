@@ -20,6 +20,7 @@ public enum EffectType {
     RETURN_TO_HAND,     // Return N card(s) to a player's hand
     PLAY_CARD,          // Play a card (from hand, deck, or trash; may be free or at cost)
     SEARCH_DECK,        // Look at the top N cards of deck; add some to hand, rest to bottom
+    SHUFFLE_DECK,       // Shuffle a player's deck (often follows SEARCH_DECK)
     MOVE_TO_BOTTOM_DECK,// Place N card(s) at the bottom of a player's deck
     MOVE_TO_TOP_DECK,   // Place N card(s) at the top of a player's deck
 

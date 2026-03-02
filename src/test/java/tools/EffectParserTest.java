@@ -254,4 +254,27 @@ public class EffectParserTest {
         List<ParsedEffect> effects = many("If this Character is rested, draw 1 card.", 1);
         assertEquals("IF_RESTED", effects.get(0).condition());
     }
+
+    // ── SHUFFLE_DECK ──────────────────────────────────────────────────────────
+
+    @Test
+    void parse_shuffleYourDeck_shuffleDeckType() {
+        ParsedEffect e = one("Shuffle your deck.");
+        assertEquals("SHUFFLE_DECK", e.effectType());
+        assertEquals("SELF", e.targetPlayer());
+    }
+
+    // ── MODAL branch splitting ────────────────────────────────────────────────
+
+    @Test
+    void parse_chooseOne_threeEffects_modalPlusBranches() {
+        List<ParsedEffect> effects = many(
+                "Choose one: • Draw 2 cards. • Rest up to 1 of your opponent's Characters.", 3);
+        assertEquals("MODAL",  effects.get(0).effectType());
+        assertEquals("DRAW",   effects.get(1).effectType());
+        assertEquals(2,        effects.get(1).value());
+        assertEquals("REST",   effects.get(2).effectType());
+        assertEquals(1,        effects.get(2).max());
+        assertEquals("OPPONENT", effects.get(2).targetPlayer());
+    }
 }
