@@ -29,7 +29,7 @@ public class CsvGenerator {
 
     private static final String COMPILED_DIR = "src/main/resources/compiled/data/";
     private static final String RAW_DIR      = "src/main/resources/raw/data/";
-    private static final String OUTPUT_PATH  = "card_names_subtypes.csv";
+    private static final String OUTPUT_PATH  = "csv/card_names_subtypes.csv";
     private static final String[] CATEGORIES = {"sets", "decks", "promos"};
 
     // Strip all (...) blocks (variant labels, foil types, card numbers, event packs, etc.)
