@@ -19,5 +19,12 @@ package tools;
  * structured representation of the condition)
  */
 public record Token(TokenType type, String raw, Object value) {
-
+    @Override
+    public String toString() {
+        return "Token: {" +
+                "type=" + type +
+                ", raw='" + raw + '\'' +
+                ", value=" + value +
+                '}';
+    }
 }

@@ -19,12 +19,12 @@ public class CardFactory {
 
     /**
      * Creates a Card or Leader from the given CardData, owned by the given player.
-     * Returns a Leader when cardType is Leader, a plain Card otherwise.
+     * Returns a Leader when cardType is LEADER, a plain Card otherwise.
      * Abilities are generated via AbilityFactory and attached before returning.
      */
     public static Card createCard(CardData data, Player owner) {
         Card card;
-        if (data.cardType() == CardType.Leader) {
+        if (data.cardType() == CardType.LEADER) {
             card = new Leader(data.id(), data, owner);
         } else {
             card = new Card(data.id(), data, owner);
