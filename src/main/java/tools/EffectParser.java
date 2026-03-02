@@ -126,38 +126,53 @@ public final class EffectParser {
         return -1;
     }
 
-    /** Classifies an "if …" condition by looking at the tokens that follow. */
+    /**
+     * Classifies an "if …" / "when …" condition by scanning tokens up to the
+     * first effect VERB. Uses two passes so that high-specificity FILTER markers
+     * (rested, multicolored, type) are checked before lower-specificity CARD_TYPE
+     * markers — otherwise "if this Character is rested" would return
+     * IF_CHARACTER_COUNT instead of IF_RESTED.
+     */
     private static String classifyConditionClause(List<Token> tokens) {
+        // Find the boundary: index of first VERB that maps to a real EffectType.
+        int limit = tokens.size();
         for (int i = 1; i < tokens.size(); i++) {
             Token t = tokens.get(i);
-            // Stop at the connector that ends the condition clause.
-            if (t.type() == TokenType.CONNECTOR) break;
+            if (t.type() == TokenType.VERB
+                    && resolveVerb(t.raw(), tokens.subList(i, tokens.size())) != null) {
+                limit = i;
+                break;
+            }
+        }
+
+        // Pass 1 — high-specificity single-token markers.
+        for (int i = 1; i < limit; i++) {
+            Token t = tokens.get(i);
             String r = t.raw();
-            if (t.type() == TokenType.ZONE && (r.equals("life") || r.equals("life area") || r.equals("life cards")))
-                return "IF_LIFE_COUNT";
-            if (t.type() == TokenType.CARD_TYPE && r.contains("don!!"))
-                return "IF_DON_COUNT";
-            if (t.type() == TokenType.CARD_TYPE && r.contains("character"))
-                return "IF_CHARACTER_COUNT";
+            if (t.type() == TokenType.FILTER && r.equals("rested"))
+                return "IF_RESTED";
             if (t.type() == TokenType.FILTER && r.equals("multicolored"))
                 return "IF_LEADER_COLOR";
             if (t.type() == TokenType.FILTER && (r.startsWith("{") || r.equals("type")))
                 return "IF_LEADER_TYPE";
+            if (t.type() == TokenType.ZONE
+                    && (r.equals("life") || r.equals("life area") || r.equals("life cards")))
+                return "IF_LIFE_COUNT";
         }
-        return null; // unknown condition — defer to manual override
-    }
 
-    /**
-     * Returns a sublist of {@code tokens} starting after the first CONNECTOR
-     * at or after {@code from}, or the rest of the list if no CONNECTOR found.
-     */
-    private static List<Token> consumeThroughConnector(List<Token> tokens, int from) {
-        for (int i = from; i < tokens.size(); i++) {
-            if (tokens.get(i).type() == TokenType.CONNECTOR) {
-                return tokens.subList(i + 1, tokens.size());
-            }
+        // Pass 2 — contextual type / zone markers.
+        for (int i = 1; i < limit; i++) {
+            Token t = tokens.get(i);
+            String r = t.raw();
+            if (t.type() == TokenType.CARD_TYPE && r.contains("don!!"))
+                return "IF_DON_COUNT";
+            if (t.type() == TokenType.CARD_TYPE && r.contains("character"))
+                return "IF_CHARACTER_COUNT";
+            if (t.type() == TokenType.ZONE && r.equals("hand"))
+                return "IF_HAND_COUNT";
         }
-        return List.of(); // entire stream was the condition
+
+        return null; // unknown condition — defer to manual override
     }
 
     // ── Clause splitting ──────────────────────────────────────────────────────
@@ -194,13 +209,8 @@ public final class EffectParser {
                                           List<List<Token>> clauses,
                                           int clauseIndex,
                                           String connectorRaw) {
-        // Count tokens in prior clauses to find the connector that preceded clauseIndex.
-        int consumed = 0;
-        for (int c = 0; c < clauseIndex; c++) consumed += clauses.get(c).size();
-        // The connector sits at position `consumed` in the filtered stream
-        // (if splitting was consistent — connector tokens are not in clauses).
-        // Walk the original filtered stream to find the connector between the clauses.
-        int clauseTokensSeen = 0;
+        // Walk the original filtered stream, counting non-"/" CONNECTORs.
+        // The Nth connector (1-based) is the one that precedes clause N.
         int clauseIdx = 0;
         for (int i = 0; i < filtered.size(); i++) {
             Token t = filtered.get(i);
@@ -293,7 +303,7 @@ public final class EffectParser {
                  "reveals"                 -> "SEARCH_DECK";
             case "negate", "negated"       -> "NEGATE";
             case "choose one"              -> "MODAL";
-            case "shuffle", "shuffles"     -> "SEARCH_DECK"; // shuffle deck = implicitly a deck operation
+            case "shuffle", "shuffles"     -> null; // no SHUFFLE_DECK EffectType yet — deferred Phase 2
             // Context-dependent
             case "add", "adds"             -> resolveAdd(clause);
             case "give", "gain", "gains"   -> resolveGiveGain(clause);
@@ -407,8 +417,11 @@ public final class EffectParser {
      * Returns int[]{value, max}.
      *
      * Rule:
-     * - "up to" followed by a digit → digit goes to max.
-     * - Signed digit (± or plain) with no preceding "up to":
+     * - "up to N" anywhere → max = N (always a targeting count).
+     * - Bare digit BEFORE the VERB → max = N (subject-first clause targeting count,
+     *   e.g. "1 of your Characters gains +1000 power" or
+     *        "Up to 1 of your Leader or Characters gains +1000 power").
+     * - Bare digit AFTER the VERB → routed by effectType:
      *     → value for count-effects (DRAW, POWER_BOOST, COST_MODIFY, ADD_DON, TRASH, ADD_LIFE, ATTACH_DON)
      *     → max  for targeting effects (REST, KO, RETURN_TO_HAND, PLAY_CARD, SEARCH_DECK)
      */
@@ -416,8 +429,10 @@ public final class EffectParser {
         int value = 0;
         int max   = 0;
         boolean upToSeen = false;
+        boolean pastVerb = false;
 
         for (Token t : clause) {
+            if (t.type() == TokenType.VERB) { pastVerb = true; continue; }
             if (t.type() == TokenType.QUANTITY) {
                 String raw = t.raw();
                 if (raw.equals("up to")) {
@@ -426,10 +441,14 @@ public final class EffectParser {
                 }
                 if (t.value() instanceof Integer n) {
                     if (upToSeen) {
+                        // "up to N" — always a targeting count
                         max = n;
                         upToSeen = false;
+                    } else if (!pastVerb) {
+                        // Digit before the VERB — subject-first targeting count
+                        max = n;
                     } else {
-                        // Route based on EffectType
+                        // Digit after the VERB — route by EffectType
                         if (isTargetingEffect(effectType)) {
                             max = n;
                         } else {
@@ -445,8 +464,7 @@ public final class EffectParser {
     /** Returns true for effects that are always performed by/on the active player. */
     private static boolean isSelfTargetingEffect(String effectType) {
         return switch (effectType) {
-            case "DRAW", "ADD_DON", "SET_DON_ACTIVE", "ADD_LIFE",
-                 "SEARCH_DECK", "SHUFFLE_DECK" -> true;
+            case "DRAW", "ADD_DON", "SET_DON_ACTIVE", "ADD_LIFE", "SEARCH_DECK" -> true;
             default -> false;
         };
     }
