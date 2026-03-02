@@ -15,7 +15,9 @@ public enum TokenType {
     ZONE, // e.g. "hand", "field", "trash"
     DURATION, // e.g. "until end of turn", "for the rest of the game"
     CONDITION, // e.g. "if you have more cards in hand than your opponent", "if this card is in your trash"
-    CONNECTOR, // e.g. "and", "or", "then"
-    SKIP, // Words that are recognized but not relevant for game logic (e.g. "the", "a", "each")
-    UNKNOWN // Words that are not recognized as any of the above types
+    CONNECTOR,   // e.g. "and", "or", "then"
+    DESTINATION, // directional/positional preposition: "from", "to", "into", "on", "in", "at"
+    STAT,        // game stat noun standalone: "power", "cost"
+    SKIP,        // grammatical glue with no game-logic value (e.g. "the", "a", "may")
+    UNKNOWN      // unrecognized word — signals a missing phrase-table entry
 }
