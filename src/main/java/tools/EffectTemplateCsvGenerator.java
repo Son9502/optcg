@@ -56,43 +56,41 @@ public class EffectTemplateCsvGenerator {
         "Double Attack", "Banish", "Unblockable"
     );
 
-    /**
-     * Verb/action words that indicate an "If X" clause is NOT a pure condition —
-     * it already contains the consequence and should not be split further.
-     */
-    private static final List<String> ACTION_WORDS = List.of(
-        " draw", " trash", " rest ", " play", " give", " return",
-        " add", " look at", " set ", " k.o.", " place", " reveal"
-    );
-
-    // ── Effect-type explanations ───────────────────────────────────────────────
+    // ── Effect-type explanations (keyed by engine EffectType name) ───────────
 
     private static final Map<String, String> EXPLANATIONS;
     static {
         Map<String, String> m = new LinkedHashMap<>();
-        m.put("MODAL",        "Player chooses one effect from a list of options (Choose one: •A •B)");
-        m.put("CONDITION",    "Conditional clause gating one or more subsequent effects");
-        m.put("ADD_DON",      "Take N DON!! cards from the DON!! deck and put them into play rested or active");
-        m.put("GIVE_DON",     "Attach DON!! cards from the cost area to a character on the field");
-        m.put("RETURN_DON",   "Return DON!! cards from the field back to the DON!! deck");
-        m.put("DRAW",         "Draw cards from the top of the deck into hand");
-        m.put("KO",           "Knock out one or more characters, sending them to trash");
-        m.put("BOUNCE",       "Return a card from the field to the owner's hand");
-        m.put("PLAY",         "Play a card from hand, deck, or trash directly to the field");
-        m.put("TRASH",        "Send a card from hand, field, or deck to the trash");
-        m.put("REST",         "Change one or more cards' state from active to rested");
-        m.put("SET_ACTIVE",   "Change one or more cards' state from rested to active");
-        m.put("LOOK",         "Look at top cards of the deck without drawing them");
-        m.put("SEARCH",       "Look at the deck, reveal a matching card, and add it to hand");
-        m.put("POWER_UP",     "Temporarily or permanently increase a card's power");
-        m.put("POWER_DOWN",   "Temporarily or permanently decrease a card's power");
-        m.put("COST_REDUCE",  "Reduce the cost of a character or event card");
-        m.put("LIFE_ADD",     "Add cards from the top of the deck to the Life area");
-        m.put("LIFE_REMOVE",  "Remove cards from the Life area and add them to hand");
-        m.put("KEYWORD",      "Standalone keyword ability (Rush, Blocker, Double Attack, Banish, Unblockable)");
-        m.put("PASSIVE",      "Persistent passive effect while conditions are met");
-        m.put("COUNTER",      "Power boost granted to your cards during a battle");
-        m.put("OTHER",        "Complex or rare effect not fitting a standard category");
+        // Engine EffectType names
+        m.put("MODAL",              "Player selects one of two or more effects ('Choose one:')");
+        m.put("DRAW",               "Draw cards from the top of the deck into hand");
+        m.put("TRASH",              "Send a card from hand, field, or deck to the trash");
+        m.put("REST",               "Change one or more cards' state from active to rested");
+        m.put("UNREST",             "Change one or more cards' state from rested to active");
+        m.put("KO",                 "Knock out one or more Characters, sending them to trash");
+        m.put("POWER_BOOST",        "Increase a card's power by +N (positive value)");
+        m.put("POWER_REDUCE",       "Decrease a card's power by N");
+        m.put("COST_MODIFY",        "Change a Character's cost by ±N");
+        m.put("RETURN_TO_HAND",     "Return a card from the field to the owner's hand");
+        m.put("PLAY_CARD",          "Play a card from hand, deck, or trash directly to the field");
+        m.put("SEARCH_DECK",        "Look at the top N cards of the deck; add matching cards to hand");
+        m.put("SHUFFLE_DECK",       "Shuffle a player's deck");
+        m.put("MOVE_TO_BOTTOM_DECK","Place N card(s) at the bottom of a player's deck");
+        m.put("MOVE_TO_TOP_DECK",   "Place N card(s) at the top of a player's deck");
+        m.put("ATTACH_DON",         "Give N rested DON!! from your field to a Leader or Character");
+        m.put("ADD_DON",            "Add N DON!! card(s) from your DON!! deck (rested or active)");
+        m.put("SET_DON_ACTIVE",     "Set N of your DON!! cards as active (refresh them)");
+        m.put("ADD_LIFE",           "Place N card(s) into a player's Life area");
+        m.put("GRANT_KEYWORD",      "Give a Character a keyword ability (Rush, Blocker, Double Attack, etc.)");
+        m.put("PREVENT_ATTACK",     "Target cannot attack this turn or during this battle");
+        m.put("PREVENT_BLOCK",      "Opponent cannot activate a Blocker meeting a condition");
+        m.put("PREVENT_KO",         "Target cannot be K.O.'d (in battle or by a specific attribute)");
+        m.put("NEGATE",             "Negate the effects of an opponent's card");
+        // Trigger-based categories (not engine EffectTypes)
+        m.put("COUNTER",            "Power boost granted to your cards during a battle");
+        m.put("KEYWORD",            "Standalone keyword ability (Rush, Blocker, Double Attack, Banish, Unblockable)");
+        m.put("PASSIVE",            "Persistent passive effect while conditions are met");
+        m.put("OTHER",              "Complex or rare effect not yet covered by a parser rule");
         EXPLANATIONS = Collections.unmodifiableMap(m);
     }
 
@@ -146,7 +144,7 @@ public class EffectTemplateCsvGenerator {
 
                         // Split compound effects into atomic sub-clauses before generalising.
                         for (String sub : splitSubEffects(effectText)) {
-                            String effectType = classifyEffect(sub, trigger);
+                            String effectType = classifyEffectWithParser(sub, trigger);
                             String simplified = generalizeEffect(sub);
                             String key        = simplified.toLowerCase() + "::" + trigger.toLowerCase();
 
@@ -267,79 +265,24 @@ public class EffectTemplateCsvGenerator {
     // ── Effect classification ─────────────────────────────────────────────────
 
     /**
-     * Returns the effect_type string for a given sub-effect clause.
-     * Leading "/" or "•" modal prefixes are stripped before classification so
-     * sub-choices are classified by their actual action type (KO, DRAW, etc.)
-     * rather than as MODAL.  Only the introductory "Choose one:" / "Choose:"
-     * line itself is classified as MODAL.
+     * Returns the engine EffectType name for a given sub-effect clause by
+     * delegating to EffectParser. Trigger-based special categories (Counter,
+     * Keyword, Passive) are handled before the parser is invoked.
+     * Falls back to "OTHER" for effects the parser does not yet recognise.
      */
-    private static String classifyEffect(String text, String trigger) {
+    private static String classifyEffectWithParser(String text, String trigger) {
         if ("Counter".equals(trigger)) return "COUNTER";
         if ("Keyword".equals(trigger)) return "KEYWORD";
         if ("Passive".equals(trigger)) return "PASSIVE";
 
-        // Strip leading modal prefix before classification
-        String core  = text.replaceFirst("^[/•]\\s*", "").trim();
-        String lower = core.toLowerCase();
+        // Strip leading modal prefix ("• " or "/ ") so the parser sees the action text.
+        String core = text.replaceFirst("^[/•]\\s*", "").trim();
 
-        // MODAL — top-level "Choose one:" line
-        if (lower.startsWith("choose one") || lower.equals("choose:") || lower.startsWith("choose one:")) {
-            return "MODAL";
+        List<ParsedEffect> effects = EffectParser.parse(core);
+        if (!effects.isEmpty() && effects.get(0).effectType() != null) {
+            return effects.get(0).effectType();
         }
-
-        // CONDITION — pure "If X" clause with no action verb
-        if (lower.startsWith("if ") && isConditionOnly(lower)) {
-            return "CONDITION";
-        }
-
-        // DON!! management
-        if (lower.contains("don!!") && lower.contains("deck") && lower.contains("add"))    return "ADD_DON";
-        if (lower.contains("don!!") && lower.contains("give"))                             return "GIVE_DON";
-        if (lower.contains("don!!") && lower.contains("return"))                           return "RETURN_DON";
-        if (lower.contains("don!!") && lower.contains("set") && lower.contains("active")) return "SET_ACTIVE";
-
-        // Card manipulation
-        if (lower.contains("k.o.") || (lower.contains("ko") && lower.contains("character"))) return "KO";
-        if (lower.contains("draw"))                                                          return "DRAW";
-        if (lower.contains("look at") && lower.contains("deck") && lower.contains("reveal")) return "SEARCH";
-        if (lower.contains("look at") && lower.contains("deck"))                             return "LOOK";
-        if (lower.contains("return") && (lower.contains("hand") || lower.contains("owner"))) return "BOUNCE";
-        if (lower.contains("play") && (lower.contains("character") || lower.contains("event")
-                || lower.contains("stage") || lower.contains("leader")))                    return "PLAY";
-        if (lower.contains("trash"))                                                         return "TRASH";
-
-        // State changes
-        if (lower.contains("set") && lower.contains("active"))                              return "SET_ACTIVE";
-        if ((lower.contains(" rest ") || lower.startsWith("rest "))
-                && (lower.contains("character") || lower.contains("leader")
-                    || lower.contains("don!!")))                                             return "REST";
-
-        // Power / cost
-        if (lower.contains("power")) {
-            boolean plus  = core.contains("+");
-            boolean minus = core.contains("-");
-            if (plus && !minus) return "POWER_UP";
-            if (minus && !plus) return "POWER_DOWN";
-            if (plus)           return "POWER_UP";
-        }
-        if (lower.contains("give") && core.contains("-") && lower.contains("cost")) return "COST_REDUCE";
-
-        // Life
-        if (lower.contains("life") && (lower.contains("add") || lower.contains("place"))) return "LIFE_ADD";
-        if (lower.contains("life") && lower.contains("hand"))                              return "LIFE_REMOVE";
-
         return "OTHER";
-    }
-
-    /**
-     * Returns true when an "if"-prefixed clause contains no known action verb —
-     * i.e., it is a pure condition with no embedded consequence.
-     */
-    private static boolean isConditionOnly(String lower) {
-        for (String verb : ACTION_WORDS) {
-            if (lower.contains(verb)) return false;
-        }
-        return true;
     }
 
     // ── Effect generalisation ─────────────────────────────────────────────────
