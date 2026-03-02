@@ -19,7 +19,7 @@ Each clause has the same shape: `[VERB] [QUANTITY?] [PLAYER?] [CARD_TYPE] [FILTE
 
 ## Token Vocabulary (Lexer Layer)
 
-Nine token types. Every word or phrase in a card effect body belongs to exactly one.
+Ten token types. Every word or phrase in a card effect body belongs to exactly one.
 
 ### VERB
 The first meaningful word of a clause. Determines `EffectType`.
@@ -171,9 +171,11 @@ A `"If [clause],"` prefix applied to the entire effect clause that follows.
 | `IF_LEADER_IDENTITY` | `If your Leader is [CARD_REF]` or `If your Leader has the {Type} type or is [CARD_REF]` |
 | `IF_THIS_POWER` | `If this Character has [POWER] power or more` |
 | `IF_THIS_RESTED` | `If this Character is rested` |
+| `IF_RESTED` | `If [target] is rested` — FILTER(RESTED) detected in condition body before CARD_TYPE |
 | `IF_THIS_KO` | `If this Character would be K.O.'d` — replacement effect |
 | `IF_CHARACTER_EXISTS` | `If you have a {Type} type Character` |
 | `IF_CHARACTER_COLOR` | `If you have a [Color] Character` |
+| `IF_HAND_COUNT` | `If you have N or more cards in your hand` |
 | `IF_REVEALED_COST` | `If the revealed card has a cost of N or more` — follows a SEARCH_DECK clause |
 | `IF_YOU_DO` | `If you do,` — follow-up conditional on the previous clause succeeding |
 
@@ -185,9 +187,29 @@ Joins clauses within an ability body.
 and    — simultaneous or sequential; both effects happen
 then   — sequential; second resolves after first completes
 also   — additional effect, lower priority than and/then
+or     — clause alternative (modal choice between two effects) OR compound target ("Leader or Characters")
 ,      — clause boundary (contextual: may separate filters or clauses)
 •  /   — modal option separators (inside a MODAL clause)
 ```
+
+> **Known Phase 2 gap:** `or` serves two distinct roles. When both arms of an `or` split contain
+> a VERB, it separates independent clauses (split correctly). When neither arm contains a VERB —
+> `"this Leader or 1 of your Characters"` — it is a compound-target alternation and should NOT
+> produce two clauses. `EffectParser` Phase 1 splits on all `or` CONNECTOR tokens uniformly;
+> disambiguation is deferred to Phase 2.
+
+---
+
+### MODIFIER
+Semantic qualifier on the immediately following verb/clause. Does **not** describe a target or
+action — describes whether executing the action is mandatory.
+```
+may    → optional = true   (player chooses whether to execute the effect)
+must   → optional = false  (effect is mandatory, no choice)
+```
+`EffectParser` scans for a MODIFIER token before the VERB in each clause and sets
+`ParsedEffect.optional` accordingly. MODIFIER tokens are consumed separately from SKIP tokens —
+they carry game-logic meaning.
 
 ---
 
@@ -339,6 +361,19 @@ to defer to manual JSON override.
 
 **Color filter on target:** `"a purple {Big Mom Pirates} type Character"` — color is an
 additional FILTER, not a separate token type. `Target` needs a `color` field to store it.
+
+**`"or"` as compound-target vs. clause separator (Phase 2 gap):** `"or"` is registered as a
+CONNECTOR in `EffectTables`, so `EffectParser` Phase 1 always splits on it. This is correct for
+modal choices (`"Draw 2 cards or trash 1"`) but incorrect for compound targets (`"this Leader or
+1 of your Characters"`). The Phase 2 fix: before committing to an `or` split, check whether
+both resulting sub-lists contain at least one VERB token; if neither sub-list has a VERB it is a
+compound-target `or` and should not produce a clause split.
+
+**Dynamic cost filters (Phase 2 gap):** FILTER_PATTERNS match only static integer thresholds
+(e.g. `"cost of 4 or less"` → `maxCost = 4`). Relational expressions like `"cost equal to or
+less than the number of DON!! cards on your field"` have no digit to capture — they produce no
+FILTER token and the bound is silently dropped. These effects require a `"DYNAMIC"` filter
+category and runtime evaluation of the referent count.
 
 ---
 

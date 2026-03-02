@@ -26,7 +26,7 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 - `CardData` record carries a `subTypes` field (normalized from API `sub_types` strings)
 - `CardDatabase` secondary index: `getByName()` (O(1)), `getBySubtype()` (O(n)), `getAllCards()`
 - `CsvGenerator`: offline tool that rebuilds `card_names_subtypes.csv` from compiled (or raw) JSON with name normalization and deduplication
-- 153 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty)
+- 180 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty)
 
 ---
 
@@ -117,7 +117,7 @@ Raw card data is scraped from the API by `CardScraper` and saved to `src/main/re
 mvn exec:java -Dexec.mainClass="tools.CardCompiler"
 ```
 
-`CardCompiler` deduplicates cards by `card_set_id` (keeping the base version over SP/Parallel variants), strips fields unused by the engine, and appends a structured `abilities[]` array to each card using `Parser`.
+`CardCompiler` deduplicates cards by `card_set_id` (keeping the base version over SP/Parallel variants), strips fields unused by the engine, appends a structured `abilities[]` array to each card using `Parser`, and populates each ability's `effects[]` array by running `EffectParser` on the effect body text. At the end of compilation it calls `CardChecklistCsvGenerator` to write `csv/card_checklist.csv` — a per-card checklist of unknown tokens and override flags for tracking parser coverage.
 
 `CardDatabase` loads compiled JSON at startup. Cards are indexed by `card_set_id` (primary) and by `name` (secondary, case-insensitive, multi-result). Three query methods are provided:
 
@@ -144,7 +144,7 @@ mvn exec:java -Dexec.mainClass="tools.CsvGenerator"
 mvn test
 ```
 
-**Current test suite: 153 tests, 0 failures, 0 errors.**
+**Current test suite: 180 tests, 0 failures, 0 errors.**
 10 `CardDatabaseTest` cases are data-dependent and skip automatically (via `assumeTrue`) when `raw/data/` is empty — run `CardScraper` first to populate.
 
 | Test class | Tests | Coverage area |
@@ -161,7 +161,8 @@ mvn test
 | `ParserTest` | 21 | Ability parsing: triggers, conditions, costs, keywords, multi-ability blocks, Blocker+On Block inline split |
 | `GameFactoryTest` | 9 | Pre-built test deck construction, card type breakdown, ownership, field/stage/don counts |
 | `TokenTest` | 8 | `Token` record field access, value types (int/String/null), record equality, toString |
-| `EffectLexerTest` | 34 | All 9 token types, bracket detection, regex filters, K.O. normalisation, phrase-length preference, 6 verbatim card text examples from CSV |
+| `EffectLexerTest` | 34 | All 10 token types, bracket detection, regex filters, K.O. normalisation, phrase-length preference, 6 verbatim card text examples from CSV |
+| `EffectParserTest` | 27 | All EffectTypes (DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST, COST_MODIFY, ADD_DON, SET_DON_ACTIVE, GRANT_KEYWORD, PLAY_CARD, NEGATE, PREVENT_ATTACK, UNREST, ATTACH_DON), optional flag, conditions (IF_YOU_DO, IF_RESTED, IF_LEADER_TYPE), multi-clause chains, subject-first clauses |
 
 ---
 
@@ -218,12 +219,14 @@ src/
 │   │       ├── CsvGenerator.java                ← Rebuilds card_names_subtypes.csv from compiled/raw data
 │   │       ├── Parser.java                      ← Parses card text into structured abilities
 │   │       ├── ParsedAbility.java               ← Record: trigger, condition, cost, character, effect
-│   │       ├── TokenType.java                   ← 9-value enum (VERB, QUANTITY, PLAYER, CARD_TYPE, FILTER, ZONE, DURATION, CONDITION, CONNECTOR)
+│   │       ├── TokenType.java                   ← 10-value enum (VERB, QUANTITY, PLAYER, CARD_TYPE, FILTER, ZONE, DURATION, CONDITION, CONNECTOR, MODIFIER)
 │   │       ├── Token.java                       ← Record: (TokenType type, String raw, Object value)
-│   │       ├── EffectTables.java                ← All phrase→TokenType entries, sorted lists, regex filter Patterns (shared with future EffectParser)
+│   │       ├── EffectTables.java                ← All phrase→TokenType entries, sorted lists, regex filter Patterns (shared by EffectLexer and EffectParser)
 │   │       ├── EffectLexer.java                 ← Word-level scanner; produces List<Token> from raw effect text
 │   │       ├── ParsedEffect.java                ← Intermediate structured effect record (tools pipeline only)
+│   │       ├── EffectParser.java                ← Token→ParsedEffect parser; resolveVerb, splitClauses, extractPlayer/Zone/CardType/Filters/Duration/Condition
 │   │       ├── EffectTemplateCsvGenerator.java  ← Reads compiled JSON → Parser → generalise → split compound effects → write generic/unique CSV pair
+│   │       ├── CardChecklistCsvGenerator.java   ← Reads compiled cards → EffectLexer → collects UNKNOWN tokens → writes csv/card_checklist.csv
 │   │       ├── LexerCoverageReport.java         ← Runs EffectLexer on all CSV templates; reports fully-tokenised % and top unknown tokens
 │   │       └── Report.java                      ← Shared CSV row record used by LexerCoverageReport
 │   └── resources/
@@ -303,6 +306,11 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 - `Parser.splitOnEmbeddedTriggers`: fixed `[Blocker] (explanation) [On Block] effect` being parsed as one ability; added `sawKeyword` tracking + parenthetical skip so the embedded trigger fires the split
 - `Duration` enum added (`THIS_BATTLE`, `THIS_TURN`, `OPPONENTS_NEXT_TURN`, `PERMANENT`); `EffectData.duration` promoted from `int` to `Duration`
 - `ParsedEffect` record: intermediate structured representation of a single parsed effect clause (tools pipeline; not part of game runtime)
+- `MODIFIER` token type added to `TokenType` (10th value): `may` (optional action) and `must` (forced action); `EffectParser` reads the MODIFIER flag to populate `ParsedEffect.optional`
+- `EffectParser` Phase 1 complete: `List<Token>` → `List<ParsedEffect>`; covers DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST, COST_MODIFY, ADD_DON, SET_DON_ACTIVE, GRANT_KEYWORD, PLAY_CARD, NEGATE, PREVENT_ATTACK, UNREST, ATTACH_DON; clause splitting on CONNECTOR; condition classification; optional flag from MODIFIER tokens; subject-first clause handling
+- `CardCompiler.toEffectJson()` implemented: each non-KEYWORD ability's `effects[]` is now populated from `EffectParser.parse()` output; `buildTargetNode()`, `mapZone()`, `mapParsedCardType()` helpers produce engine-compatible field names
+- `CardChecklistCsvGenerator`: called automatically at the end of `CardCompiler.main()`; writes `csv/card_checklist.csv` with columns `card_name`, `card_set_id`, `card_text`, `generic_card_text`, `unknown_tokens`, `needs_override`; deduplicates across sets/decks/promos by `card_set_id`
+- `CardType.fromValue()` `@JsonCreator` added: case-insensitive Jackson deserialization (`"Character"` → `CHARACTER`) so compiled JSON written before the enum rename round-trips correctly
 
 **Remaining:**
 - **Trigger**: activates when a life card is revealed, at no DON cost
@@ -412,4 +420,4 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
 
 See [DEVLOG.md](DEVLOG.md) for a full account of what was built manually, what was AI-assisted, the key prompts used, and what changed through iteration.
 
-*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is in progress: keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable) are implemented and tested; the card text corpus has been analysed and the EffectLexer skeleton is complete; Counter resolution, Trigger, Event effects, and [Activate:Main] abilities remain. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*
+*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is in progress: keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable) are implemented and tested; the full tools pipeline (EffectLexer → EffectParser → CardCompiler → compiled JSON) is operational with 99%/96% lexer coverage and EffectParser Phase 1 complete; Counter resolution, Trigger, Event effects, and [Activate:Main] ability evaluation remain. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*

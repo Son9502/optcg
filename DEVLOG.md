@@ -450,6 +450,94 @@ These patterns recurred throughout the project and proved effective:
 
 ---
 
+### CardType @JsonCreator deserialization fix (collab)
+
+**Problem:** After renaming `CardType` enum values from mixed-case (`Character`) to UPPERCASE (`CHARACTER`), compiled JSON files still contained the old lowercase forms. Jackson's default enum deserialization is case-sensitive — the mismatch caused `cardType` fields to deserialize as `null`, breaking 3 `CardDatabaseTest` assertions.
+
+**Fix:** Added a `@JsonCreator` static factory method to `CardType`:
+```java
+@JsonCreator
+public static CardType fromValue(String value) {
+    return CardType.valueOf(value.toUpperCase());
+}
+```
+This allows any case variant in JSON (`"Character"`, `"character"`, `"CHARACTER"`) to map to the correct enum constant. The fix is transparent — no changes to compiled JSON files were needed.
+
+**Developer reasoning:** Reserializing every compiled JSON file was rejected — it would break the audit trail and require a full re-scrape to regenerate. A single `@JsonCreator` absorbs all past and future case variation at the deserialization boundary.
+
+**Result:** 180 tests, 0 failures.
+
+---
+
+### EffectParser Phase 1 — tools pipeline (collab)
+
+**Problem:** `CardCompiler` always wrote `"effects": []`. After the EffectLexer reached 99%/96% coverage, the next layer — converting token lists to structured `ParsedEffect` records — needed to be built.
+
+**Data flow:**
+```
+ParsedAbility.effect()  (String — trigger/cost already stripped)
+    ↓ EffectLexer.parseEffect()
+List<Token>
+    ↓ EffectParser.parse()
+List<ParsedEffect>
+    ↓ CardCompiler.toEffectJson()
+effects[] in compiled JSON
+```
+
+**Pre-pass changes (developer-directed):**
+- `TokenType` — added `MODIFIER` (10th value) for `may`/`must`; these are semantic qualifiers that change a mandatory effect to optional, not words to skip
+- `EffectTables` — moved `may`/`must` from `addSkips()` to new `addModifiers()` helper
+- `ParsedEffect` — added `boolean optional` as the last field
+
+**Key design decisions (developer):**
+
+*Flat clause model:* `ParsedEffect` remains a flat record — no sub-effect nesting, no `choices` field. MODAL effects (Choose one: A / B) emit a single `ParsedEffect(type=MODAL)` stub. The `choices` field is deferred until `EffectData` gains `List<List<EffectData>> choices` to hold sub-effects.
+
+*Subject-first clauses:* `"Up to 1 of your Characters gains +1000 power"` puts the target before the verb. Detected via a `pastVerb` flag in `extractQuantities()`: when QUANTITY tokens appear before the first VERB, the first QUANTITY goes to `max` (targeting) rather than `value` (effect magnitude).
+
+*Condition two-pass:* Condition is extracted from the leading `if`/`when` clause before splitting into sub-clauses. FILTER tokens in the condition body are checked for `RESTED` (→ `IF_RESTED`) before the CARD_TYPE token, to avoid misclassifying "if this Character is rested" as `IF_CHARACTER_COUNT`.
+
+*`IF_YOU_DO` propagation:* Clauses after a `then` CONNECTOR automatically receive `condition = "IF_YOU_DO"` — the clause fires only if the prior one resolved. Explicit `"If you do,"` tokens in text confirm this rather than starting a new condition classification.
+
+*`"or"` ambiguity (known Phase 2 gap):* `"or"` appears both as a CONNECTOR between independent clauses ("Draw 2 *or* trash 1") and as a compound-target separator ("this Leader *or* 1 of your Characters"). EffectParser splits on all `"or"` CONNECTOR tokens uniformly. Disambiguation — checking whether both arms of an `"or"` split contain VERBs before committing to the split — is deferred to Phase 2.
+
+**EffectTypes implemented (Phase 1):**
+DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST, COST_MODIFY, ADD_DON, SET_DON_ACTIVE, GRANT_KEYWORD, PLAY_CARD, NEGATE, PREVENT_ATTACK, UNREST, ATTACH_DON, MODAL (stub).
+
+**Test results:** 27 `EffectParserTest` tests, 0 failures. Total suite: 180 tests, 0 failures.
+
+---
+
+### CardCompiler — toEffectJson() integration (collab)
+
+**Problem:** `toAbilityJson()` hardcoded `node.set("effects", mapper.createArrayNode())`. With `EffectParser` complete, the stub could be replaced with real output.
+
+**Design decisions (developer):**
+- KEYWORD abilities keep `effects: []` — keywords are encoded on `AbilityData.keyword`, not in `EffectData`
+- `buildTargetNode()` returns `null` (→ `"target": null` in JSON) when all targeting fields are zero/null, avoiding meaningless empty objects
+- `mapZone()` maps lexer raw strings (`"hand"`, `"don!! deck"`, etc.) to `ZoneType` enum names; unmapped values return `null`
+- `mapParsedCardType()` maps `ParsedEffect` type strings to `CardType` enum names; compound types (`"LEADER_OR_CHARACTER"`, `"CARD"`) map to `null` — they cannot be expressed as a single enum value and need manual override
+
+**Result:** Compiled JSON now contains fully populated `effects[]` arrays for all cards where `EffectParser` can classify the verb. Cards with unresolvable verbs or MODAL effects get an empty or MODAL stub array.
+
+---
+
+### CardChecklistCsvGenerator (collab)
+
+**Problem:** After `CardCompiler` runs, there was no way to quickly see which cards still had unresolved UNKNOWN tokens or needed manual JSON overrides. The existing `LexerCoverageReport` operates on the generic/unique CSV templates, not on individual cards.
+
+**Design (developer-directed):**
+- Called automatically from the end of `CardCompiler.main()` — no separate invocation needed
+- One row per unique card (`card_set_id`); deduplication across sets/decks/promos uses a `LinkedHashMap<String, ObjectNode>` accumulated during compilation with `putIfAbsent`
+- `collectUnknownTokens()`: calls `Parser.parse()` to strip trigger headers and costs from `card_text`, then runs `EffectLexer.parseEffect()` on each ability body, collects distinct UNKNOWN token raw values in encounter order
+- `generalizeEffect()` in `EffectTemplateCsvGenerator` promoted from `private static` to package-private (`static`) so `CardChecklistCsvGenerator` can reuse it without duplication
+- `stripDisclaimer()`: removes `"Disclaimer:"`, `"DISCLAIMER:"`, and inline errata sentences before lexing — same boilerplate-stripping logic used in `EffectTemplateCsvGenerator`
+- `needs_override` column: `"true"` if `unknown_tokens` is non-empty; allows filtering the CSV to the actionable backlog
+
+**Output:** `csv/card_checklist.csv` — sorted by `card_set_id`, columns: `card_name`, `card_set_id`, `card_text`, `generic_card_text`, `unknown_tokens`, `needs_override`.
+
+---
+
 ## What Was Never AI-Generated
 
 - The overall phased architecture (CMU → Tmux → GUI → AI → Online)
@@ -467,3 +555,8 @@ These patterns recurred throughout the project and proved effective:
 - The generic/unique threshold choice (≥2 occurrences = generic) for the CSV corpus split
 - The classification of `when` as CONDITION vs SKIP (OP TCG domain knowledge: "when X, do Y" is a conditional gate identical in semantics to "if X, do Y")
 - The decision that `counter` is ZONE (not FILTER), `no`/`none` are QUANTITY (not SKIP), and `battle` is SKIP (residual after the full "during this battle" DURATION phrase fires)
+- The `EffectParser` flat-record design (no sub-effect nesting, MODAL deferred) — rejecting the temptation to add `List<List<ParsedEffect>> choices` before the engine needs it
+- The `MODIFIER` token type classification — `may`/`must` are semantic qualifiers on the whole clause, not words to skip; this maps to the `optional` boolean in `ParsedEffect`
+- The `IF_RESTED` condition priority — checking FILTER tokens for `RESTED` before the CARD_TYPE token prevents misclassification of "if this Character is rested" as `IF_CHARACTER_COUNT`
+- The `@JsonCreator` absorb-all-cases strategy for `CardType` — reserializing compiled JSON to uppercase was rejected in favour of tolerating past and future case variation at the deserialization boundary
+- The `buildTargetNode()` null-return contract — emitting `"target": null` instead of `{}` when all targeting fields are absent, keeping compiled JSON clean for the engine's null checks
