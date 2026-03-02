@@ -160,10 +160,142 @@ public class CardCompiler {
             node.putNull("keyword");
         }
 
-        node.set("effects", mapper.createArrayNode()); // filled in Step 4
+        ArrayNode effectsNode = mapper.createArrayNode();
+        if (!"KEYWORD".equals(triggerName)) {
+            String effectText = pa.effect();
+            if (effectText != null && !effectText.isBlank()) {
+                for (ParsedEffect pe : EffectParser.parse(effectText)) {
+                    ObjectNode effectNode = toEffectJson(mapper, pe);
+                    if (effectNode != null) effectsNode.add(effectNode);
+                }
+            }
+        }
+        node.set("effects", effectsNode);
+        return node;
+    }
+    /**
+     * Converts a ParsedEffect to an ObjectNode whose field names match the
+     * {@code @JsonProperty} annotations on {@link engine.cards.effects.EffectData}.
+     * Returns null if the effect type is null (unrecognised verb) so the caller
+     * can skip it without adding a broken entry to the JSON.
+     *
+     * <p>Output shape:
+     * <pre>
+     * {
+     *   "type"      : "DRAW",
+     *   "value"     : 2,
+     *   "target"    : { "player":"SELF", "zone":null, "cardType":null,
+     *                   "max":0, "maxCost":0, "minCost":0, "maxPower":0, "minPower":0 },
+     *   "condition" : null,
+     *   "duration"  : null
+     * }
+     * </pre>
+     * {@code target} is null when no targeting information is present.
+     *
+     * @param mapper Jackson mapper used to create ObjectNode instances
+     * @param pe     the intermediate ParsedEffect produced by {@link EffectParser}
+     * @return compiled ObjectNode matching EffectData, or null if effectType is null
+     */
+    private static ObjectNode toEffectJson(ObjectMapper mapper, ParsedEffect pe) {
+        if (pe.effectType() == null) return null;
+
+        ObjectNode node = mapper.createObjectNode();
+        node.put("type",  pe.effectType());
+        node.put("value", pe.value());
+
+        ObjectNode targetNode = buildTargetNode(mapper, pe);
+        if (targetNode != null) node.set("target", targetNode);
+        else                    node.putNull("target");
+
+        if (pe.condition() != null) node.put("condition", pe.condition());
+        else                        node.putNull("condition");
+
+        if (pe.duration() != null) node.put("duration", pe.duration());
+        else                       node.putNull("duration");
+
         return node;
     }
 
+    /**
+     * Builds the nested {@code "target"} ObjectNode from the flat targeting fields
+     * of a {@link ParsedEffect}. Field names match the record components of
+     * {@link engine.cards.effects.Target} so Jackson can deserialise them directly.
+     *
+     * <p>Returns null when all targeting fields are absent (null / zero), which
+     * signals to the caller that {@code "target": null} should be written instead
+     * of an empty object.
+     *
+     * @param mapper Jackson mapper used to create the ObjectNode
+     * @param pe     source ParsedEffect whose target fields are extracted
+     * @return populated target ObjectNode, or null if no targeting data is present
+     */
+    private static ObjectNode buildTargetNode(ObjectMapper mapper, ParsedEffect pe) {
+        String player   = pe.targetPlayer();
+        String zone     = mapZone(pe.targetZone());
+        String cardType = mapParsedCardType(pe.targetCardType());
+        int max      = pe.max();
+        int maxCost  = pe.maxCost();
+        int minCost  = pe.minCost();
+        int maxPower = pe.maxPower();
+        int minPower = pe.minPower();
+
+        boolean hasData = player != null || zone != null || cardType != null
+                || max != 0 || maxCost != 0 || minCost != 0 || maxPower != 0 || minPower != 0;
+        if (!hasData) return null;
+
+        ObjectNode n = mapper.createObjectNode();
+        if (player   != null) n.put("player",   player);   else n.putNull("player");
+        if (zone     != null) n.put("zone",      zone);     else n.putNull("zone");
+        if (cardType != null) n.put("cardType",  cardType); else n.putNull("cardType");
+        n.put("max",      max);
+        n.put("maxCost",  maxCost);
+        n.put("minCost",  minCost);
+        n.put("maxPower", maxPower);
+        n.put("minPower", minPower);
+        return n;
+    }
+
+    /**
+     * Maps a raw lexer zone string (as stored in {@link ParsedEffect#targetZone()})
+     * to the corresponding {@link engine.zones.ZoneType} enum name used in JSON.
+     *
+     * @param raw lexer zone token value (e.g. {@code "hand"}, {@code "don!! deck"})
+     * @return ZoneType enum name (e.g. {@code "HAND"}), or null if unrecognised
+     */
+    private static String mapZone(String raw) {
+        if (raw == null) return null;
+        return switch (raw.toLowerCase()) {
+            case "hand"                            -> "HAND";
+            case "deck"                            -> "DECK";
+            case "don!! deck", "don!!"             -> "DON_DECK";
+            case "life", "life area", "life cards" -> "LIFE";
+            case "field"                           -> "CHARACTER";
+            case "trash"                           -> "TRASH";
+            default                                -> null;
+        };
+    }
+
+    /**
+     * Maps a {@link ParsedEffect#targetCardType()} string to the corresponding
+     * {@link engine.cards.types.CardType} enum name used in JSON.
+     * Returns null for compound or generic types that have no single CardType
+     * equivalent (e.g. {@code "LEADER_OR_CHARACTER"}, {@code "CARD"}).
+     *
+     * @param raw ParsedEffect card-type string (e.g. {@code "CHARACTER"}, {@code "DON_CARD"})
+     * @return CardType enum name, or null if no direct mapping exists
+     */
+    private static String mapParsedCardType(String raw) {
+        if (raw == null) return null;
+        return switch (raw) {
+            case "CHARACTER"           -> "CHARACTER";
+            case "LEADER"              -> "LEADER";
+            case "EVENT"               -> "EVENT";
+            case "DON_CARD"            -> "DON";
+            case "LEADER_OR_CHARACTER" -> null; // no single CardType equivalent
+            case "CARD"                -> null; // generic — no single CardType
+            default                    -> null;
+        };
+    }
     private static String mapTrigger(String trigger) {
         if (trigger == null) return null;
         return switch (trigger.trim()) {
