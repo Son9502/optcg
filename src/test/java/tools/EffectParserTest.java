@@ -6,11 +6,42 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Unit tests for {@link EffectParser}.
+ *
+ * <p>Each test parses one or more effect clauses via the convenience
+ * {@link EffectParser#parse(String)} entry point and asserts that the
+ * resulting {@link ParsedEffect} fields match expected engine values.
+ *
+ * <p>Test coverage (Phase 1 + Phase 2 MVP):
+ * <ul>
+ *   <li>Core effects: DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST,
+ *       COST_MODIFY, GRANT_KEYWORD, ADD_DON, SET_DON_ACTIVE, SHUFFLE_DECK</li>
+ *   <li>Connectors: "and" splits into two ParsedEffects; "then" implies IF_YOU_DO</li>
+ *   <li>Optional flag: "may" before verb → {@code optional = true}</li>
+ *   <li>Conditions: IF_YOU_DO, IF_LIFE_COUNT, IF_DON_COUNT, IF_CHARACTER_COUNT,
+ *       IF_LEADER_COLOR, IF_HAND_COUNT, IF_RESTED</li>
+ *   <li>Subject-first clauses: "N of your Characters gains +K power"</li>
+ *   <li>MODAL branch splitting: "Choose one: • A • B" → [MODAL, A, B]</li>
+ * </ul>
+ *
+ * <p>Helper methods:
+ * <ul>
+ *   <li>{@link #one(String)} — asserts exactly one effect and returns it</li>
+ *   <li>{@link #many(String, int)} — asserts exactly N effects and returns them</li>
+ * </ul>
+ */
 public class EffectParserTest {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /** Parses and asserts exactly one ParsedEffect is returned. */
+    /**
+     * Parses {@code text} and asserts that exactly one {@link ParsedEffect} is
+     * produced, failing with a descriptive message if the count differs.
+     *
+     * @param text effect clause text to parse
+     * @return the single resulting {@link ParsedEffect}
+     */
     private ParsedEffect one(String text) {
         List<ParsedEffect> effects = EffectParser.parse(text);
         assertEquals(1, effects.size(),
@@ -18,7 +49,14 @@ public class EffectParserTest {
         return effects.get(0);
     }
 
-    /** Parses and asserts exactly N ParsedEffects are returned. */
+    /**
+     * Parses {@code text} and asserts that exactly {@code n} {@link ParsedEffect}
+     * objects are produced, failing with a descriptive message otherwise.
+     *
+     * @param text effect clause text to parse
+     * @param n    expected number of effects
+     * @return the full list of resulting {@link ParsedEffect} objects
+     */
     private List<ParsedEffect> many(String text, int n) {
         List<ParsedEffect> effects = EffectParser.parse(text);
         assertEquals(n, effects.size(),

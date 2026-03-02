@@ -30,7 +30,14 @@ public final class EffectParser {
 
     // ── Entry points ──────────────────────────────────────────────────────────
 
-    /** Convenience: tokenize {@code effectText} then parse the token stream. */
+    /**
+     * Convenience entry point: tokenizes {@code effectText} with the EffectLexer,
+     * then delegates to {@link #parse(List)}.
+     *
+     * @param effectText raw ability body text (trigger header and cost already stripped)
+     * @return ordered list of parsed effects; empty if the text contains no
+     *         recognised effect verbs
+     */
     public static List<ParsedEffect> parse(String effectText) {
         return parse(EffectLexer.parseEffect(effectText));
     }
@@ -39,6 +46,9 @@ public final class EffectParser {
      * Core entry point. Filters SKIP tokens, extracts a leading condition if
      * present, splits into clauses on CONNECTOR boundaries, and parses each
      * clause into a ParsedEffect.
+     *
+     * @param tokens pre-tokenized stream produced by {@link EffectLexer#parseEffect}
+     * @return ordered list of parsed effects; empty if no recognisable verbs are found
      */
     public static List<ParsedEffect> parse(List<Token> tokens) {
         // 1. Remove SKIP tokens; keep everything else (MODIFIER included).
@@ -75,10 +85,21 @@ public final class EffectParser {
 
     /**
      * If the token stream starts with a CONDITION token ("if", "when",
-     * "if you do", "once per turn"), consume all tokens up to and including
-     * the next CONNECTOR (the comma boundary), classify the condition, and
-     * return the remaining token list. Writes the condition name into
-     * {@code out[0]}.
+     * "if you do", "once per turn"), classifies the condition, consumes its
+     * tokens, and returns the remaining effect tokens.  Writes the Condition
+     * enum name (e.g. {@code "IF_LIFE_COUNT"}) into {@code out[0]}.
+     * <p>
+     * Self-contained conditions ("if you do", "once per turn") consume only
+     * their single token.  General "if"/"when" conditions consume up to the
+     * first effect VERB (the comma separator is stripped as punctuation by the
+     * lexer, so no CONNECTOR token marks the boundary).
+     *
+     * @param tokens SKIP-filtered token list starting with a potential CONDITION
+     * @param out    single-element array used as a mutable output box for the
+     *               condition name; {@code out[0]} is set to null if no condition
+     *               is found
+     * @return token sublist beginning at the first effect VERB, or the original
+     *         list unchanged if no leading condition was present
      */
     private static List<Token> extractLeadingCondition(List<Token> tokens, String[] out) {
         if (tokens.isEmpty()) return tokens;
@@ -112,8 +133,13 @@ public final class EffectParser {
 
     /**
      * Finds the index of the first VERB token (at or after {@code from}) that
-     * resolves to a non-null EffectType — i.e., the start of an effect clause.
-     * Returns -1 if none found.
+     * {@link #resolveVerb} maps to a non-null EffectType — i.e. the start of
+     * an actionable effect clause rather than a verb inside a condition clause
+     * (e.g. "have" in "if you have N life cards").
+     *
+     * @param tokens SKIP-filtered token list to scan
+     * @param from   inclusive start index for the search
+     * @return index of the first effect-verb token, or {@code -1} if none found
      */
     private static int findFirstEffectVerb(List<Token> tokens, int from) {
         for (int i = from; i < tokens.size(); i++) {
@@ -132,6 +158,10 @@ public final class EffectParser {
      * (rested, multicolored, type) are checked before lower-specificity CARD_TYPE
      * markers — otherwise "if this Character is rested" would return
      * IF_CHARACTER_COUNT instead of IF_RESTED.
+     *
+     * @param tokens full SKIP-filtered stream starting with the CONDITION token
+     * @return Condition enum name string (e.g. {@code "IF_LIFE_COUNT"}), or
+     *         {@code null} if the condition pattern is not recognised
      */
     private static String classifyConditionClause(List<Token> tokens) {
         // Find the boundary: index of first VERB that maps to a real EffectType.
@@ -179,9 +209,13 @@ public final class EffectParser {
 
     /**
      * Splits the token stream into clauses on CONNECTOR tokens
-     * ("and", "then", "also"). Each resulting sub-list is one game-effect
-     * clause. The "/" connector (MODAL option separator) is intentionally
-     * kept inside clauses for the MODAL stub handler.
+     * ("and", "then", "also", "•"). Each resulting sub-list is one game-effect
+     * clause. The "/" connector (trigger-notation separator) is intentionally
+     * kept inside clauses rather than used as a split boundary.
+     *
+     * @param tokens SKIP-filtered token list after leading condition extraction
+     * @return list of per-clause token sub-lists; never empty (at minimum one
+     *         list containing all tokens is returned)
      */
     private static List<List<Token>> splitClauses(List<Token> tokens) {
         List<List<Token>> clauses = new ArrayList<>();
@@ -201,9 +235,18 @@ public final class EffectParser {
     }
 
     /**
-     * Returns true if the connector token immediately before clause {@code i}
-     * (in the original filtered stream) matches {@code connectorRaw}.
-     * Used to detect "then" boundaries so subsequent clauses get IF_YOU_DO.
+     * Returns {@code true} if the CONNECTOR token immediately preceding
+     * clause {@code clauseIndex} (in the original filtered stream) matches
+     * {@code connectorRaw}. Used to detect "then" boundaries so that
+     * subsequent clauses receive an implicit {@code IF_YOU_DO} condition.
+     *
+     * @param filtered      SKIP-filtered token list (includes CONNECTOR tokens)
+     * @param clauses       clause sub-lists as produced by {@link #splitClauses}
+     * @param clauseIndex   1-based index of the clause whose preceding connector
+     *                      is being inspected
+     * @param connectorRaw  raw text of the connector to match (e.g. {@code "then"})
+     * @return {@code true} if the Nth connector (where N == clauseIndex) in
+     *         {@code filtered} equals {@code connectorRaw}
      */
     private static boolean connectsBefore(List<Token> filtered,
                                           List<List<Token>> clauses,
@@ -227,8 +270,14 @@ public final class EffectParser {
     // ── Clause parser ─────────────────────────────────────────────────────────
 
     /**
-     * Parses a single clause (list of non-SKIP tokens) into a ParsedEffect.
-     * Returns null if no recognisable VERB is found (residual fragment).
+     * Parses a single clause (list of non-SKIP tokens) into a {@link ParsedEffect}
+     * by extracting the verb, all field values, and assembling the record.
+     *
+     * @param clause    SKIP-filtered tokens for one effect clause
+     * @param condition Condition enum name inherited from the leading condition
+     *                  extraction, or {@code null} if unconditional
+     * @return populated {@link ParsedEffect}, or {@code null} if the clause
+     *         contains no recognisable effect VERB (residual fragment skipped)
      */
     private static ParsedEffect parseClause(List<Token> clause, String condition) {
         // 4a. Find the VERB.
@@ -289,6 +338,17 @@ public final class EffectParser {
 
     // ── Verb → EffectType resolution ─────────────────────────────────────────
 
+    /**
+     * Maps a verb's raw string to an EffectType enum name, delegating to
+     * context-dependent helpers for verbs that are ambiguous without the
+     * surrounding clause (e.g. "give" can mean POWER_BOOST, COST_MODIFY,
+     * GRANT_KEYWORD, or ATTACH_DON depending on what follows).
+     *
+     * @param verb   lowercased raw text of the VERB token
+     * @param clause full clause token list passed to disambiguation helpers
+     * @return EffectType name string (e.g. {@code "DRAW"}), or {@code null}
+     *         if the verb is not mapped to any recognised effect
+     */
     private static String resolveVerb(String verb, List<Token> clause) {
         return switch (verb) {
             // Unambiguous
@@ -316,7 +376,14 @@ public final class EffectParser {
         };
     }
 
-    /** "add / adds" — disambiguate by first CARD_TYPE or ZONE. */
+    /**
+     * Disambiguates "add / adds": DON!! CARD_TYPE → {@code ADD_DON};
+     * life-zone ZONE → {@code ADD_LIFE}; defaults to {@code ADD_DON}
+     * (the most common "add" usage in OP TCG).
+     *
+     * @param clause full clause token list
+     * @return EffectType name string
+     */
     private static String resolveAdd(List<Token> clause) {
         for (Token t : clause) {
             if (t.type() == TokenType.CARD_TYPE && t.raw().contains("don!!")) return "ADD_DON";
@@ -329,8 +396,14 @@ public final class EffectParser {
     }
 
     /**
-     * "give / gain / gains" — look at the first STAT or FILTER token after the VERB.
-     * Signed QUANTITY before STAT determines power-boost vs cost-modify.
+     * Disambiguates "give / gain / gains" by inspecting the first STAT or FILTER
+     * token after the VERB: STAT("power") → {@code POWER_BOOST};
+     * STAT("cost") → {@code COST_MODIFY}; keyword FILTER → {@code GRANT_KEYWORD};
+     * DON!! CARD_TYPE → {@code ATTACH_DON}.
+     *
+     * @param clause full clause token list
+     * @return EffectType name string, or {@code null} if no recognisable
+     *         target token is found
      */
     private static String resolveGiveGain(List<Token> clause) {
         boolean pastVerb = false;
@@ -358,7 +431,14 @@ public final class EffectParser {
         return null;
     }
 
-    /** "set / activate …" — DON!! → SET_DON_ACTIVE; character/leader → UNREST. */
+    /**
+     * Disambiguates "set / activate / activates / activated": DON!! CARD_TYPE →
+     * {@code SET_DON_ACTIVE}; character or leader CARD_TYPE → {@code UNREST};
+     * defaults to {@code SET_DON_ACTIVE} when no CARD_TYPE token is present.
+     *
+     * @param clause full clause token list
+     * @return EffectType name string
+     */
     private static String resolveSetActivate(List<Token> clause) {
         for (Token t : clause) {
             if (t.type() == TokenType.CARD_TYPE) {
@@ -371,7 +451,15 @@ public final class EffectParser {
         return "SET_DON_ACTIVE"; // default
     }
 
-    /** "place / places / placed" — use FILTER(top/bottom) or ZONE(life) to disambiguate. */
+    /**
+     * Disambiguates "place / places / placed": FILTER("top") →
+     * {@code MOVE_TO_TOP_DECK}; FILTER("bottom") → {@code MOVE_TO_BOTTOM_DECK};
+     * life-zone ZONE → {@code ADD_LIFE}; returns {@code null} if none of
+     * the expected context tokens are present.
+     *
+     * @param clause full clause token list
+     * @return EffectType name string, or {@code null}
+     */
     private static String resolvePlace(List<Token> clause) {
         for (Token t : clause) {
             if (t.type() == TokenType.FILTER) {
@@ -388,8 +476,13 @@ public final class EffectParser {
     }
 
     /**
-     * "cannot" — look at the next VERB after "cannot" for "attack" (→ PREVENT_ATTACK),
-     * "ko'd" (→ PREVENT_KO); or a [Blocker] FILTER (→ PREVENT_BLOCK).
+     * Disambiguates "cannot" by inspecting the VERB or FILTER that follows it:
+     * "attack" → {@code PREVENT_ATTACK}; "ko'd" → {@code PREVENT_KO};
+     * "activate" / "activates" or a bracket FILTER → {@code PREVENT_BLOCK}.
+     *
+     * @param clause full clause token list
+     * @return EffectType name string, or {@code null} if no recognisable
+     *         follow-on token is found
      */
     private static String resolveCannot(List<Token> clause) {
         boolean pastCannot = false;
@@ -413,17 +506,21 @@ public final class EffectParser {
     // ── Field extractors ──────────────────────────────────────────────────────
 
     /**
-     * Extracts value and max from QUANTITY tokens in the clause.
-     * Returns int[]{value, max}.
+     * Extracts {@code value} and {@code max} from QUANTITY tokens in the clause.
      *
-     * Rule:
-     * - "up to N" anywhere → max = N (always a targeting count).
-     * - Bare digit BEFORE the VERB → max = N (subject-first clause targeting count,
-     *   e.g. "1 of your Characters gains +1000 power" or
-     *        "Up to 1 of your Leader or Characters gains +1000 power").
-     * - Bare digit AFTER the VERB → routed by effectType:
-     *     → value for count-effects (DRAW, POWER_BOOST, COST_MODIFY, ADD_DON, TRASH, ADD_LIFE, ATTACH_DON)
-     *     → max  for targeting effects (REST, KO, RETURN_TO_HAND, PLAY_CARD, SEARCH_DECK)
+     * <p>Routing rules:
+     * <ul>
+     *   <li>"up to N" anywhere → {@code max = N} (always a targeting count).</li>
+     *   <li>Bare digit <em>before</em> the VERB → {@code max = N} (subject-first
+     *       clause, e.g. "1 of your Characters gains +1000 power").</li>
+     *   <li>Bare digit <em>after</em> the VERB → {@code value} for count-effects
+     *       (DRAW, POWER_BOOST, COST_MODIFY, ADD_DON, TRASH, ADD_LIFE, ATTACH_DON)
+     *       or {@code max} for targeting effects (REST, KO, RETURN_TO_HAND, …).</li>
+     * </ul>
+     *
+     * @param clause     SKIP-filtered clause token list
+     * @param effectType resolved EffectType name used to route the post-verb digit
+     * @return two-element array {@code [value, max]}; 0 means "not specified"
      */
     private static int[] extractQuantities(List<Token> clause, String effectType) {
         int value = 0;
@@ -461,7 +558,14 @@ public final class EffectParser {
         return new int[]{value, max};
     }
 
-    /** Returns true for effects that are always performed by/on the active player. */
+    /**
+     * Returns {@code true} for EffectTypes that are always performed by or on
+     * the active player, allowing {@link #parseClause} to default
+     * {@code targetPlayer} to {@code "SELF"} when no PLAYER token is present.
+     *
+     * @param effectType EffectType name string
+     * @return {@code true} if the effect is inherently self-targeting
+     */
     private static boolean isSelfTargetingEffect(String effectType) {
         return switch (effectType) {
             case "DRAW", "ADD_DON", "SET_DON_ACTIVE", "ADD_LIFE", "SEARCH_DECK", "SHUFFLE_DECK" -> true;
@@ -469,7 +573,15 @@ public final class EffectParser {
         };
     }
 
-    /** Returns true for effects where the numeric argument is a targeting count. */
+    /**
+     * Returns {@code true} for EffectTypes where the primary numeric argument
+     * is a targeting count (stored in {@code max}) rather than a direct
+     * effect-magnitude value (stored in {@code value}).
+     *
+     * @param effectType EffectType name string
+     * @return {@code true} if the digit after the VERB should be routed to
+     *         {@code max} rather than {@code value}
+     */
     private static boolean isTargetingEffect(String effectType) {
         return switch (effectType) {
             case "REST", "KO", "RETURN_TO_HAND", "PLAY_CARD",
@@ -479,7 +591,13 @@ public final class EffectParser {
         };
     }
 
-    /** Maps a PLAYER token raw value to a TargetPlayer name string. */
+    /**
+     * Maps the first PLAYER token in the clause to a TargetPlayer enum name string.
+     *
+     * @param clause SKIP-filtered clause token list
+     * @return {@code "OPPONENT"}, {@code "SELF"}, or {@code null} if no PLAYER
+     *         token is present
+     */
     private static String extractPlayer(List<Token> clause) {
         Token t = firstOfType(clause, TokenType.PLAYER);
         if (t == null) return null;
@@ -493,8 +611,14 @@ public final class EffectParser {
     }
 
     /**
-     * Maps the first CARD_TYPE token to a normalized CardType name string.
-     * Possessives and multi-word forms are collapsed to base type names.
+     * Maps the first CARD_TYPE token to a normalised CardType name string.
+     * Possessives and multi-word forms (e.g. "leader or characters", "don!! card")
+     * are collapsed to their canonical base names.
+     *
+     * @param clause SKIP-filtered clause token list
+     * @return CardType name string ({@code "CHARACTER"}, {@code "LEADER"},
+     *         {@code "DON_CARD"}, {@code "LEADER_OR_CHARACTER"}, {@code "CARD"},
+     *         etc.), or {@code null} if no CARD_TYPE token is present
      */
     private static String extractCardType(List<Token> clause) {
         Token t = firstOfType(clause, TokenType.CARD_TYPE);
@@ -511,8 +635,14 @@ public final class EffectParser {
     }
 
     /**
-     * Returns the raw value of the first ZONE token that appears after a
-     * DESTINATION token, or the first ZONE token if no DESTINATION precedes it.
+     * Returns the raw value of the most contextually relevant ZONE token.
+     * Prefers a ZONE that follows a DESTINATION token (e.g. "from your hand",
+     * "to the owner's hand") over a leading ZONE with no preceding DESTINATION.
+     * Falls back to the first ZONE seen if no DESTINATION is present.
+     *
+     * @param clause SKIP-filtered clause token list
+     * @return raw zone string (e.g. {@code "hand"}, {@code "deck"},
+     *         {@code "don!! deck"}), or {@code null} if no ZONE token is found
      */
     private static String extractZone(List<Token> clause) {
         boolean seenDestination = false;
@@ -528,9 +658,13 @@ public final class EffectParser {
     }
 
     /**
-     * Extracts numeric cost/power filter bounds from FILTER tokens.
-     * FILTER_PATTERNS in the lexer store the numeric value in token.value().
-     * Returns int[]{maxCost, minCost, maxPower, minPower}.
+     * Extracts numeric cost/power filter bounds from FILTER tokens whose
+     * {@link Token#value()} is an {@link Integer} (populated by the lexer's
+     * FILTER_PATTERNS for clauses like "with a cost of 4 or less").
+     *
+     * @param clause SKIP-filtered clause token list
+     * @return four-element array {@code [maxCost, minCost, maxPower, minPower]};
+     *         0 indicates "not specified" for each bound
      */
     private static int[] extractFilters(List<Token> clause) {
         int maxCost = 0, minCost = 0, maxPower = 0, minPower = 0;
@@ -549,7 +683,15 @@ public final class EffectParser {
         return new int[]{maxCost, minCost, maxPower, minPower};
     }
 
-    /** Maps a DURATION token to its Duration enum name string. */
+    /**
+     * Maps the first DURATION token in the clause to a Duration enum name string.
+     * Absent duration is treated as {@code null} (engine interprets null as PERMANENT).
+     *
+     * @param clause SKIP-filtered clause token list
+     * @return {@code "THIS_BATTLE"}, {@code "THIS_TURN"},
+     *         {@code "OPPONENTS_NEXT_TURN"}, or {@code null} if no DURATION token
+     *         is present
+     */
     private static String extractDuration(List<Token> clause) {
         Token t = firstOfType(clause, TokenType.DURATION);
         if (t == null) return null;
@@ -562,7 +704,14 @@ public final class EffectParser {
 
     // ── Utility ───────────────────────────────────────────────────────────────
 
-    /** Returns the first token in {@code clause} with the given type, or null. */
+    /**
+     * Returns the first token in {@code clause} whose type equals {@code type},
+     * or {@code null} if no such token exists.
+     *
+     * @param clause token list to search
+     * @param type   the token type to look for
+     * @return matching token, or {@code null}
+     */
     private static Token firstOfType(List<Token> clause, TokenType type) {
         for (Token t : clause) {
             if (t.type() == type) return t;
