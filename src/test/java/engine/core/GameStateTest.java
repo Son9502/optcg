@@ -99,7 +99,7 @@ public class GameStateTest {
                 "", // subTypes
                 "Test Set", // setName
                 null, // rarity
-                CardType.Character, // cardType
+                CardType.CHARACTER, // cardType
                 null, // attribute
                 null, // color
                 0, // cost
@@ -117,7 +117,7 @@ public class GameStateTest {
                 "", // subTypes
                 "Test Set", // setName
                 null, // rarity
-                CardType.Event, // cardType
+                CardType.EVENT, // cardType
                 null, // attribute
                 null, // color
                 0, // cost
@@ -135,7 +135,7 @@ public class GameStateTest {
                 "", // subTypes
                 "Test Set", // setName
                 null, // rarity
-                CardType.Stage, // cardType
+                CardType.STAGE, // cardType
                 null, // attribute
                 null, // color
                 0, // cost
@@ -168,7 +168,7 @@ public class GameStateTest {
     @Test
     void testPlayCard_fieldFull_characterRejected() {
         CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
-                null, CardType.Character, null, null, 0, 1000, null, null, 0.0, null);
+                null, CardType.CHARACTER, null, null, 0, 1000, null, null, 0.0, null);
 
         // Fill the field to the 5-card limit
         for (int i = 0; i < 5; i++) {
@@ -190,7 +190,7 @@ public class GameStateTest {
     @Test
     void testPlayCard_stageOccupied_secondStageRejected() {
         CardData stageData = new CardData("S", "SET", "Stage", "", "", "Set",
-                null, CardType.Stage, null, null, 0, 0, null, null, 0.0, null);
+                null, CardType.STAGE, null, null, 0, 0, null, null, 0.0, null);
 
         Card stage1 = new Card("s1", stageData, p1);
         Card stage2 = new Card("s2", stageData, p1);
@@ -365,7 +365,7 @@ public class GameStateTest {
     @Test
     void testPlayCard_insufficientDon_cardStaysInHand() {
         CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
-                null, CardType.Character, null, null, 2, 1000, null, null, 0.0, null);
+                null, CardType.CHARACTER, null, null, 2, 1000, null, null, 0.0, null);
         Card card = new Card("c1", charData, p1);
         p1.getHand().add(card);
 
@@ -383,7 +383,7 @@ public class GameStateTest {
     @Test
     void testPlayCard_exactDon_cardPlaysAndDonsRested() {
         CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
-                null, CardType.Character, null, null, 2, 1000, null, null, 0.0, null);
+                null, CardType.CHARACTER, null, null, 2, 1000, null, null, 0.0, null);
         Card card = new Card("c1", charData, p1);
         p1.getHand().add(card);
 
@@ -404,7 +404,7 @@ public class GameStateTest {
     @Test
     void testPlayCard_surplusDon_onlyExactAmountRested() {
         CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
-                null, CardType.Character, null, null, 1, 1000, null, null, 0.0, null);
+                null, CardType.CHARACTER, null, null, 1, 1000, null, null, 0.0, null);
         Card card = new Card("c1", charData, p1);
         p1.getHand().add(card);
 
@@ -427,7 +427,7 @@ public class GameStateTest {
     @Test
     void testPlayCard_zeroCost_playsWithoutDon() {
         CardData charData = new CardData("C", "SET", "Char", "", "", "Set",
-                null, CardType.Character, null, null, 0, 1000, null, null, 0.0, null);
+                null, CardType.CHARACTER, null, null, 0, 1000, null, null, 0.0, null);
         Card card = new Card("c1", charData, p1);
         p1.getHand().add(card);
 

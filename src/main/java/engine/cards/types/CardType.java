@@ -1,9 +1,16 @@
 package engine.cards.types;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+
 public enum CardType {
-    Character,
-    Leader,
-    Event,
-    Stage,
-    Don
+    CHARACTER,
+    LEADER,
+    EVENT,
+    STAGE,
+    DON;
+
+    @JsonCreator
+    public static CardType fromValue(String value) {
+        return CardType.valueOf(value.toUpperCase());
+    }
 }

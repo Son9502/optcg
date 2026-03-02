@@ -45,7 +45,7 @@ public class GameFactory {
                                      Color color, Player owner) {
         CardData data = new CardData(
                 id, "OP-TEST", name, "Test leader for local play.", "", "Test Set",
-                null, CardType.Leader, Attribute.Strike, color,
+                null, CardType.LEADER, Attribute.Strike, color,
                 0, power, life, null, 0.0, null);
         return new Leader(id, data, owner);
     }
@@ -59,22 +59,22 @@ public class GameFactory {
         String pid = owner.getPlayerId();
 
         // Characters (42 total: 9+9+9+7+5+2+1)
-        addCardsWithKeyword(deck, owner, pid + "-C1", "Pirate Grunt",      1, 1000, CardType.Character, 9, Keyword.RUSH);
-        addCards           (deck, owner, pid + "-C2", "Pirate Lieutenant", 2, 2000, CardType.Character, 9);
-        addCardsWithKeyword(deck, owner, pid + "-C3", "Pirate Captain",    3, 3000, CardType.Character, 9, Keyword.BLOCKER);
-        addCards           (deck, owner, pid + "-C4", "Pirate Commander",  4, 4000, CardType.Character, 7);
-        addCardsWithKeyword(deck, owner, pid + "-C5", "Pirate Admiral",    5, 5000, CardType.Character, 5, Keyword.DOUBLE_ATTACK);
-        addCardsWithKeyword(deck, owner, pid + "-C6", "Yonko Officer",     6, 6000, CardType.Character, 2, Keyword.BANISH);
-        addCardsWithKeyword(deck, owner, pid + "-C7", "Yonko",             7, 7000, CardType.Character, 1, Keyword.UNBLOCKABLE);
+        addCardsWithKeyword(deck, owner, pid + "-C1", "Pirate Grunt",      1, 1000, CardType.CHARACTER, 9, Keyword.RUSH);
+        addCards           (deck, owner, pid + "-C2", "Pirate Lieutenant", 2, 2000, CardType.CHARACTER, 9);
+        addCardsWithKeyword(deck, owner, pid + "-C3", "Pirate Captain",    3, 3000, CardType.CHARACTER, 9, Keyword.BLOCKER);
+        addCards           (deck, owner, pid + "-C4", "Pirate Commander",  4, 4000, CardType.CHARACTER, 7);
+        addCardsWithKeyword(deck, owner, pid + "-C5", "Pirate Admiral",    5, 5000, CardType.CHARACTER, 5, Keyword.DOUBLE_ATTACK);
+        addCardsWithKeyword(deck, owner, pid + "-C6", "Yonko Officer",     6, 6000, CardType.CHARACTER, 2, Keyword.BANISH);
+        addCardsWithKeyword(deck, owner, pid + "-C7", "Yonko",             7, 7000, CardType.CHARACTER, 1, Keyword.UNBLOCKABLE);
 
         // Events (5 total: 2+2+1)
-        addCards(deck, owner, pid + "-E1", "Gomu Gomu no Pistol", 1, 0, CardType.Event, 2);
-        addCards(deck, owner, pid + "-E2", "Pirate's Charge",     2, 0, CardType.Event, 2);
-        addCards(deck, owner, pid + "-E3", "Conqueror's Haki",    4, 0, CardType.Event, 1);
+        addCards(deck, owner, pid + "-E1", "Gomu Gomu no Pistol", 1, 0, CardType.EVENT, 2);
+        addCards(deck, owner, pid + "-E2", "Pirate's Charge",     2, 0, CardType.EVENT, 2);
+        addCards(deck, owner, pid + "-E3", "Conqueror's Haki",    4, 0, CardType.EVENT, 1);
 
         // Stages (3 total: 2+1)
-        addCards(deck, owner, pid + "-S1", "Thousand Sunny", 1, 0, CardType.Stage, 2);
-        addCards(deck, owner, pid + "-S2", "Marineford",     3, 0, CardType.Stage, 1);
+        addCards(deck, owner, pid + "-S1", "Thousand Sunny", 1, 0, CardType.STAGE, 2);
+        addCards(deck, owner, pid + "-S2", "Marineford",     3, 0, CardType.STAGE, 1);
 
         // total: 42 + 5 + 3 = 50
         return deck;
@@ -115,7 +115,7 @@ public class GameFactory {
         CardData donData = new CardData(
                 "DON", "OP-TEST", "DON!!",
                 "Attach to your Leader or a Character card. (+1000 power during your turn)",
-                "", "Test Set", null, CardType.Don, null, null,
+                "", "Test Set", null, CardType.DON, null, null,
                 0, 0, null, null, 0.0, null);
 
         List<Card> dons = new ArrayList<>();

@@ -1,11 +1,11 @@
 package engine.cards.effects;
 
 import engine.cards.types.CardType;
-import engine.zones.Zone;
+import engine.zones.ZoneType;
 
 public record Target(
     TargetPlayer player,
-    Zone zone,
+    ZoneType zone,
     CardType cardType,
     int max,
     int maxCost,

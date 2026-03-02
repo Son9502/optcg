@@ -151,9 +151,9 @@ public class BattleSystem {
         // card effects.
         int counterValue = 0;
         CardType type = counterCard.getData().cardType();
-        if (type == null || type == CardType.Character) {
+        if (type == null || type == CardType.CHARACTER) {
             counterValue = counterCard.getData().counter();
-        } else if (type == CardType.Event) {
+        } else if (type == CardType.EVENT) {
             counterValue = gameState.playCounter(defender, counterCard, target);
         }
         gameState.trash(defender, counterCard);

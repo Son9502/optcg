@@ -50,7 +50,7 @@ public class GameFactoryTest {
     void testDeckContainsCharacterCards() {
         List<Card> deck = p1.getDeck().getCards();
         long count = deck.stream()
-                .filter(c -> c.getData() != null && c.getData().cardType() == CardType.Character)
+                .filter(c -> c.getData() != null && c.getData().cardType() == CardType.CHARACTER)
                 .count();
         assertTrue(count > 0, "Deck should contain at least one Character card");
     }
@@ -59,7 +59,7 @@ public class GameFactoryTest {
     void testDeckContainsEventCards() {
         List<Card> deck = p1.getDeck().getCards();
         long count = deck.stream()
-                .filter(c -> c.getData() != null && c.getData().cardType() == CardType.Event)
+                .filter(c -> c.getData() != null && c.getData().cardType() == CardType.EVENT)
                 .count();
         assertTrue(count > 0, "Deck should contain at least one Event card");
     }
@@ -68,7 +68,7 @@ public class GameFactoryTest {
     void testDeckContainsStageCards() {
         List<Card> deck = p1.getDeck().getCards();
         long count = deck.stream()
-                .filter(c -> c.getData() != null && c.getData().cardType() == CardType.Stage)
+                .filter(c -> c.getData() != null && c.getData().cardType() == CardType.STAGE)
                 .count();
         assertTrue(count > 0, "Deck should contain at least one Stage card");
     }
@@ -77,13 +77,13 @@ public class GameFactoryTest {
     void testDeckCardTypeBreakdown() {
         List<Card> deck = p1.getDeck().getCards();
         long characters = deck.stream()
-                .filter(c -> c.getData() != null && c.getData().cardType() == CardType.Character)
+                .filter(c -> c.getData() != null && c.getData().cardType() == CardType.CHARACTER)
                 .count();
         long events = deck.stream()
-                .filter(c -> c.getData() != null && c.getData().cardType() == CardType.Event)
+                .filter(c -> c.getData() != null && c.getData().cardType() == CardType.EVENT)
                 .count();
         long stages = deck.stream()
-                .filter(c -> c.getData() != null && c.getData().cardType() == CardType.Stage)
+                .filter(c -> c.getData() != null && c.getData().cardType() == CardType.STAGE)
                 .count();
         assertEquals(42, characters, "Deck should have 42 Character cards");
         assertEquals(5, events,      "Deck should have 5 Event cards");

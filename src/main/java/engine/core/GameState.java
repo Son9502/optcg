@@ -162,7 +162,7 @@ public class GameState {
         // Determine the target zone based on the card type
         Zone targetZone;
         switch (card.getData().cardType()) {
-            case Character:
+            case CHARACTER:
                 if (player.getField().getCards().size() >= 5) {
                     System.out.println("Field is full (5/5). " + card.getData().name() + " cannot be played.");
                     return;
@@ -172,10 +172,10 @@ public class GameState {
                     card.setSummonSick(true);
                 }
                 break;
-            case Event:
+            case EVENT:
                 targetZone = player.getTrash();
                 break;
-            case Stage:
+            case STAGE:
                 if (!player.getStage().isEmpty()) {
                     System.out.println("Stage zone is occupied. " + card.getData().name() + " cannot be played.");
                     return;

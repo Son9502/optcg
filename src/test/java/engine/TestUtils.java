@@ -54,7 +54,7 @@ public final class TestUtils {
         AbilityData abilityData = new AbilityData(
                 Trigger.KEYWORD, 0, null, false, null, keyword, List.of());
         CardData data = new CardData("TEST-KW", "TEST-SET", "TestCard", "", "", "TestSet",
-                null, CardType.Character, null, null, 0, power, 0, null, 0.0, List.of(abilityData));
+                null, CardType.CHARACTER, null, null, 0, power, 0, null, 0.0, List.of(abilityData));
         Card card = new Card("c-kw-" + power + "-" + keyword, data, owner);
         card.addAbility(new Ability(abilityData));
         return card;

@@ -527,7 +527,7 @@ public class CliController {
         CardType selectedType = selected.getData().cardType();
 
         // Handle zone capacity: prompt for replacement before playing
-        if (selectedType == CardType.Character && currentPlayer.getField().getCards().size() >= 5) {
+        if (selectedType == CardType.CHARACTER && currentPlayer.getField().getCards().size() >= 5) {
             System.out.println("Your field is full (5/5). Choose a character to send to trash, or 0 to cancel:");
             List<Card> fieldCards = new ArrayList<>(currentPlayer.getField().getCards());
             Card toTrash = selectCard(fieldCards, "Replace: ");
@@ -537,7 +537,7 @@ public class CliController {
             }
             gameState.trash(currentPlayer, toTrash);
             System.out.println(colorize(toTrash.getData().name(), toTrash.getData().color()) + " sent to trash.");
-        } else if (selectedType == CardType.Stage && !currentPlayer.getStage().isEmpty()) {
+        } else if (selectedType == CardType.STAGE && !currentPlayer.getStage().isEmpty()) {
             Card existing = currentPlayer.getStage().getCards().get(0);
             boolean confirm = inputHandler.confirm(
                     colorize(existing.getData().name(), existing.getData().color())

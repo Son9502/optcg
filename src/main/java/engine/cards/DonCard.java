@@ -9,7 +9,7 @@ public class DonCard extends Card {
 
     public DonCard(String card_id, CardData data, Player owner) {
         super(card_id, data, owner);
-        this.type = CardType.Don;
+        this.type = CardType.DON;
         this.controller = owner; // Don cards are controlled by their owner
     }
     public DonCard(Player owner){
@@ -27,7 +27,7 @@ public class DonCard extends Card {
         throw new UnsupportedOperationException("Cannot detach a Don card from another Don card.");
     }
     public boolean isDonCard() {
-        return this.type == CardType.Don;
+        return this.type == CardType.DON;
     }
     public boolean isAttached() {
         return isAttached;

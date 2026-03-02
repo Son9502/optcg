@@ -48,7 +48,7 @@ public class CardDatabaseTest {
     void testLeaderCardParsedCorrectly() {
         requireData();
         CardData data = db.getCardData("OP01-001");
-        assertEquals(CardType.Leader, data.cardType());
+        assertEquals(CardType.LEADER, data.cardType());
         assertEquals(Color.Red, data.color());
         assertEquals(5000, data.power());
         assertEquals(5, data.life());
@@ -59,7 +59,7 @@ public class CardDatabaseTest {
         requireData();
         // OP01-004 is a cost-2, 3000-power Red Character from Romance Dawn
         CardData data = db.getCardData("OP01-004");
-        assertEquals(CardType.Character, data.cardType());
+        assertEquals(CardType.CHARACTER, data.cardType());
         assertEquals(Color.Red, data.color());
         assertEquals(3000, data.power());
         assertEquals(2, data.cost());
