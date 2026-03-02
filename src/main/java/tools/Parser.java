@@ -57,6 +57,8 @@ public class Parser {
 
     // Regex: one bracket token at the start of a string
     private static final Pattern BRACKET_TOKEN = Pattern.compile("^\\[([^\\]]+)\\]");
+    // Regex: any bracket token anywhere in a string (used for embedded-trigger scanning)
+    private static final Pattern BRACKET_ANYWHERE = Pattern.compile("\\[([^\\]]+)\\]");
     // Regex: parenthetical explanation "(text)" — used to skip Blocker/Rush descriptions
     private static final Pattern PAREN_BLOCK    = Pattern.compile("^\\(([^)]+)\\)");
     // Regex: DON!! xN inside a bracket token
@@ -110,22 +112,114 @@ public class Parser {
 
     /**
      * Splits card text into individual ability blocks.
-     * Primary split: newlines.
-     * Secondary split: two or more spaces before '[' (inline multi-ability).
+     *   Pass 1 — newlines.
+     *   Pass 2 — two or more spaces before '[' (legacy inline multi-ability).
+     *   Pass 3 — any [TriggerToken] that appears after a sentence boundary mid-line
+     *             (handles single-space inline multi-ability, e.g.
+     *              "[Activate:Main]… Draw 1 card. [When Attacking]… Give -1 cost.").
      */
     private static List<String> splitIntoBlocks(String text) {
         List<String> result = new ArrayList<>();
         for (String line : text.split("\n")) {
             line = line.trim();
             if (line.isEmpty() || line.equalsIgnoreCase("null")) continue;
-            // Split inline multi-ability: "  [" separates two abilities on one line
+            // Pass 2: double-space split
             String[] inline = line.split("  +(?=\\[)");
             for (String part : inline) {
-                String trimmed = part.trim();
-                if (!trimmed.isEmpty()) result.add(trimmed);
+                part = part.trim();
+                if (!part.isEmpty()) splitOnEmbeddedTriggers(part, result);
             }
         }
         return result;
+    }
+
+    /**
+     * Scans {@code block} for any [TriggerToken], keyword, or [DON!! xN] bracket
+     * that appears AFTER a sentence boundary (period, !, ?) inside the body text.
+     * Such a bracket signals the start of a second ability on the same line.
+     * Adds one or more sub-blocks to {@code result}.
+     *
+     * Also handles the pattern "[Keyword] (explanation) [Trigger] body" — a keyword
+     * followed by its parenthetical rule reminder, then a separate trigger ability.
+     * Because the paren ends with ')' (not '.'), the afterSentence check would miss it;
+     * instead we track whether we have seen a keyword bracket in the leading cluster
+     * and split when the very next leading bracket is a trigger.
+     *
+     * Safe against card-reference brackets like "[Main]" in
+     * "Activate this card's [Main] effect." because those appear mid-sentence,
+     * not after a sentence terminator.
+     */
+    private static void splitOnEmbeddedTriggers(String block, List<String> result) {
+        Matcher m = BRACKET_ANYWHERE.matcher(block);
+        int leadingEnd = 0;             // end-index of the leading-bracket region (incl. paren)
+        boolean sawKeyword = false;     // true after a keyword bracket + its paren were consumed
+        List<Integer> splitPoints = new ArrayList<>();
+
+        while (m.find()) {
+            int start = m.start();
+
+            // Skip any bracket whose position is already inside a consumed parenthetical.
+            if (start < leadingEnd) continue;
+
+            String inner = m.group(1).trim();
+            String gap   = block.substring(leadingEnd, start);
+
+            if (gap.isBlank()) {
+                // Still inside the leading-bracket cluster.
+                if (KEYWORD_SET.contains(inner)) {
+                    // Keyword bracket: advance past it, then also skip the parenthetical
+                    // explanation that immediately follows (e.g. "[Blocker] (After ...)").
+                    leadingEnd = m.end();
+                    sawKeyword = true;
+                    // Skip optional whitespace + a single "(…)" block
+                    int pos = leadingEnd;
+                    while (pos < block.length() && Character.isWhitespace(block.charAt(pos))) pos++;
+                    if (pos < block.length() && block.charAt(pos) == '(') {
+                        int close = block.indexOf(')', pos);
+                        if (close >= 0) leadingEnd = close + 1;
+                    }
+                } else if (sawKeyword && TRIGGER_MAP.containsKey(inner)) {
+                    // A trigger bracket appearing right after a keyword+paren block
+                    // starts a new, separate ability — record the split point.
+                    splitPoints.add(start);
+                    sawKeyword = false;
+                    leadingEnd = m.end();
+                } else {
+                    // DON!! requirement, timing condition, or additional trigger header.
+                    leadingEnd = m.end();
+                }
+            } else {
+                // Body text has begun. Split here only if:
+                //   (a) the text since the last leading bracket ends with a sentence terminator, AND
+                //   (b) this bracket is a known ability-starter (trigger, keyword, or DON!! req)
+                String gapTrimmed = gap.stripTrailing();
+                boolean afterSentence = !gapTrimmed.isEmpty()
+                        && (gapTrimmed.endsWith(".")
+                        ||  gapTrimmed.endsWith("!")
+                        ||  gapTrimmed.endsWith("?")
+                        ||  gapTrimmed.endsWith(";"));
+
+                if (afterSentence && (TRIGGER_MAP.containsKey(inner)
+                        || KEYWORD_SET.contains(inner)
+                        || DON_REQ.matcher(inner).matches())) {
+                    splitPoints.add(start);
+                }
+            }
+        }
+
+        if (splitPoints.isEmpty()) {
+            result.add(block);
+            return;
+        }
+
+        int prev = 0;
+        for (int sp : splitPoints) {
+            String part = block.substring(prev, sp).trim();
+            if (!part.isEmpty()) result.add(part);
+            prev = sp;
+        }
+        String last = block.substring(prev).trim();
+        if (!last.isEmpty()) result.add(last);
     }
 
     // -------------------------------------------------------------------------
