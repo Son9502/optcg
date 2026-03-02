@@ -287,7 +287,7 @@ public class EffectTemplateCsvGenerator {
 
     // ── Effect generalisation ─────────────────────────────────────────────────
 
-    private static String generalizeEffect(String text) {
+    static String generalizeEffect(String text) {
         // 1. {TypeName} → {TYPE_REF}
         text = P_TYPE_BRACE.matcher(text).replaceAll("{TYPE_REF}");
 

@@ -43,6 +43,9 @@ public class CardCompiler {
         int totalCards = 0;
         int totalFiles = 0;
 
+        // Accumulated across all categories for the checklist; first-seen card_set_id wins.
+        Map<String, ObjectNode> allCards = new LinkedHashMap<>();
+
         for (String category : CATEGORIES) {
             File rawDir = Path.of(RAW_DIR, category).toFile();
             File compiledDir = Path.of(COMPILED_DIR, category).toFile();
@@ -80,6 +83,9 @@ public class CardCompiler {
                     }
                 }
 
+                // Accumulate into cross-category map (first-seen card_set_id wins).
+                deduped.forEach(allCards::putIfAbsent);
+
                 // Sort by card_set_id
                 List<ObjectNode> sorted = new ArrayList<>(deduped.values());
                 sorted.sort(Comparator.comparing(n -> n.path("card_set_id").asText()));
@@ -97,6 +103,8 @@ public class CardCompiler {
 
         System.out.printf("%nDone. %d files, %d total cards written to %s%n",
                 totalFiles, totalCards, COMPILED_DIR);
+
+        CardChecklistCsvGenerator.generate(allCards.values());
     }
 
     /**
