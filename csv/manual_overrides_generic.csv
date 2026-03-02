@@ -1,0 +1,9 @@
+effect_type,trigger,example,unknown_tokens
+"PASSIVE","Passive","When your opponent activates an Event, your opponent must place 1 card from their hand at the bottom of their deck.","must"
+"PASSIVE","Passive","Also treat this card's name as [Kouzuki Oden] according to the rules.","treat | name"
+"PASSIVE","Passive","The cost of playing [Celestial Dragons] type Character cards with a cost of 2 or more from your hand will be reduced by 1.","playing"
+"PASSIVE","Passive","When this Leader attacks or is attacked, you may trash any number of Event or Stage cards from your hand. This Leader gains +1000 power during this battle for every card trashed.","attacked"
+"PASSIVE","Passive","When this Character's attack deals damage to your opponent's Life, you may trash 7 cards from the top of your deck.","deals"
+"PASSIVE","Passive","Your face-up Life cards are placed at the bottom of your deck instead of being added to your hand, according to the rules.","added"
+"PASSIVE","Passive","This Leader can only be used in designated events according to the rules.","used | designated"
+"PASSIVE","Passive","This Leader is treated as a card with all card names, types, and attributes according to the rules.","treated | names | types | attributes"
