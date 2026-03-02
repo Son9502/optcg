@@ -378,8 +378,7 @@ public class EffectLexerTest {
         List<Token> tokens = EffectLexer.parseEffect(
                 "Rest up to 1 of your opponent's Characters with a cost of 5 or less. " +
                 "Then, draw 1 card.");
-        List<TokenType> t = types(tokens);
-
+                
         // First verb is "rest", second is "draw"
         List<Token> verbs = tokens.stream()
                 .filter(tk -> tk.type() == TokenType.VERB).collect(Collectors.toList());

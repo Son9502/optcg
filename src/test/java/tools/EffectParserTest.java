@@ -176,4 +176,82 @@ public class EffectParserTest {
         ParsedEffect e = one("Draw 1 card.");
         assertFalse(e.optional(), "Mandatory effect should not be optional");
     }
+
+    // ── Subject-first clauses ─────────────────────────────────────────────────
+
+    @Test
+    void parse_subjectFirst_characterGainsPowerBoost_maxAndValue() {
+        ParsedEffect e = one("1 of your Characters gains +1000 power during this turn.");
+        assertEquals("POWER_BOOST", e.effectType());
+        assertEquals(1000, e.value());
+        assertEquals(1, e.max());
+        assertEquals("SELF", e.targetPlayer());
+        assertEquals("THIS_TURN", e.duration());
+    }
+
+    @Test
+    void parse_subjectFirst_upToCharacterGainsPowerBoost_maxAndValue() {
+        ParsedEffect e = one("Up to 1 of your Leader or Characters gains +1000 power during this turn.");
+        assertEquals("POWER_BOOST", e.effectType());
+        assertEquals(1000, e.value());
+        assertEquals(1, e.max());
+        assertEquals("THIS_TURN", e.duration());
+    }
+
+    // ── Condition: IF_LIFE_COUNT ──────────────────────────────────────────────
+
+    @Test
+    void parse_ifLifeCardsOrLess_conditionIsLifeCount() {
+        List<ParsedEffect> effects = many("If you have 1 or less Life cards, draw 1 card.", 1);
+        ParsedEffect e = effects.get(0);
+        assertEquals("DRAW", e.effectType());
+        assertEquals(1, e.value());
+        assertEquals("IF_LIFE_COUNT", e.condition());
+    }
+
+    @Test
+    void parse_ifLifeCardsOrMore_conditionIsLifeCount() {
+        List<ParsedEffect> effects = many("If you have 4 or more Life cards, draw 1 card.", 1);
+        assertEquals("IF_LIFE_COUNT", effects.get(0).condition());
+    }
+
+    // ── Condition: IF_DON_COUNT ───────────────────────────────────────────────
+
+    @Test
+    void parse_ifDonCardsOnField_conditionIsDonCount() {
+        List<ParsedEffect> effects = many("If you have 8 or more DON!! cards on your field, draw 1 card.", 1);
+        assertEquals("IF_DON_COUNT", effects.get(0).condition());
+    }
+
+    // ── Condition: IF_CHARACTER_COUNT ─────────────────────────────────────────
+
+    @Test
+    void parse_ifCharacterCount_conditionIsCharacterCount() {
+        List<ParsedEffect> effects = many("If you have 2 or more Characters, draw 1 card.", 1);
+        assertEquals("IF_CHARACTER_COUNT", effects.get(0).condition());
+    }
+
+    // ── Condition: IF_LEADER_COLOR ────────────────────────────────────────────
+
+    @Test
+    void parse_ifLeaderMulticolored_conditionIsLeaderColor() {
+        List<ParsedEffect> effects = many("If your Leader is multicolored, draw 1 card.", 1);
+        assertEquals("IF_LEADER_COLOR", effects.get(0).condition());
+    }
+
+    // ── Condition: IF_HAND_COUNT ──────────────────────────────────────────────
+
+    @Test
+    void parse_ifHandCountOrLess_conditionIsHandCount() {
+        List<ParsedEffect> effects = many("If you have 2 or less cards in hand, draw 1 card.", 1);
+        assertEquals("IF_HAND_COUNT", effects.get(0).condition());
+    }
+
+    // ── Condition: IF_RESTED ──────────────────────────────────────────────────
+
+    @Test
+    void parse_ifThisCharacterIsRested_conditionIsRested() {
+        List<ParsedEffect> effects = many("If this Character is rested, draw 1 card.", 1);
+        assertEquals("IF_RESTED", effects.get(0).condition());
+    }
 }

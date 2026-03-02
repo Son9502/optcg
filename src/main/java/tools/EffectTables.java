@@ -166,7 +166,8 @@ public final class EffectTables {
     // ── CARD_TYPE ─────────────────────────────────────────────────────────────
     private static void addCardTypes(Map<String, TokenType> p) {
         // Multi-word entries must precede any single-word alternatives they share a prefix with.
-        put(p, "leader or character", TokenType.CARD_TYPE); // 3 words; compound target
+        put(p, "leader or characters", TokenType.CARD_TYPE); // 3 words; compound target (plural)
+        put(p, "leader or character",  TokenType.CARD_TYPE); // 3 words; compound target (singular)
         put(p, "don!! cards",         TokenType.CARD_TYPE); // 2 words; must precede "don!!"
         put(p, "don!! card",          TokenType.CARD_TYPE);
         put(p, "event cards",         TokenType.CARD_TYPE);
