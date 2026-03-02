@@ -148,6 +148,21 @@ public class ParserTest {
     // -------------------------------------------------------------------------
 
     @Test
+    void parse_blockerAndOnBlock_inlineSplit() {
+        // [Blocker] (explanation) [On Block] body — all on ONE LINE, single space.
+        // The paren ends with ')' not '.', so the old afterSentence guard missed this.
+        List<ParsedAbility> abilities = Parser.parse(
+                "[Blocker] (After your opponent declares an attack, you may rest this card to make it the new target of the attack.) " +
+                "[On Block] Draw 1 card if you have 2 or less cards in your hand.");
+
+        assertEquals(2, abilities.size());
+        assertEquals("Keyword",  abilities.get(0).trigger());
+        assertTrue(abilities.get(0).isKeyword());
+        assertEquals("On Block", abilities.get(1).trigger());
+        assertNotNull(abilities.get(1).effect());
+    }
+
+    @Test
     void parse_multiAbility_blockerThenOnPlay() {
         // OP01-047: [Blocker] (...)\n[On Play] You may return 1 of your Characters to the owner's hand: Play...
         List<ParsedAbility> abilities = Parser.parse(
@@ -186,6 +201,51 @@ public class ParserTest {
         assertEquals(2, abilities.size());
         assertEquals("Activate:Main", abilities.get(1).trigger());
         assertTrue(abilities.get(1).condition().contains("Once Per Turn"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Inline multi-ability — embedded trigger (single-space separator)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void parse_inlineMultiAbility_embeddedTrigger() {
+        // Bug reported by user: two abilities on one line with single space between them.
+        // "[Activate:Main][Once Per Turn] You may trash 1 card from your hand: Draw 1 card.
+        //  [When Attacking] Give up to 1 of your opponent's Characters -1 cost during this turn."
+        List<ParsedAbility> abilities = Parser.parse(
+                "[Activate:Main][Once Per Turn] You may trash 1 card from your hand: Draw 1 card. " +
+                "[When Attacking] Give up to 1 of your opponent's Characters -1 cost during this turn.");
+
+        assertEquals(2, abilities.size());
+        assertEquals("Activate:Main",  abilities.get(0).trigger());
+        assertTrue(abilities.get(0).condition().contains("Once Per Turn"));
+        assertEquals("When Attacking", abilities.get(1).trigger());
+        assertNotNull(abilities.get(1).effect());
+    }
+
+    @Test
+    void parse_embeddedTrigger_cardRefNotSplit() {
+        // "[Main] effect" bracket mid-sentence must NOT be treated as a new ability.
+        // "[Trigger] Activate this card's [Main] effect."
+        List<ParsedAbility> abilities = Parser.parse(
+                "[Trigger] Activate this card's [Main] effect.");
+
+        assertEquals(1, abilities.size());
+        assertEquals("Trigger", abilities.get(0).trigger());
+    }
+
+    @Test
+    void parse_inlineMultiAbility_threeTriggers() {
+        // Three abilities on one line, each terminated by a period.
+        List<ParsedAbility> abilities = Parser.parse(
+                "[On Play] Draw 1 card. " +
+                "[When Attacking] Give this Leader +1000 power during this turn. " +
+                "[Trigger] Play this card.");
+
+        assertEquals(3, abilities.size());
+        assertEquals("On Play",        abilities.get(0).trigger());
+        assertEquals("When Attacking", abilities.get(1).trigger());
+        assertEquals("Trigger",        abilities.get(2).trigger());
     }
 
     // -------------------------------------------------------------------------

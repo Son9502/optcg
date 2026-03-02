@@ -193,27 +193,32 @@ public class EffectLexerTest {
     // ── ZONE detection ────────────────────────────────────────────────────────
 
     @Test
-    void parseEffect_fromYourDeck_emitsZone() {
+    void parseEffect_fromYourDeck_emitsDestinationAndZone() {
+        // "from" → DESTINATION, "your" → PLAYER, "deck" → ZONE (atomic)
         List<Token> tokens = EffectLexer.parseEffect("Draw 1 card from your deck.");
+        Token dest = first(tokens, TokenType.DESTINATION);
+        assertNotNull(dest);
+        assertEquals("from", dest.raw());
         Token zone = first(tokens, TokenType.ZONE);
         assertNotNull(zone);
-        assertEquals("from your deck", zone.raw());
+        assertEquals("deck", zone.raw());
     }
 
     @Test
-    void parseEffect_fromYourDonDeck_preferredOverFromYourDeck() {
-        // "from your don!! deck" must match before "from your deck"
+    void parseEffect_donDeckZone_preferredOverDonAlone() {
+        // "don!! deck" (2-word ZONE) must match before "don!!" (CARD_TYPE)
         List<Token> tokens = EffectLexer.parseEffect("Add 1 DON!! card from your DON!! deck.");
         Token zone = first(tokens, TokenType.ZONE);
         assertNotNull(zone);
-        assertEquals("from your don!! deck", zone.raw());
+        assertEquals("don!! deck", zone.raw());
     }
 
     @Test
-    void parseEffect_asActive_emitsZone() {
+    void parseEffect_setAsActive_emitsActiveFilter() {
+        // "as active" is no longer a compound ZONE; "as" → SKIP, "active" → FILTER
         List<Token> tokens = EffectLexer.parseEffect("Add 1 DON!! card from your DON!! deck and set it as active.");
-        List<Token> zones = tokens.stream().filter(t -> t.type() == TokenType.ZONE).collect(Collectors.toList());
-        assertTrue(zones.stream().anyMatch(z -> "as active".equals(z.raw())));
+        assertTrue(tokens.stream().anyMatch(t ->
+                t.type() == TokenType.FILTER && "active".equals(t.raw())));
     }
 
     // ── DURATION detection ────────────────────────────────────────────────────
@@ -312,9 +317,12 @@ public class EffectLexerTest {
         assertEquals(2, t.stream().filter(tt -> tt == TokenType.QUANTITY).count());
         // 2-word phrase preferred over single "don!!"
         assertEquals("don!! card", first(tokens, TokenType.CARD_TYPE).raw());
-        // "from your don!! deck" + "as active"
-        assertEquals(2, t.stream().filter(tt -> tt == TokenType.ZONE).count());
-        assertTrue(t.contains(TokenType.CONNECTOR)); // "and"
+        // "don!! deck" is the only ZONE; "as active" → SKIP("as") + FILTER("active")
+        assertEquals(1, t.stream().filter(tt -> tt == TokenType.ZONE).count());
+        assertEquals("don!! deck", first(tokens, TokenType.ZONE).raw());
+        assertTrue(t.contains(TokenType.DESTINATION)); // "from"
+        assertTrue(t.contains(TokenType.FILTER));      // "active"
+        assertTrue(t.contains(TokenType.CONNECTOR));   // "and"
     }
 
     @Test
@@ -356,9 +364,10 @@ public class EffectLexerTest {
         // Two bare-digit QUANTITYs: 2 and 1
         assertEquals(2, t.stream().filter(tt -> tt == TokenType.QUANTITY).count());
         assertTrue(t.contains(TokenType.CONNECTOR)); // "and"
+        // "from" → DESTINATION, "your" → PLAYER, "hand" → ZONE (atomic)
         Token zone = first(tokens, TokenType.ZONE);
         assertNotNull(zone);
-        assertEquals("from your hand", zone.raw());
+        assertEquals("hand", zone.raw());
     }
 
     @Test
@@ -404,9 +413,11 @@ public class EffectLexerTest {
         assertEquals("add",  verbs.get(0).raw());
         assertEquals("rest", verbs.get(1).raw());
 
-        assertEquals("don!! card",          first(tokens, TokenType.CARD_TYPE).raw());
-        assertEquals("from your don!! deck", first(tokens, TokenType.ZONE).raw());
-        assertTrue(t.contains(TokenType.CONNECTOR)); // "and"
+        assertEquals("don!! card", first(tokens, TokenType.CARD_TYPE).raw());
+        // "from" → DESTINATION, "your" → PLAYER, "don!! deck" → ZONE (atomic)
+        assertEquals("don!! deck", first(tokens, TokenType.ZONE).raw());
+        assertTrue(t.contains(TokenType.DESTINATION)); // "from"
+        assertTrue(t.contains(TokenType.CONNECTOR));   // "and"
     }
 
     @Test

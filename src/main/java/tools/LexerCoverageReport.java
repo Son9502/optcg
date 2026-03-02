@@ -14,14 +14,16 @@ import java.util.stream.Collectors;
  *   - total rows, fully-tokenized count, needs-manual count, coverage %
  *   - top 15 most-frequent unknown tokens per file
  *
- * Output files (written to project root):
+ * Output files (written to csv/):
  *   - manual_overrides_generic.csv — generic rows that had unknown tokens
  *   - manual_overrides_unique.csv  — unique rows that had unknown tokens
  *
- * Run from the project root (where the CSV files live), e.g.:
+ * Run from the project root, e.g.:
  *   mvn exec:java -Dexec.mainClass="tools.LexerCoverageReport"
  */
 public class LexerCoverageReport {
+
+    private static final String CSV_DIR = "csv/";
 
     public static void main(String[] args) throws IOException {
         System.out.println("=== EffectLexer Coverage Report ===\n");
@@ -33,11 +35,11 @@ public class LexerCoverageReport {
         Map<String, Integer> genericFreq = new LinkedHashMap<>();
         Map<String, Integer> uniqueFreq  = new LinkedHashMap<>();
 
-        scan("GENERIC", Path.of("effect_templates_generic.csv"), genericManual, genericFreq);
-        scan("UNIQUE",  Path.of("effect_templates_unique.csv"),  uniqueManual,  uniqueFreq);
+        scan("GENERIC", Path.of(CSV_DIR + "effect_templates_generic.csv"), genericManual, genericFreq);
+        scan("UNIQUE",  Path.of(CSV_DIR + "effect_templates_unique.csv"),  uniqueManual,  uniqueFreq);
 
-        writeManualOverrides("manual_overrides_generic.csv", genericManual);
-        writeManualOverrides("manual_overrides_unique.csv",  uniqueManual);
+        writeManualOverrides(CSV_DIR + "manual_overrides_generic.csv", genericManual);
+        writeManualOverrides(CSV_DIR + "manual_overrides_unique.csv",  uniqueManual);
 
         System.out.println("\nTop unknown tokens [GENERIC]:");
         printTopUnknowns(genericFreq, 15);
@@ -45,9 +47,9 @@ public class LexerCoverageReport {
         System.out.println("\nTop unknown tokens [UNIQUE]:");
         printTopUnknowns(uniqueFreq, 15);
 
-        System.out.println("\nManual override files written to project root:");
-        System.out.printf("  manual_overrides_generic.csv  (%d rows)%n", genericManual.size());
-        System.out.printf("  manual_overrides_unique.csv   (%d rows)%n", uniqueManual.size());
+        System.out.println("\nManual override files written to csv/:");
+        System.out.printf("  csv/manual_overrides_generic.csv  (%d rows)%n", genericManual.size());
+        System.out.printf("  csv/manual_overrides_unique.csv   (%d rows)%n", uniqueManual.size());
     }
 
     // ── Core scan ─────────────────────────────────────────────────────────────
