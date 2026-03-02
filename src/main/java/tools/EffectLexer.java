@@ -116,21 +116,24 @@ public class EffectLexer {
             if (words[position].startsWith("\"")) {
                 int end = position;
                 // Scan forward until we hit the word that closes the quote.
-                while (end < words.length && !words[end].endsWith("\"")) end++;
-                // Guard against an unclosed quote (edge case — should not happen in valid card text).
-                if (end >= words.length) end = words.length - 1;
-                String raw   = joinWords(words, position, end + 1);
+                while (end < words.length && !words[end].endsWith("\""))
+                    end++;
+                // Guard against an unclosed quote (edge case — should not happen in valid card
+                // text).
+                if (end >= words.length)
+                    end = words.length - 1;
+                String raw = joinWords(words, position, end + 1);
                 String inner = raw.replaceAll("^\"|\"$", ""); // strip surrounding quotes
                 tokens.add(new Token(TokenType.FILTER, raw, inner));
                 position = end + 1;
                 continue;
             }
 
-            // Check for numbers (e.g., "-3, +1000, -2000, 1, 2, etc") 
+            // Check for numbers (e.g., "-3, +1000, -2000, 1, 2, etc")
             if (words[position].matches("[+-]?\\d+")) { // Check for negative numbers as well (e.g., "-3 cost")
                 int val = Integer.parseInt(words[position]);
                 tokens.add(new Token(TokenType.QUANTITY, words[position], val));
-                //System.out.println("Processed quantity: " + words[position]);
+                // System.out.println("Processed quantity: " + words[position]);
                 position++;
                 continue;
             }
@@ -147,7 +150,8 @@ public class EffectLexer {
                     tokens.add(new Token(TokenType.FILTER, matcher.group(), value));
                     position += matcher.group().split(" ").length; // Advance position by the number of words in the
                                                                    // matched filter
-                    //System.out.println("Processed filter: " + matcher.group() + " with value: " + value);
+                    // System.out.println("Processed filter: " + matcher.group() + " with value: " +
+                    // value);
                     matched = true;
                     break;
                 }
@@ -162,7 +166,8 @@ public class EffectLexer {
 
                         Object value = null;
                         tokens.add(new Token(PHRASES_TABLE.get(phraseStr), phraseStr, value));
-                        //System.out.println("Processed phrase: " + phraseStr + " with value: " + value);
+                        // System.out.println("Processed phrase: " + phraseStr + " with value: " +
+                        // value);
                         position += phrase.length;
                         matched = true;
                         break;
@@ -299,43 +304,4 @@ public class EffectLexer {
         }
         return sb.toString();
     }
-
-    public static void main(String[] args) {
-        String effectTextOne = "Add 5 DON!! card from your DON!! deck and set it as active.";
-        String effectTextThree = "If the number of DON!! cards on your field is at least 2 less than the number on your opponent's field, give this card in your hand -3 cost.";
-        String effectTextFour = "Add up to 1 DON!! card from your DON!! deck and set it as active. Then, if your opponent has a Character with 6000 power or more, add up to 1 DON!! card from your DON!! deck and set it as active.";
-        String effectTextFive = "DON!! -1 (You may return the specified number of DON!! cards from your field to your DON!! deck.): Draw 2 cards and trash 1 card from your hand.";
-        String effectTextSix = "If your Leader is multicolored, draw 1 card. Then, return up to 1 Character with a cost of 5 or less to the owner's hand. [Trigger] If your Leader is multicolored, draw 2 cards.";
-        
-        List<Token> tokensOne = parseEffect(effectTextOne);
-        System.out.println(effectTextOne);
-        for (Token token : tokensOne) {
-            System.out.println(token);
-        }
-
-        List<Token> tokensThree = parseEffect(effectTextThree);
-        System.out.println(effectTextThree);
-        for (Token token : tokensThree) {
-            System.out.println(token);
-        }
-
-        List<Token> tokensFour = parseEffect(effectTextFour);
-        System.out.println(effectTextFour);
-        for (Token token : tokensFour) {
-            System.out.println(token);
-        }
-
-        List<Token> tokensFive = parseEffect(effectTextFive);
-        System.out.println(effectTextFive);
-        for (Token token : tokensFive) {
-            System.out.println(token);
-        }
-
-        List<Token> tokensSix = parseEffect(effectTextSix);
-        System.out.println(effectTextSix);
-        for (Token token : tokensSix) {
-            System.out.println(token);
-        }
-    }
-
 }
