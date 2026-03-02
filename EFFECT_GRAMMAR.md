@@ -25,9 +25,17 @@ Nine token types. Every word or phrase in a card effect body belongs to exactly 
 The first meaningful word of a clause. Determines `EffectType`.
 ```
 Draw | Rest | K.O. | Trash | Return | Play | Add | Give | Set | Place |
-Look | Reveal | Negate | Choose one | Gain | Gains | Activate | cannot
+Look | Reveal | Negate | Choose one | Gain | Gains | Activate | cannot |
+Become | Becomes | Choose | Select | Shuffle | Deal | Swap | Take | Win |
+Change | Ko'd
 ```
-> `cannot` is a special verb that begins a **prevention clause** (see below).
+3rd-person and past-tense inflections are also in the phrase table:
+`draws`, `reveals`, `adds`, `plays`, `chooses`, `shuffles`, `places`, `returns`,
+`attacks`, `trashes`, `activates`, `battles`, `played`, `activated`, `trashed`,
+`negated`, `placed`, `reduced`.
+
+> `cannot` opens a **prevention clause** (see below).
+> `ko'd` is the normalised form of `K.O.'d` after lexer normalisations are applied.
 
 ---
 
@@ -35,9 +43,19 @@ Look | Reveal | Negate | Choose one | Gain | Gains | Activate | cannot
 How many cards are affected. `up to N` and `N or less` are **synonymous** in all contexts —
 both parse to `max=N` (player may choose any count from 0 to N).
 ```
-N               — exactly N
+N               — exactly N (bare digit caught by number check)
 up to N         — player chooses 0..N  (= N or less)
 all             — every matching card
+each            — one instance per matching card
+every           — "for every N characters" (scaling)
+more            — comparative upper bound
+less            — comparative lower bound
+number          — "the number of DON!! cards…"
+total           — "a total of N", "N or more in total"
+no / none       — zero matching cards
+one             — word form of 1; "one of your characters"
+additional      — "an additional +N power"
+extra           — "an extra card", "N extra power"
 ```
 
 ---
@@ -78,10 +96,14 @@ Filters are AND-ed together (all must be true).
 | Power (min) | `with [POWER] power or more` | |
 | Base cost/power | `with a base cost of N or less` | `base` = before any boost/reduce modifiers |
 | State | `rested` / `active` | Card's current orientation |
-| Keyword | `[KEYWORD]` / `with [KEYWORD]` | Card must have that keyword |
-| Type | `{Type name} type` / `"Type name" type` | Sub-type match |
-| Color | `red/green/blue/purple/yellow/black` | Precedes CARD_TYPE or TYPE filter |
-| Attribute | `(Slash) attribute` / `(Strike) attribute` | Card's printed attribute |
+| Placement | `face-up` / `face-down` | Orientation when entering a zone |
+| Keyword (bracket) | `[KEYWORD]` / `with [KEYWORD]` | Card must have that keyword; emitted as FILTER with String value |
+| Keyword (word) | `blocker` / `double` / `banish` / `rush` | Lowercase form in "gains the Blocker keyword" constructions |
+| Type (brace) | `{Type name} type` | Sub-type match using curly-brace syntax |
+| Type (quote) | `"Type name" type` | Sub-type match using double-quote syntax; lexer joins multi-word quoted spans |
+| Attribute (paren) | `(Slash) attribute` / `(Strike) attribute` | Card's printed attribute |
+| Color | `red/green/blue/purple/yellow/black` / `multicolored` | Precedes CARD_TYPE or TYPE filter |
+| Card state | `selected` / `revealed` / `chosen` | Result of a previous look/search clause |
 | Identity | `other than [CARD_REF]` | Excludes a specific named card |
 | Name | `named [CARD_REF]` | Only that specific named card |
 
@@ -116,12 +138,18 @@ rested                   — placement state for DON!! or Character (enters rest
 
 ### DURATION
 How long the effect lasts. If omitted, the effect is permanent (until the card leaves the field).
+Maps to the `Duration` enum: `THIS_TURN`, `THIS_BATTLE`, `OPPONENTS_NEXT_TURN`, `PERMANENT`.
+
 ```
-during this turn
-during this battle
-until end of this turn
-until the end of your opponent's next turn
-until the end of your opponent's next End Phase
+during this turn                                  → THIS_TURN
+until end of this turn                            → THIS_TURN
+until the end of this turn                        → THIS_TURN
+during this battle                                → THIS_BATTLE
+until the start of your next turn                 → OPPONENTS_NEXT_TURN  (most common "next turn" form)
+until the end of your next turn                   → OPPONENTS_NEXT_TURN
+until the end of your opponent's next turn        → OPPONENTS_NEXT_TURN
+until the end of your opponent's next End Phase   → OPPONENTS_NEXT_TURN
+(omitted)                                         → PERMANENT
 ```
 
 ---
@@ -175,6 +203,23 @@ rest this Character
 trash N card(s) from your hand
 return N DON!! card(s) to your DON!! deck
 ```
+
+---
+
+## Lexer Input Normalisations
+
+Applied to `input` before the word-array is built, in this order:
+
+| Source form | Normalised to | Reason |
+|---|---|---|
+| `K.O.` (any case) | `ko` | Periods shred into extra tokens under the split regex |
+| `K.O.'d` (any case) | `ko'd` | Same; `ko'd` is then a VERB table entry |
+| En-dash `–` (U+2013) | `-` (hyphen-minus) | Card text uses en-dash for negative costs; number regex only matches `-` |
+| Em-dash `—` (U+2014) | `-` | Safety normalisation for em-dash variants |
+| `"TypeName"` quoted span | Joined as single FILTER token | Split regex does not break on `"`, so `"Straw Hat Pirates"` becomes `["\"straw", "hat", "pirates\""]`; lexer detects leading `"` and scans forward to the closing `"` |
+
+Disclaimer and errata boilerplate (`Disclaimer:`, `DISCLAIMER:`, `"This card has been officially errata'd."`)
+is stripped from `card_text` before `Parser.parse()` is called in `EffectTemplateCsvGenerator`.
 
 ---
 

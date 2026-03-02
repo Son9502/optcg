@@ -26,7 +26,7 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 - `CardData` record carries a `subTypes` field (normalized from API `sub_types` strings)
 - `CardDatabase` secondary index: `getByName()` (O(1)), `getBySubtype()` (O(n)), `getAllCards()`
 - `CsvGenerator`: offline tool that rebuilds `card_names_subtypes.csv` from compiled (or raw) JSON with name normalization and deduplication
-- 149 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty)
+- 153 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty)
 
 ---
 
@@ -144,7 +144,7 @@ mvn exec:java -Dexec.mainClass="tools.CsvGenerator"
 mvn test
 ```
 
-**Current test suite: 149 tests, 0 failures, 0 errors.**
+**Current test suite: 153 tests, 0 failures, 0 errors.**
 10 `CardDatabaseTest` cases are data-dependent and skip automatically (via `assumeTrue`) when `raw/data/` is empty — run `CardScraper` first to populate.
 
 | Test class | Tests | Coverage area |
@@ -158,7 +158,7 @@ mvn test
 | `ZoneTest` | 6 | Add, remove, draw top, move card, shuffle |
 | `PlayerTest` | 2 | Zone initialization, leader assignment |
 | `CardDatabaseTest` | 16 (10 skipped without data) | Card loading, deserialization, `getByName`, `getBySubtype`, `getAllCards`, `CardFactory` |
-| `ParserTest` | 17 | Ability parsing: triggers, conditions, costs, keywords, multi-ability blocks |
+| `ParserTest` | 21 | Ability parsing: triggers, conditions, costs, keywords, multi-ability blocks, Blocker+On Block inline split |
 | `GameFactoryTest` | 9 | Pre-built test deck construction, card type breakdown, ownership, field/stage/don counts |
 | `TokenTest` | 8 | `Token` record field access, value types (int/String/null), record equality, toString |
 | `EffectLexerTest` | 34 | All 9 token types, bracket detection, regex filters, K.O. normalisation, phrase-length preference, 6 verbatim card text examples from CSV |
@@ -183,7 +183,7 @@ src/
 │   │   │   │   ├── DonCard.java
 │   │   │   │   ├── Leader.java
 │   │   │   │   ├── abilities/                   ← Trigger, Condition, Cost, AbilityData, Ability, AbilityFactory
-│   │   │   │   ├── effects/                     ← EffectData, EffectType, EffectFactory (stubs)
+│   │   │   │   ├── effects/                     ← EffectData, EffectType, Duration, EffectFactory (stub)
 │   │   │   │   ├── keywords/                    ← Keyword enum (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, Rush: Character)
 │   │   │   │   └── types/                       ← CardType, Color, Attribute, Rarity enums
 │   │   │   ├── core/
@@ -221,7 +221,11 @@ src/
 │   │       ├── TokenType.java                   ← 9-value enum (VERB, QUANTITY, PLAYER, CARD_TYPE, FILTER, ZONE, DURATION, CONDITION, CONNECTOR)
 │   │       ├── Token.java                       ← Record: (TokenType type, String raw, Object value)
 │   │       ├── EffectTables.java                ← All phrase→TokenType entries, sorted lists, regex filter Patterns (shared with future EffectParser)
-│   │       └── EffectLexer.java                 ← Word-level scanner; produces List<Token> from raw effect text
+│   │       ├── EffectLexer.java                 ← Word-level scanner; produces List<Token> from raw effect text
+│   │       ├── ParsedEffect.java                ← Intermediate structured effect record (tools pipeline only)
+│   │       ├── EffectTemplateCsvGenerator.java  ← Reads compiled JSON → Parser → generalise → split compound effects → write generic/unique CSV pair
+│   │       ├── LexerCoverageReport.java         ← Runs EffectLexer on all CSV templates; reports fully-tokenised % and top unknown tokens
+│   │       └── Report.java                      ← Shared CSV row record used by LexerCoverageReport
 │   └── resources/
 │       ├── compiled/data/                       ← Engine-ready JSON (CardDatabase reads this)
 │       │   ├── sets/                            ← One file per card set (e.g. OP01.json)
@@ -292,8 +296,13 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
   - **Banish**: target life card goes to trash instead of opponent's hand
   - **Unblockable**: opponent's blocker window is skipped entirely
 - CLI defend window: sequential blocker → counter loop → single `BattleSystem.resolve()`
-- Card text corpus analysed (2,836 cards, 3,326 ability blocks) → `effect_templates_generic.csv` (1,454 parseable templates) + `effect_templates_unique.csv` (434 complex patterns); `EffectType` enum redesigned to 23 types; `EFFECT_GRAMMAR.md` written
-- `EffectLexer` skeleton: word-level scanner with longest-phrase-first matching, bracket detection for `[Keyword]`/`{Type}`/`(Attribute)` filters, 7 regex patterns for numeric cost/power filters, K.O. normalisation; backed by `EffectTables` (shared phrase→TokenType map used by future `EffectParser`)
+- Card text corpus analysed (3,115 cards) → `effect_templates_generic.csv` + `effect_templates_unique.csv`; `EffectType` enum redesigned to 23 types; `EFFECT_GRAMMAR.md` written
+- `EffectLexer` word-level scanner backed by `EffectTables` (shared phrase→TokenType map): longest-phrase-first matching; bracket detection for `[Keyword]`/`{Type}`/`(Attribute)`/`"TypeName"` filters; 7 regex patterns for numeric cost/power filters; normalisations for K.O., en-dash, and `"TypeName"` quoted spans
+- `EffectTemplateCsvGenerator`: reads compiled JSON, re-runs `Parser.parse()`, generalises effect text, splits compound effects on `•`/`. Then, `/`If X, Y.`, strips modal trigger labels, deduplicates on `(simplified, trigger)`, writes generic/unique CSV pair
+- `LexerCoverageReport`: runs `EffectLexer` on all CSV templates, reports fully-tokenised vs. UNKNOWN, lists top unknown tokens by frequency — current coverage **99.0% generic / 96.0% unique**
+- `Parser.splitOnEmbeddedTriggers`: fixed `[Blocker] (explanation) [On Block] effect` being parsed as one ability; added `sawKeyword` tracking + parenthetical skip so the embedded trigger fires the split
+- `Duration` enum added (`THIS_BATTLE`, `THIS_TURN`, `OPPONENTS_NEXT_TURN`, `PERMANENT`); `EffectData.duration` promoted from `int` to `Duration`
+- `ParsedEffect` record: intermediate structured representation of a single parsed effect clause (tools pipeline; not part of game runtime)
 
 **Remaining:**
 - **Trigger**: activates when a life card is revealed, at no DON cost
