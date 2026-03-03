@@ -1,5 +1,258 @@
 package engine.cards.effects;
 
+import engine.cards.Card;
+import engine.cards.DonCard;
+import engine.cards.abilities.Condition;
+import engine.cards.types.CardType;
+import engine.core.GameState;
+import engine.player.Player;
+import engine.zones.Zone;
+import engine.zones.ZoneType;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+
 public class EffectFactory {
-    
+
+    /**
+     * Build a runtime {@link Effect} from compiled {@link EffectData}.
+     *
+     * @param effectData the compiled effect descriptor
+     * @param sourceCard the card that carries this effect — used for THIS_CARD
+     *                   targeting and IF_RESTED condition checks; may be null for
+     *                   event cards whose source has already moved to trash
+     * @return an Effect lambda ready to be applied to a GameState
+     */
+    public static Effect build(EffectData effectData, Card sourceCard) {
+        return (gameState, source) -> {
+            if (effectData == null || effectData.type() == null) return;
+            if (!evaluateCondition(effectData.condition(), gameState, source, sourceCard)) return;
+
+            switch (effectData.type()) {
+                case DRAW         -> gameState.draw(source, Math.max(effectData.value(), 1));
+                case ADD_DON      -> gameState.drawDon(source, Math.max(effectData.value(), 1));
+                case SET_DON_ACTIVE -> applySetDonActive(source, effectData.value());
+                case REST         -> resolveTargets(effectData, gameState, source, sourceCard)
+                                         .forEach(Card::rest);
+                case UNREST       -> resolveTargets(effectData, gameState, source, sourceCard)
+                                         .forEach(Card::activate);
+                case KO           -> resolveTargets(effectData, gameState, source, sourceCard)
+                                         .forEach(c -> gameState.trash(c.getOwner(), c));
+                case TRASH        -> resolveTargets(effectData, gameState, source, sourceCard)
+                                         .forEach(c -> gameState.trash(c.getOwner(), c));
+                case RETURN_TO_HAND -> resolveTargets(effectData, gameState, source, sourceCard)
+                                         .forEach(c -> gameState.moveCard(c, c.getOwner().getHand()));
+                case POWER_BOOST  -> resolveTargets(effectData, gameState, source, sourceCard)
+                                         .forEach(c -> c.addPowerBoost(effectData.value()));
+                case POWER_REDUCE -> resolveTargets(effectData, gameState, source, sourceCard)
+                                         .forEach(c -> c.addPowerBoost(-effectData.value()));
+                case ATTACH_DON   -> applyAttachDon(effectData, gameState, source, sourceCard);
+                case ADD_LIFE     -> applyAddLife(effectData, gameState, source);
+
+                // Phase-2 stubs — no-op until implemented
+                case COST_MODIFY, GRANT_KEYWORD,
+                     PREVENT_ATTACK, PREVENT_BLOCK, PREVENT_KO, NEGATE,
+                     MODAL, SEARCH_DECK, SHUFFLE_DECK,
+                     MOVE_TO_BOTTOM_DECK, MOVE_TO_TOP_DECK, PLAY_CARD -> {}
+            }
+        };
+    }
+
+    // ── Condition gate ──────────────────────────────────────────────────────────
+
+    private static boolean evaluateCondition(Condition condition, GameState gs,
+                                              Player source, Card sourceCard) {
+        if (condition == null) return true;
+        return switch (condition) {
+            // Enforced externally by TurnManager / Ability.canActivate()
+            case YOUR_TURN, OPPONENTS_TURN, ONCE_PER_TURN -> true;
+            // Permissive stub: caller's chain guarantees the prior effect resolved
+            case IF_YOU_DO -> true;
+            // Precise: check whether the source card is currently rested
+            case IF_RESTED -> sourceCard != null && sourceCard.isRested();
+            // Threshold stubs — no conditionValue in EffectData yet (Phase 2)
+            case IF_LIFE_COUNT, IF_HAND_COUNT, IF_DON_COUNT, IF_CHARACTER_COUNT -> true;
+            // Type / colour stubs — require Leader subtype metadata (Phase 2)
+            case IF_LEADER_TYPE, IF_LEADER_COLOR -> true;
+        };
+    }
+
+    // ── Target resolution ───────────────────────────────────────────────────────
+
+    /**
+     * Returns the list of cards this effect will act on.
+     * Selection is automatic (first N matching cards). Interactive player choices
+     * are handled by CliController, not here.
+     */
+    private static List<Card> resolveTargets(EffectData e, GameState gs,
+                                              Player source, Card sourceCard) {
+        Target t = e.target();
+        if (t == null) return Collections.emptyList();
+
+        // THIS_CARD — the card that owns this ability
+        if (t.player() == Target.TargetPlayer.THIS_CARD) {
+            return (sourceCard != null) ? List.of(sourceCard) : Collections.emptyList();
+        }
+
+        Player opponent = getOpponent(gs, source);
+        List<Card> pool = new ArrayList<>();
+
+        switch (t.player()) {
+            case SELF     -> addZoneCards(pool, source,   t.zone());
+            case OPPONENT -> addZoneCards(pool, opponent, t.zone());
+            case ALL      -> {
+                addZoneCards(pool, source,   t.zone());
+                addZoneCards(pool, opponent, t.zone());
+            }
+            default -> {}
+        }
+
+        // LEADER_OR_CHARACTER: also include the relevant Leader(s) since Leaders
+        // live outside the CHARACTER zone and are not returned by addZoneCards.
+        if (t.cardType() == CardType.LEADER_OR_CHARACTER) {
+            if (t.player() == Target.TargetPlayer.SELF || t.player() == Target.TargetPlayer.ALL) {
+                Card leader = source.getLeader();
+                if (leader != null) pool.add(leader);
+            }
+            if (t.player() == Target.TargetPlayer.OPPONENT || t.player() == Target.TargetPlayer.ALL) {
+                Card leader = opponent.getLeader();
+                if (leader != null) pool.add(leader);
+            }
+        }
+
+        List<Card> filtered = pool.stream()
+                .filter(c -> matchesFilters(c, t))
+                .collect(Collectors.toList());
+
+        // Determine how many to act on: max takes priority, else value; 0 = all
+        int limit = t.max() > 0 ? t.max() : (e.value() > 0 ? e.value() : filtered.size());
+        return filtered.subList(0, Math.min(limit, filtered.size()));
+    }
+
+    private static void addZoneCards(List<Card> pool, Player p, ZoneType zone) {
+        if (zone == null || p == null) return;
+        Zone z = getZone(p, zone);
+        if (z != null) pool.addAll(z.getCards());
+    }
+
+    private static Zone getZone(Player p, ZoneType zone) {
+        if (zone == null) return null;
+        return switch (zone) {
+            case HAND      -> p.getHand();
+            case CHARACTER -> p.getField();
+            case TRASH     -> p.getTrash();
+            case LIFE      -> p.getLife();
+            case COST      -> p.getCost();
+            case STAGE     -> p.getStage();
+            case DECK      -> p.getDeck();
+            case DON_DECK  -> p.getDonDeck();
+        };
+    }
+
+    private static boolean matchesFilters(Card card, Target t) {
+        // Card-type filter
+        if (t.cardType() != null) {
+            if (t.cardType() == CardType.LEADER_OR_CHARACTER) {
+                // Accept any card whose type is CHARACTER or LEADER; reject DON!! and others.
+                if (card instanceof DonCard) return false;
+                CardType ct = (card.getData() == null) ? null : card.getData().cardType();
+                if (ct != CardType.CHARACTER && ct != CardType.LEADER) return false;
+            } else if (card instanceof DonCard) {
+                if (t.cardType() != CardType.DON) return false;
+            } else {
+                CardType ct = (card.getData() == null) ? null : card.getData().cardType();
+                if (t.cardType() != ct) return false;
+            }
+        }
+        // Cost bounds (0 = unset)
+        if (t.maxCost() > 0 || t.minCost() > 0) {
+            Integer cost = (card.getData() == null) ? null : card.getData().cost();
+            if (cost == null) return false;
+            if (t.maxCost() > 0 && cost > t.maxCost()) return false;
+            if (t.minCost() > 0 && cost < t.minCost()) return false;
+        }
+        // Power bounds (0 = unset)
+        if (t.maxPower() > 0 || t.minPower() > 0) {
+            int power = card.getTotalPower();
+            if (t.maxPower() > 0 && power > t.maxPower()) return false;
+            if (t.minPower() > 0 && power < t.minPower()) return false;
+        }
+        return true;
+    }
+
+    private static Player getOpponent(GameState gs, Player source) {
+        return (gs.getPlayer1() == source) ? gs.getPlayer2() : gs.getPlayer1();
+    }
+
+    // ── Compound-action helpers ─────────────────────────────────────────────────
+
+    /** Activate up to {@code value} rested, unattached DON!! in the cost zone. */
+    private static void applySetDonActive(Player source, int value) {
+        int limit = (value <= 0) ? Integer.MAX_VALUE : value;
+        int count = 0;
+        for (Card c : source.getCost().getCards()) {
+            if (count >= limit) break;
+            if (c instanceof DonCard don && don.isRested() && !don.isAttached()) {
+                don.activate();
+                count++;
+            }
+        }
+    }
+
+    /**
+     * Give N DON!! cards from the source's cost zone to the resolved recipient
+     * (Leader or Character on field).  The DON state filter (RESTED_DON /
+     * ACTIVE_DON) comes from {@code e.target().cardType()}; {@code null} means
+     * no state check (any unattached DON qualifies — backward-compatible path).
+     */
+    private static void applyAttachDon(EffectData e, GameState gs,
+                                        Player source, Card sourceCard) {
+        Target t = e.target();
+        int count = (t != null && t.max() > 0) ? t.max() : Math.max(e.value(), 1);
+
+        // Resolve the recipient card.
+        Card recipient;
+        if (t != null && t.player() == Target.TargetPlayer.THIS_CARD) {
+            recipient = sourceCard;
+        } else {
+            Player tp = (t != null && t.player() == Target.TargetPlayer.OPPONENT)
+                    ? getOpponent(gs, source) : source;
+            recipient = tp.getLeader();
+            if (recipient == null && !tp.getField().getCards().isEmpty())
+                recipient = tp.getField().getCards().get(0);
+            if (recipient == null) recipient = sourceCard;
+        }
+        if (recipient == null) return;
+
+        // DON state filter: null → no state check; RESTED_DON → rested; ACTIVE_DON → active.
+        CardType donFilter = (t != null) ? t.cardType() : null;
+        boolean checkState = donFilter != null;
+        boolean wantActive = donFilter == CardType.ACTIVE_DON;
+
+        int attached = 0;
+        for (Card c : new ArrayList<>(source.getCost().getCards())) {
+            if (attached >= count) break;
+            if (c instanceof DonCard don && !don.isAttached()) {
+                boolean stateOk = !checkState || (wantActive ? !don.isRested() : don.isRested());
+                if (stateOk) {
+                    gs.attachDon(recipient, don);
+                    attached++;
+                }
+            }
+        }
+    }
+
+    /**
+     * Draw the top N cards from the player's deck and place them in the Life area.
+     */
+    private static void applyAddLife(EffectData e, GameState gs, Player source) {
+        int count = Math.max(e.value(), 1);
+        for (int i = 0; i < count; i++) {
+            if (source.getDeck().getCards().isEmpty()) break;
+            Card card = source.getDeck().draw();
+            if (card != null) gs.addLife(source, card);
+        }
+    }
 }
