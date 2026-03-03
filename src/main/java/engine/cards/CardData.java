@@ -24,12 +24,12 @@ public record CardData(
         @JsonProperty("card_type") CardType cardType,
         Attribute attribute,
         @JsonDeserialize(using = ColorDeserializer.class)
-        @JsonProperty("card_color") Color color,
+        @JsonProperty("card_color") List<Color> colors,
         @JsonProperty("card_cost") Integer cost,
         @JsonProperty("card_power") Integer power,
         Integer life,
         @JsonProperty("counter_amount") Integer counter,
-        
+
         @JsonProperty("market_price") Double marketPrice,
         @JsonProperty("abilities")    List<AbilityData> abilities) {
     public CardData {
@@ -39,6 +39,9 @@ public record CardData(
         }
         if (subTypes == null || subTypes.equalsIgnoreCase("null")) {
             subTypes = "";
+        }
+        if (colors == null) {
+            colors = List.of();
         }
         if (cost == null) {
             cost = 0;
@@ -59,11 +62,13 @@ public record CardData(
             abilities = Collections.emptyList();
         }
     }
+
     public String getId() {
         return id;
     }
+
     public String toString() {
-        return "CardData [id=" + id + ", name=" + name + ", cardType=" + cardType + ", color=" + color
+        return "CardData [id=" + id + ", name=" + name + ", cardType=" + cardType + ", colors=" + colors
                 + ", cost=" + cost + ", power=" + power + ", life=" + life + ", counter=" + counter
                 + ", subTypes=" + subTypes + ", marketPrice=" + marketPrice + "]";
     }

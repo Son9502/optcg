@@ -48,8 +48,8 @@ public class GameFactory {
         Player p1 = new Player("p1", "Monkey D. Luffy", null);
         Player p2 = new Player("p2", "Roronoa Zoro", null);
 
-        p1.setLeader(makeLeader("L-001", "Monkey D. Luffy", 5000, 5, Color.Red, p1));
-        p2.setLeader(makeLeader("L-002", "Roronoa Zoro",    5000, 5, Color.Green, p2));
+        p1.setLeader(makeLeader("L-001", "Monkey D. Luffy", 5000, 5, List.of(Color.Red), p1));
+        p2.setLeader(makeLeader("L-002", "Roronoa Zoro",    5000, 5, List.of(Color.Green), p2));
 
         DeckBuilder.buildDeck(p1, buildMainDeck(p1));
         DeckBuilder.buildDeck(p2, buildMainDeck(p2));
@@ -64,10 +64,10 @@ public class GameFactory {
     // -------------------------------------------------------------------------
 
     private static Leader makeLeader(String id, String name, int power, int life,
-                                     Color color, Player owner) {
+                                     List<Color> colors, Player owner) {
         CardData data = new CardData(
                 id, "OP-TEST", name, "Test leader for local play.", "", "Test Set",
-                null, CardType.LEADER, Attribute.Strike, color,
+                null, CardType.LEADER, Attribute.Strike, colors,
                 0, power, life, null, 0.0, null);
         return new Leader(id, data, owner);
     }

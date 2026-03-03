@@ -120,6 +120,56 @@ public class CliController {
     }
 
     /**
+     * Returns the raw ANSI escape code string for the given color, or an empty
+     * string if color is null.
+     */
+    private String ansiCode(Color color) {
+        if (color == null) return "";
+        return switch (color) {
+            case Red    -> RED;
+            case Green  -> GREEN;
+            case Blue   -> BLUE;
+            case Yellow -> YELLOW;
+            case Purple -> PURPLE;
+            case Black  -> BLACK;
+        };
+    }
+
+    /**
+     * Multi-color variant of {@link #colorize(String, Color)}.
+     * Single-color lists delegate to the standard method.
+     * Multi-color lists alternate ANSI color codes per character so that both
+     * colors are visible in the name (e.g. "Yamato" in Green/Yellow alternates
+     * each letter between the two codes).
+     */
+    private String colorize(String text, List<Color> colors) {
+        if (colors.isEmpty()) return text;
+        if (colors.size() == 1) return colorize(text, colors.get(0));
+        String[] codes = colors.stream().map(this::ansiCode).toArray(String[]::new);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < text.length(); i++) {
+            sb.append(codes[i % codes.length]).append(text.charAt(i));
+        }
+        return sb.append(RESET).toString();
+    }
+
+    /**
+     * Multi-color variant of {@link #boldColorize(String, Color)}.
+     * Same alternating-character logic as {@link #colorize(String, List)} but
+     * each character is also rendered in bold.
+     */
+    private String boldColorize(String text, List<Color> colors) {
+        if (colors.isEmpty()) return boldColorize(text, (Color) null);
+        if (colors.size() == 1) return boldColorize(text, colors.get(0));
+        String[] codes = colors.stream().map(c -> BOLD + ansiCode(c)).toArray(String[]::new);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < text.length(); i++) {
+            sb.append(codes[i % codes.length]).append(text.charAt(i));
+        }
+        return sb.append(RESET).toString();
+    }
+
+    /**
      * Returns a single-line ability/effect description for {@code card}.
      *
      * <p>Priority order:
@@ -167,7 +217,7 @@ public class CliController {
                 String raw = (card.getData() != null) ? card.getData().name() : "DON!!";
                 name = WHITE + raw + RESET;
             } else if (card.getData() != null) {
-                name = colorize(card.getData().name(), card.getData().color());
+                name = colorize(card.getData().name(), card.getData().colors());
             } else {
                 name = "Unknown Card";
             }
@@ -189,8 +239,8 @@ public class CliController {
      * @param opponent The opponent player.
      */
     public void printStatus(Player active, Player opponent) {
-        Color activeColor = (active.getLeader() != null) ? active.getLeader().getData().color() : null;
-        Color opponentColor = (opponent.getLeader() != null) ? opponent.getLeader().getData().color() : null;
+        Color activeColor = (active.getLeader() != null) ? active.getLeader().getData().colors() : null;
+        Color opponentColor = (opponent.getLeader() != null) ? opponent.getLeader().getData().colors() : null;
         System.out.println("=== " + boldColorize(active.getName(), activeColor)
                 + " vs " + boldColorize(opponent.getName(), opponentColor) + " ===");
 
@@ -245,7 +295,7 @@ public class CliController {
                 System.out.printf("%d. Unknown Card%n", i + 1);
                 continue;
             }
-            String name = boldColorize(card.getData().name(), card.getData().color());
+            String name = boldColorize(card.getData().name(), card.getData().colors());
             String type = (card.getData().cardType() != null) ? " [" + card.getData().cardType() + "]" : "";
             System.out.printf("%d. %s%s  |  Cost: %d, Power: %d%n",
                     i + 1, name, type, card.getData().cost(), card.getData().power());
@@ -293,7 +343,7 @@ public class CliController {
         // Leader
         Leader leader = player.getLeader();
         if (leader != null && leader.getData() != null) {
-            String name = boldColorize(leader.getData().name(), leader.getData().color());
+            String name = boldColorize(leader.getData().name(), leader.getData().colors());
             String rested = leader.isRested() ? "Rested" : "Active";
             String dons = leader.countDon() > 0 ? " | Dons: " + leader.countDon() : "";
             int power = (turnManager.getActivePlayer() == player) ? leader.getTotalPower() : leader.getBasePower();
@@ -316,7 +366,7 @@ public class CliController {
                     System.out.println("    - Unknown Card");
                     continue;
                 }
-                String name = boldColorize(card.getData().name(), card.getData().color());
+                String name = boldColorize(card.getData().name(), card.getData().colors());
                 String type = (card.getData().cardType() != null) ? " [" + card.getData().cardType() + "]" : "";
                 int power = (turnManager.getActivePlayer() == player) ? card.getTotalPower() : card.getBasePower();
                 String rested = card.isRested() ? "Rested" : "Active";
@@ -340,7 +390,7 @@ public class CliController {
                     System.out.println("    - Unknown Card");
                     continue;
                 }
-                String name = boldColorize(card.getData().name(), card.getData().color());
+                String name = boldColorize(card.getData().name(), card.getData().colors());
                 String type = (card.getData().cardType() != null) ? " [" + card.getData().cardType() + "]" : "";
                 int power = (turnManager.getActivePlayer() == player) ? card.getTotalPower() : card.getBasePower();
                 String rested = card.isRested() ? "Rested" : "Active";
@@ -363,7 +413,7 @@ public class CliController {
             if (topCard.getData() == null) {
                 System.out.println("    - Unknown Card");
             } else {
-                String name = boldColorize(topCard.getData().name(), topCard.getData().color());
+                String name = boldColorize(topCard.getData().name(), topCard.getData().colors());
                 String type = (topCard.getData().cardType() != null) ? " [" + topCard.getData().cardType() + "]" : "";
                 int power = (turnManager.getActivePlayer() == player) ? topCard.getTotalPower()
                         : topCard.getBasePower();
@@ -572,7 +622,7 @@ public class CliController {
         System.out.println("Select a card to play:");
         for (int i = 0; i < playable.size(); i++) {
             Card card = playable.get(i);
-            String name = colorize(card.getData().name(), card.getData().color());
+            String name = colorize(card.getData().name(), card.getData().colors());
             int cost = card.getData().cost();
             int power = card.getData().power();
             String stats = (availableDon >= cost)
@@ -600,18 +650,18 @@ public class CliController {
                 return;
             }
             gameState.trash(currentPlayer, toTrash);
-            System.out.println(colorize(toTrash.getData().name(), toTrash.getData().color()) + " sent to trash.");
+            System.out.println(colorize(toTrash.getData().name(), toTrash.getData().colors()) + " sent to trash.");
         } else if (selectedType == CardType.STAGE && !currentPlayer.getStage().isEmpty()) {
             Card existing = currentPlayer.getStage().getCards().get(0);
             boolean confirm = inputHandler.confirm(
-                    colorize(existing.getData().name(), existing.getData().color())
+                    colorize(existing.getData().name(), existing.getData().colors())
                             + " will be sent to trash. Replace?");
             if (!confirm) {
                 System.out.println("Play cancelled.");
                 return;
             }
             gameState.trash(currentPlayer, existing);
-            System.out.println(colorize(existing.getData().name(), existing.getData().color()) + " sent to trash.");
+            System.out.println(colorize(existing.getData().name(), existing.getData().colors()) + " sent to trash.");
         }
 
         gameState.playCard(currentPlayer, selected);
@@ -729,8 +779,8 @@ public class CliController {
      * @param target   the card being attacked
      */
     public void announceAttack(Card attacker, Card target) {
-        String atkName = boldColorize(attacker.getData().name(), attacker.getData().color());
-        String tgtName = colorize(target.getData().name(), target.getData().color());
+        String atkName = boldColorize(attacker.getData().name(), attacker.getData().colors());
+        String tgtName = colorize(target.getData().name(), target.getData().colors());
         System.out.println("  \n" + atkName + " attacks " + tgtName + "!");
     }
 
@@ -741,8 +791,8 @@ public class CliController {
      * @param attacker the attacking card (shown for context)
      */
     public void announceBlocker(Card blocker, Card attacker) {
-        String blkName = boldColorize(blocker.getData().name(), blocker.getData().color());
-        String atkName = colorize(attacker.getData().name(), attacker.getData().color());
+        String blkName = boldColorize(blocker.getData().name(), blocker.getData().colors());
+        String atkName = colorize(attacker.getData().name(), attacker.getData().colors());
         System.out.println("  " + blkName + " blocks " + atkName + "! (attack redirected)");
     }
 
@@ -753,7 +803,7 @@ public class CliController {
      * @param boost       the power boost it granted to the defender
      */
     public void announceCounter(Card counterCard, int boost) {
-        String name = colorize(counterCard.getData().name(), counterCard.getData().color());
+        String name = colorize(counterCard.getData().name(), counterCard.getData().colors());
         System.out.println("  Counter: " + name + " (+" + boost + " power to defender)");
     }
 
@@ -771,8 +821,8 @@ public class CliController {
      */
     public void announceBattleResult(Card attacker, Card target,
                                      boolean attackerWon, int defenderLifeAfter, int lifesTaken) {
-        String tgtName = colorize(target.getData().name(), target.getData().color());
-        String atkName = boldColorize(attacker.getData().name(), attacker.getData().color());
+        String tgtName = colorize(target.getData().name(), target.getData().colors());
+        String atkName = boldColorize(attacker.getData().name(), attacker.getData().colors());
         if (!attackerWon) {
             System.out.println("  → " + tgtName + " withstands the attack!");
         } else if (target instanceof Leader) {
@@ -792,7 +842,7 @@ public class CliController {
      * @param card   the card that was played
      */
     public void announceCardPlayed(Player player, Card card) {
-        String name = boldColorize(card.getData().name(), card.getData().color());
+        String name = boldColorize(card.getData().name(), card.getData().colors());
         String type = card.getData().cardType() != null ? " [" + card.getData().cardType() + "]" : "";
         System.out.println("  " + player.getName() + " played " + name + type + ".");
         String abilityLine = cardAbilityLine(card);
