@@ -239,8 +239,8 @@ public class CliController {
      * @param opponent The opponent player.
      */
     public void printStatus(Player active, Player opponent) {
-        Color activeColor = (active.getLeader() != null) ? active.getLeader().getData().colors() : null;
-        Color opponentColor = (opponent.getLeader() != null) ? opponent.getLeader().getData().colors() : null;
+        List<Color> activeColor = (active.getLeader() != null) ? active.getLeader().getData().colors() : null;
+        List<Color> opponentColor = (opponent.getLeader() != null) ? opponent.getLeader().getData().colors() : null;
         System.out.println("=== " + boldColorize(active.getName(), activeColor)
                 + " vs " + boldColorize(opponent.getName(), opponentColor) + " ===");
 
@@ -748,7 +748,7 @@ public class CliController {
      * @param phaseName  display name of the phase (e.g. "Draw")
      */
     public void announcePhase(int turn, String playerName, String phaseName) {
-        System.out.println("\nTurn " + turn + " — " + boldColorize(playerName, null)
+        System.out.println("\nTurn " + turn + " — " + boldColorize(playerName, (Color) null)
                 + "'s " + phaseName + " Phase");
     }
 
