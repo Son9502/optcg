@@ -130,6 +130,17 @@ public class EffectFactory {
 
         // Determine how many to act on: max takes priority, else value; 0 = all
         int limit = t.max() > 0 ? t.max() : (e.value() > 0 ? e.value() : filtered.size());
+
+        // When there are more candidates than the limit, delegate the choice to
+        // the TargetSelector (real implementation prompts the player; default
+        // auto-picks the first N so tests stay deterministic).
+        if (limit > 0 && filtered.size() > limit) {
+            TargetSelector selector = gs.getTargetSelector();
+            if (selector != null) {
+                String prompt = "Select target (" + e.type().name().toLowerCase().replace('_', ' ') + "):";
+                return new ArrayList<>(selector.select(filtered, limit, prompt));
+            }
+        }
         return filtered.subList(0, Math.min(limit, filtered.size()));
     }
 

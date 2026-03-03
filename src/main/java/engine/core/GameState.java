@@ -4,6 +4,7 @@ import engine.cards.Card;
 import engine.cards.abilities.Ability;
 import engine.cards.abilities.Cost;
 import engine.cards.abilities.Trigger;
+import engine.cards.effects.TargetSelector;
 import engine.cards.keywords.Keyword;
 import engine.player.Player;
 import engine.cards.DonCard;
@@ -25,6 +26,13 @@ public class GameState {
 
     public AbilityManager getAbilityManager() { return abilityManager; }
     public void setAbilityManager(AbilityManager am) { this.abilityManager = am; }
+
+    /** Default: auto-select first N candidates (deterministic, no player input). */
+    private TargetSelector targetSelector =
+            (candidates, count, prompt) -> candidates.subList(0, Math.min(count, candidates.size()));
+
+    public TargetSelector getTargetSelector() { return targetSelector; }
+    public void setTargetSelector(TargetSelector ts) { this.targetSelector = ts; }
 
     public GameState(Player player1, Player player2) {
         this.player1 = player1;

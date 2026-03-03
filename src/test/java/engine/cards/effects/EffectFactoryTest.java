@@ -10,6 +10,8 @@ import engine.core.GameState;
 import engine.player.Player;
 import engine.zones.ZoneType;
 
+import java.util.List;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -447,5 +449,38 @@ class EffectFactoryTest {
         assertDoesNotThrow(() ->
             EffectFactory.build(eff(EffectType.GRANT_KEYWORD, 0, null, null, null), null)
                          .apply(gs, source));
+    }
+
+    // ── TargetSelector ──────────────────────────────────────────────────────────
+
+    /**
+     * Proves the TargetSelector callback is invoked when there are more
+     * candidates than the effect limit.
+     *
+     * The custom selector always picks {@code c1} by reference. Without the
+     * selector the default auto-pick would choose {@code c2} (it is first in the
+     * field list after addFirst insertion). The two choices diverge, so the
+     * surviving card tells us which path was taken.
+     */
+    @Test
+    void targetSelector_invokedWhenCandidatesExceedLimit() {
+        Card c1 = makeCharCard(opponent, 1000);
+        Card c2 = makeCharCard(opponent, 2000);
+        gs.moveCard(c1, opponent.getField());
+        gs.moveCard(c2, opponent.getField()); // c2 is now at index 0 (addFirst)
+
+        // Selector that always picks c1 (would be c2 without this override)
+        gs.setTargetSelector((candidates, count, prompt) -> List.of(c1));
+
+        // KO up to 1 of opponent's Characters
+        Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER,
+                1, 0, 0, 0, 0);
+        EffectData e = eff(EffectType.KO, 0, t, null, null);
+        EffectFactory.build(e, null).apply(gs, source);
+
+        // c1 was chosen by the selector and KO'd; c2 survives
+        assertFalse(opponent.getField().getCards().contains(c1), "c1 should be KO'd");
+        assertTrue(opponent.getField().getCards().contains(c2),  "c2 should survive");
+        assertTrue(opponent.getTrash().getCards().contains(c1),  "c1 should be in trash");
     }
 }

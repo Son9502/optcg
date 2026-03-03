@@ -116,22 +116,6 @@ public class Card {
         return true;
     }
 
-    public void onEnterZone() {
-        // Implement logic for when the card enters a zone
-    }
-
-    public void onLeaveZone() {
-        // Implement logic for when the card leaves a zone
-    }
-
-    public void onResolve() {
-        // Implement logic for when the card's effect resolves
-    }
-
-    public void applyEffects() {
-        // Implement logic to apply the card's effects
-    }
-
     /**
      * Rest this card. This is used for cards that can be rested, such as monsters.
      * Resting a card typically means it cannot be used until it is activated again.
