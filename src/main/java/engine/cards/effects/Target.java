@@ -13,7 +13,7 @@ public record Target(
     int maxPower,
     int minPower){
         public enum TargetPlayer {
-            SELF,OPPONENT,ALL
+            SELF,OPPONENT,ALL,THIS_CARD
         }
 
 }

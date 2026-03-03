@@ -213,6 +213,12 @@ public final class EffectParser {
      * clause. The "/" connector (trigger-notation separator) is intentionally
      * kept inside clauses rather than used as a split boundary.
      *
+     * <p>"or" is treated specially: it is only used as a clause boundary when a
+     * recognised effect VERB exists somewhere after it.  Without a following verb,
+     * "or" is a card-type compound connector ("your Leader <em>or</em> 1 of your
+     * Characters") and must stay inside the current clause so that
+     * {@link #extractDonSourceType} can read the DON state token unambiguously.
+     *
      * @param tokens SKIP-filtered token list after leading condition extraction
      * @return list of per-clause token sub-lists; never empty (at minimum one
      *         list containing all tokens is returned)
@@ -220,11 +226,18 @@ public final class EffectParser {
     private static List<List<Token>> splitClauses(List<Token> tokens) {
         List<List<Token>> clauses = new ArrayList<>();
         List<Token> current = new ArrayList<>();
-        for (Token t : tokens) {
+        for (int i = 0; i < tokens.size(); i++) {
+            Token t = tokens.get(i);
             if (t.type() == TokenType.CONNECTOR && !t.raw().equals("/")) {
-                if (!current.isEmpty()) {
-                    clauses.add(current);
-                    current = new ArrayList<>();
+                // "or" between card-type choices is NOT a clause boundary.
+                // Only split on "or" when there is a recognised effect VERB ahead.
+                if (t.raw().equals("or") && !hasVerbAhead(tokens, i + 1)) {
+                    current.add(t); // keep inside current clause
+                } else {
+                    if (!current.isEmpty()) {
+                        clauses.add(current);
+                        current = new ArrayList<>();
+                    }
                 }
             } else {
                 current.add(t);
@@ -232,6 +245,29 @@ public final class EffectParser {
         }
         if (!current.isEmpty()) clauses.add(current);
         return clauses;
+    }
+
+    /**
+     * Returns {@code true} when at least one VERB token whose raw value maps to
+     * a non-null EffectType via {@link #resolveVerb} exists at or after index
+     * {@code from} in {@code tokens}.  Used by {@link #splitClauses} to decide
+     * whether an "or" connector genuinely separates two independent effect
+     * clauses (has a verb ahead) or is merely a compound card-type connector
+     * ("your Leader or 1 of your Characters").
+     *
+     * @param tokens SKIP-filtered token list
+     * @param from   inclusive start index for the search
+     * @return {@code true} if a recognised effect verb is found at or after {@code from}
+     */
+    private static boolean hasVerbAhead(List<Token> tokens, int from) {
+        for (int i = from; i < tokens.size(); i++) {
+            Token t = tokens.get(i);
+            if (t.type() == TokenType.VERB
+                    && resolveVerb(t.raw(), tokens.subList(i, tokens.size())) != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -314,11 +350,21 @@ public final class EffectParser {
         // Effects that are always self-targeted default to SELF when no PLAYER token present.
         if (player == null && isSelfTargetingEffect(effectType)) player = "SELF";
 
-        // 4f. Card type.
-        String cardType = extractCardType(clause);
-
-        // 4g. Zone.
-        String zone = extractZone(clause);
+        // 4f–4g. Card type and zone.
+        // ATTACH_DON: the clause reads "Give N rested DON!! card to your Leader or Characters".
+        // target.cardType encodes the *DON state* (RESTED_DON / ACTIVE_DON) — which DON
+        // cards from the cost zone are eligible.  The recipient (Leader/Characters) is
+        // resolved at runtime by EffectFactory using target.player + the field + leader.
+        String cardType;
+        String zone;
+        if (effectType.equals("ATTACH_DON")) {
+            cardType = extractDonSourceType(clause); // e.g. "RESTED_DON", "ACTIVE_DON"
+            zone = null; // DON always drawn from cost zone (implicit); no zone needed
+            if (player == null) player = "SELF";
+        } else {
+            cardType = extractCardType(clause);
+            zone = extractZone(clause);
+        }
 
         // 4h. Filter bounds.
         int[] filters = extractFilters(clause);
@@ -586,6 +632,7 @@ public final class EffectParser {
         return switch (effectType) {
             case "REST", "KO", "RETURN_TO_HAND", "PLAY_CARD",
                  "SEARCH_DECK", "UNREST", "NEGATE",
+                 "ATTACH_DON",   // max = number of DON!! cards to give (recipient count)
                  "PREVENT_ATTACK", "PREVENT_BLOCK", "PREVENT_KO" -> true;
             default -> false;
         };
@@ -700,6 +747,37 @@ public final class EffectParser {
         if (r.contains("opponent") || r.contains("next"))               return "OPPONENTS_NEXT_TURN";
         // "during this turn" / "until end of this turn" / etc.
         return "THIS_TURN";
+    }
+
+    /**
+     * Extracts the DON!! source-state string for an ATTACH_DON effect clause.
+     *
+     * <p>The text pattern is {@code "Give N rested DON!! card to …"} or
+     * {@code "Give N active DON!! card to …"}.  With the state-qualified
+     * CARD_TYPE phrases added to {@link EffectTables} ("rested don!! card" →
+     * CARD_TYPE, "active don!! card" → CARD_TYPE), the lexer emits a single
+     * CARD_TYPE token before the DESTINATION("to") that this helper reads.
+     *
+     * <ul>
+     *   <li>{@code "rested don!! card/cards"} → {@code "RESTED_DON"}</li>
+     *   <li>{@code "active don!! card/cards"}  → {@code "ACTIVE_DON"}</li>
+     *   <li>No match (old data or unexpected form) → {@code "RESTED_DON"} (safe default)</li>
+     * </ul>
+     *
+     * @param clause SKIP-filtered clause token list for an ATTACH_DON effect
+     * @return DON state string ({@code "RESTED_DON"} or {@code "ACTIVE_DON"})
+     */
+    private static String extractDonSourceType(List<Token> clause) {
+        for (Token t : clause) {
+            // Stop scanning at DESTINATION("to") — DON qualifier is always before it.
+            if (t.type() == TokenType.DESTINATION && t.raw().equals("to")) break;
+            if (t.type() == TokenType.CARD_TYPE) {
+                String r = t.raw();
+                if (r.equals("rested don!! card") || r.equals("rested don!! cards")) return "RESTED_DON";
+                if (r.equals("active don!! card") || r.equals("active don!! cards"))  return "ACTIVE_DON";
+            }
+        }
+        return "RESTED_DON"; // default: standard rule for ~99% of ATTACH_DON effects
     }
 
     // ── Utility ───────────────────────────────────────────────────────────────

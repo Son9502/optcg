@@ -166,6 +166,13 @@ public final class EffectTables {
     // ── CARD_TYPE ─────────────────────────────────────────────────────────────
     private static void addCardTypes(Map<String, TokenType> p) {
         // Multi-word entries must precede any single-word alternatives they share a prefix with.
+        // State-qualified DON!! entries (5 words) precede bare "don!! card/cards" (2 words)
+        // so "rested don!! card" is matched as a single CARD_TYPE token rather than
+        // three separate tokens (FILTER "rested" + CARD_TYPE "don!!" + CARD_TYPE "card").
+        put(p, "rested don!! cards",  TokenType.CARD_TYPE); // 3 words; → RESTED_DON
+        put(p, "rested don!! card",   TokenType.CARD_TYPE); // 3 words; → RESTED_DON
+        put(p, "active don!! cards",  TokenType.CARD_TYPE); // 3 words; → ACTIVE_DON
+        put(p, "active don!! card",   TokenType.CARD_TYPE); // 3 words; → ACTIVE_DON
         put(p, "leader or characters", TokenType.CARD_TYPE); // 3 words; compound target (plural)
         put(p, "leader or character",  TokenType.CARD_TYPE); // 3 words; compound target (singular)
         put(p, "don!! cards",         TokenType.CARD_TYPE); // 2 words; must precede "don!!"

@@ -299,7 +299,9 @@ public class CardCompiler {
             case "LEADER"              -> "LEADER";
             case "EVENT"               -> "EVENT";
             case "DON_CARD"            -> "DON";
-            case "LEADER_OR_CHARACTER" -> null; // no single CardType equivalent
+            case "LEADER_OR_CHARACTER" -> "LEADER_OR_CHARACTER";
+            case "RESTED_DON"          -> "RESTED_DON";
+            case "ACTIVE_DON"          -> "ACTIVE_DON";
             case "CARD"                -> null; // generic — no single CardType
             default                    -> null;
         };
