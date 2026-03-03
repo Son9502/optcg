@@ -21,6 +21,7 @@ public class Card {
     protected boolean summonSick;
     protected List<DonCard> attachedDons;
     protected List<Ability> abilities;
+    protected int bonusPower;
 
     public Card(String card_id, CardData data, Player owner) {
         this(card_id, data, owner, null);
@@ -36,6 +37,7 @@ public class Card {
         this.summonSick = false;
         this.attachedDons = new ArrayList<DonCard>();
         this.abilities = new ArrayList<Ability>();
+        this.bonusPower = 0;
     }
 
     // Accessor methods
@@ -194,15 +196,24 @@ public class Card {
         return data.power();
     }
 
+    /** Adds a temporary power modification (positive or negative). */
+    public void addPowerBoost(int n) {
+        this.bonusPower += n;
+    }
+
+    /** Clears all temporary power boosts. Called at the start of each turn. */
+    public void clearPowerBoosts() {
+        this.bonusPower = 0;
+    }
+
     /**
-     * Calculate the total power of this card, including any attached Don cards.
-     * This is used for cards that can have Don cards attached to them, such as
-     * monsters.
-     * 
-     * @return The total power of this card, including any attached Don cards.
+     * Calculate the total power of this card, including bonus power and any
+     * attached Don cards.
+     *
+     * @return The total power of this card.
      */
     public int getTotalPower() {
-        int totalPower = data.power();
+        int totalPower = data.power() + bonusPower;
         for (DonCard don : attachedDons) {
             totalPower += don.getBoost();
         }
