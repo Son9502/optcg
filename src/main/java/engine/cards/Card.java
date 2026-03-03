@@ -22,6 +22,7 @@ public class Card {
     protected List<DonCard> attachedDons;
     protected List<Ability> abilities;
     protected int bonusPower;
+    protected int bonusCost;
 
     public Card(String card_id, CardData data, Player owner) {
         this(card_id, data, owner, null);
@@ -38,6 +39,7 @@ public class Card {
         this.attachedDons = new ArrayList<DonCard>();
         this.abilities = new ArrayList<Ability>();
         this.bonusPower = 0;
+        this.bonusCost = 0;
     }
 
     // Accessor methods
@@ -196,6 +198,12 @@ public class Card {
         return data.power();
     }
 
+    /** Returns the play cost after temporary modifications (floor: 0). */
+    public int getEffectiveCost() {
+        if (data == null || data.cost() == null) return 0;
+        return Math.max(0, data.cost() + bonusCost);
+    }
+
     /** Adds a temporary power modification (positive or negative). */
     public void addPowerBoost(int n) {
         this.bonusPower += n;
@@ -204,6 +212,16 @@ public class Card {
     /** Clears all temporary power boosts. Called at the start of each turn. */
     public void clearPowerBoosts() {
         this.bonusPower = 0;
+    }
+
+    /** Adds a temporary cost modification (negative = cheaper, positive = more expensive). */
+    public void addCostModifier(int n) {
+        this.bonusCost += n;
+    }
+
+    /** Clears all temporary cost modifications. Called at the start of each turn. */
+    public void clearCostModifiers() {
+        this.bonusCost = 0;
     }
 
     /**

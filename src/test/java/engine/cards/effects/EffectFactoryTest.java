@@ -227,6 +227,44 @@ class EffectFactoryTest {
         assertEquals(3000, c.getTotalPower());
     }
 
+    // ── COST_MODIFY ─────────────────────────────────────────────────────────────
+
+    @Test
+    void costModify_reducesEffectiveCost() {
+        Card c = makeCharCard(source, 3000); // base cost = 3
+        gs.moveCard(c, source.getField());
+
+        Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
+        EffectFactory.build(eff(EffectType.COST_MODIFY, -2, t, null, null), c)
+                     .apply(gs, source);
+
+        assertEquals(1, c.getEffectiveCost(), "Cost should be 3 + (-2) = 1");
+    }
+
+    @Test
+    void costModify_floorIsZero() {
+        Card c = makeCharCard(source, 3000); // base cost = 3
+        gs.moveCard(c, source.getField());
+
+        Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
+        EffectFactory.build(eff(EffectType.COST_MODIFY, -5, t, null, null), c)
+                     .apply(gs, source);
+
+        assertEquals(0, c.getEffectiveCost(), "Effective cost should not go below 0");
+    }
+
+    @Test
+    void costModify_clearedByRefreshField() {
+        Card c = makeCharCard(source, 3000); // base cost = 3
+        gs.moveCard(c, source.getField());
+        c.addCostModifier(-2);
+        assertEquals(1, c.getEffectiveCost());
+
+        gs.refreshField(source);
+
+        assertEquals(3, c.getEffectiveCost(), "Cost modifier should be cleared on refresh");
+    }
+
     // ── ADD_DON ─────────────────────────────────────────────────────────────────
 
     @Test

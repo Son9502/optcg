@@ -50,9 +50,11 @@ public class EffectFactory {
                                          .forEach(c -> c.addPowerBoost(-effectData.value()));
                 case ATTACH_DON   -> applyAttachDon(effectData, gameState, source, sourceCard);
                 case ADD_LIFE     -> applyAddLife(effectData, gameState, source);
+                case COST_MODIFY  -> resolveTargets(effectData, gameState, source, sourceCard)
+                                         .forEach(c -> c.addCostModifier(effectData.value()));
 
                 // Phase-2 stubs — no-op until implemented
-                case COST_MODIFY, GRANT_KEYWORD,
+                case GRANT_KEYWORD,
                      PREVENT_ATTACK, PREVENT_BLOCK, PREVENT_KO, NEGATE,
                      MODAL, SEARCH_DECK, SHUFFLE_DECK,
                      MOVE_TO_BOTTOM_DECK, MOVE_TO_TOP_DECK, PLAY_CARD -> {}

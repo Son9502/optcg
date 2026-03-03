@@ -396,6 +396,7 @@ public class GameState {
         for (Card card : player.getField().getCards()) {
             card.setSummonSick(false); // Clear summon sickness at the start of each new turn
             card.clearPowerBoosts();   // Clear end-of-turn power modifications
+            card.clearCostModifiers(); // Clear end-of-turn cost modifications
             if (card.isRested()) {
                 card.activate();
             } else {
@@ -423,7 +424,8 @@ public class GameState {
         Leader leader = player.getLeader();
         if (leader == null)
             return;
-        leader.clearPowerBoosts(); // Clear end-of-turn power modifications
+        leader.clearPowerBoosts();   // Clear end-of-turn power modifications
+        leader.clearCostModifiers(); // Clear end-of-turn cost modifications
         if (leader.isRested()) {
             leader.activate();
         }
