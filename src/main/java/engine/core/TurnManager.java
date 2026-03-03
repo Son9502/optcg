@@ -1,4 +1,5 @@
 package engine.core;
+import engine.cards.abilities.Trigger;
 import engine.player.Player;
 public class TurnManager {
     private final GameState state;
@@ -48,6 +49,13 @@ public class TurnManager {
                 currentPhase = Phase.END;
                 break;
             case END:
+                AbilityManager am = state.getAbilityManager();
+                if (am != null) {
+                    Player opponent = (activePlayer == state.getPlayer1())
+                            ? state.getPlayer2() : state.getPlayer1();
+                    am.dispatchAll(Trigger.END_OF_YOUR_TURN,      activePlayer, activePlayer);
+                    am.dispatchAll(Trigger.END_OF_OPPONENTS_TURN, opponent,     activePlayer);
+                }
                 endTurn();
                 break;
         }

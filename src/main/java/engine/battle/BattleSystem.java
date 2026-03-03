@@ -2,8 +2,10 @@ package engine.battle;
 
 import engine.cards.Card;
 import engine.cards.Leader;
+import engine.cards.abilities.Trigger;
 import engine.cards.keywords.Keyword;
 import engine.cards.types.CardType;
+import engine.core.AbilityManager;
 import engine.core.GameState;
 import engine.core.TurnManager;
 import engine.player.Player;
@@ -173,6 +175,11 @@ public class BattleSystem {
      * @param counterBoost Additional power added to the defender by counters.
      */
     public void resolve(Card attacker, Card target, int counterBoost) {
+        // Fire WHEN_ATTACKING before the attacker rests (effects happen on attack declaration)
+        AbilityManager am = gameState.getAbilityManager();
+        if (am != null) {
+            am.dispatch(Trigger.WHEN_ATTACKING, attacker, attacker.getOwner());
+        }
         attacker.rest();
 
         int attackerPower = getEffectivePower(attacker);

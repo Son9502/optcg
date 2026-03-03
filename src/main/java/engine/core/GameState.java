@@ -1,12 +1,15 @@
 package engine.core;
 
 import engine.cards.Card;
+import engine.cards.abilities.Ability;
 import engine.cards.abilities.Cost;
+import engine.cards.abilities.Trigger;
 import engine.cards.keywords.Keyword;
 import engine.player.Player;
 import engine.cards.DonCard;
 import engine.cards.Leader;
 import engine.zones.Zone;
+import engine.zones.ZoneType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +20,11 @@ public class GameState {
 
     private boolean gameOver;
     private Player winner;
+
+    private AbilityManager abilityManager;
+
+    public AbilityManager getAbilityManager() { return abilityManager; }
+    public void setAbilityManager(AbilityManager am) { this.abilityManager = am; }
 
     public GameState(Player player1, Player player2) {
         this.player1 = player1;
@@ -131,7 +139,12 @@ public class GameState {
      *               and added to the trash zone.
      */
     public void trash(Player player, Card card) {
+        boolean wasOnField = card.getZone() != null
+                && card.getZone().getType() == ZoneType.CHARACTER;
         moveCard(card, player.getTrash());
+        if (wasOnField && abilityManager != null) {
+            abilityManager.dispatch(Trigger.ON_KO, card, player);
+        }
     }
 
     /**
@@ -149,8 +162,8 @@ public class GameState {
                     + " because it is not in their hand.");
             return;
         }
-        // Pay the Don cost before moving the card
-        int cardCost = card.getData().cost();
+        // Pay the Don cost before moving the card (use effective cost to respect COST_MODIFY)
+        int cardCost = card.getEffectiveCost();
         if (cardCost > 0) {
             Cost cost = new Cost();
             cost.type = Cost.CostType.DON;
@@ -187,6 +200,9 @@ public class GameState {
                 return;
         }
         moveCard(card, targetZone);
+        if (abilityManager != null) {
+            abilityManager.dispatch(Trigger.ON_PLAY, card, player);
+        }
     }
 
     /**
@@ -397,6 +413,7 @@ public class GameState {
             card.setSummonSick(false); // Clear summon sickness at the start of each new turn
             card.clearPowerBoosts();   // Clear end-of-turn power modifications
             card.clearCostModifiers(); // Clear end-of-turn cost modifications
+            for (Ability ability : card.getAbilities()) ability.resetTurn(); // Reset once-per-turn gate
             if (card.isRested()) {
                 card.activate();
             } else {
@@ -426,6 +443,7 @@ public class GameState {
             return;
         leader.clearPowerBoosts();   // Clear end-of-turn power modifications
         leader.clearCostModifiers(); // Clear end-of-turn cost modifications
+        for (Ability ability : leader.getAbilities()) ability.resetTurn(); // Reset once-per-turn gate
         if (leader.isRested()) {
             leader.activate();
         }
