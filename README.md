@@ -20,7 +20,9 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 - Keyword enforcement: Rush (character can attack turn played), Blocker (can intercept attacks), Double Attack (deals 2 damage on hit), Banish (life card goes to trash instead of hand), Unblockable (opponent cannot activate Blocker)
 - Field character limit: 5 characters max per player; UI prompts to replace when full
 - Stage card limit: 1 stage card per player; new stage replaces the old one
-- Two pre-built test decks via `GameFactory` (Luffy/Red and Zoro/Green), with keyword-bearing cards at each cost tier for manual testing
+- Two pre-built test decks via `GameFactory` (Luffy/Red and Zoro/Green), with keyword-bearing cards at each cost tier and named ability cards (Nami, Sanji, Coby, Marco, Vivi, Perona, Kuzan) for manual testing of each Phase 2 tier
+- Ability/effect descriptions shown under each card in hand view, field view, and card-played announcements; falls back to formatted keyword list (e.g. `[Rush]`, `[Blocker]`) for generic test cards
+- Multi-color card support: `CardData.colors` is `List<Color>`; CLI alternates ANSI codes per character for dual-color cards (e.g. Green/Yellow → alternating letters)
 - Card data pipeline: raw scraped JSON → `CardCompiler` → compiled JSON → `CardDatabase`
 - `Parser`: structured ability extraction from card text into `{trigger, condition, cost, character, effect}` records
 - `CardData` record carries a `subTypes` field (normalized from API `sub_types` strings)
@@ -128,7 +130,7 @@ mvn exec:java -Dexec.mainClass="tools.CardCompiler"
 | `getBySubtype(subtype)` | `List<CardData>` | O(n) `contains()` scan (multi-word subtype names cannot be tokenised on whitespace) |
 | `getAllCards()` | `Collection<CardData>` | Unmodifiable view of the full index |
 
-Multi-color leaders (e.g., `"Red Green"` in the API) are stored as their primary color only for CMU; full multi-color support (requiring `List<Color>` and deck validation changes) is deferred to Phase 2.
+Multi-color cards (e.g., `"Green Yellow"` in the API) are fully supported: `ColorDeserializer` parses all space-separated color tokens into a `List<Color>` on `CardData.colors`. The CLI alternates ANSI color codes per character when displaying multi-color card names.
 
 `CsvGenerator` is a standalone offline tool that rebuilds `card_names_subtypes.csv` from compiled data (or falls back to raw), strips parenthetical variant suffixes and trailing ` - SETID` patterns from card names, deduplicates on `(name, cardType)`, and writes a sorted CSV. Run it after compiling:
 
@@ -144,7 +146,7 @@ mvn exec:java -Dexec.mainClass="tools.CsvGenerator"
 mvn test
 ```
 
-**Current test suite: 180 tests, 0 failures, 0 errors.**
+**Current test suite: 224 tests, 0 failures, 0 errors.**
 10 `CardDatabaseTest` cases are data-dependent and skip automatically (via `assumeTrue`) when `raw/data/` is empty — run `CardScraper` first to populate.
 
 | Test class | Tests | Coverage area |
@@ -267,7 +269,7 @@ src/
 - `DON!! −X` (§8-3-1-6) is a separate cost type: return X DON to the DON deck
 - `Zone` uses a `Deque` internally: `add()` = addFirst (top), `draw()` = removeFirst (top), `addBottom()` = addLast — supports top and bottom card placement for card effects
 - `tools/` is an offline pipeline; `CardScraper`, `CardCompiler`, `CsvGenerator`, and `Parser` run once at data-prep time and are not part of the game runtime
-- `CardData.color` stores the **primary** color only for CMU — multi-color leaders (e.g., Red/Green) store the first color token; full `List<Color>` support is deferred (requires deck validation changes not needed for CMU)
+- `CardData.colors` is `List<Color>` — `ColorDeserializer` parses all space-separated color tokens; no single-color convenience accessor exists, callers use `colors()` directly; `CliController.colorize()/boldColorize()` accept `List<Color>` and alternate ANSI codes per character for multi-color cards
 
 ---
 

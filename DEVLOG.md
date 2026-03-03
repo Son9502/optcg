@@ -538,6 +538,62 @@ DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST, COST_MODIFY, ADD_DON, SET_DO
 
 ---
 
+### CliController — message consolidation and display improvements (collab)
+
+**Problem:** `GameEngine` contained two direct `System.out.println` calls (turn announcement and game-over message), violating the "CliController is the sole output owner" rule. Additionally, battle announcements (`announceAttack`, `announceBlocker`, `announceCounter`, `announceBattleResult`) and the phase-result announcements after non-interactive phases (Draw, DON) were either stubs or missing entirely.
+
+**Developer constraint:**
+> "CliController owns ALL player-visible output. GameEngine, BattleSystem, GameState should never call System.out."
+
+**Changes (collab):**
+- `GameEngine.run()` — replaced both `System.out.println` calls with `cliController.announcePhase()` and `cliController.announceGameOver()`; added private `announcePhaseResult(Phase, int)` helper that calls `announceDrawPhaseResult` / `announceDonPhaseResult` after the non-interactive phase advances
+- New announcement methods added to `CliController`: `announcePhase`, `announceDrawPhaseResult`, `announceDonPhaseResult`, `announceAttack`, `announceBlocker`, `announceCounter`, `announceBattleResult` (proper signature: attacker, target, attackerWon, defenderLifeAfter, lifesTaken), `announceCardPlayed`, `announceGameOver`
+- `defend()` wired: captures `lifesBefore` before `battleSystem.resolve()`, then observes `lifesAfter` and field presence to determine `attackerWon` — no BattleSystem signature changes needed
+- DON count announcement uses `turnNumber == 1 ? 1 : 2`, mirroring `TurnManager.advancePhase()` logic without exposing a new `isFirstTurn()` accessor
+
+**Ability description display (collab):**
+- `cardAbilityLine(Card)` helper: returns `CardData.description()` if non-blank; otherwise formats keyword abilities as `[Rush]`, `[Double Attack]` etc. via `formatKeyword(Keyword)` — covers both real cards loaded from JSON and generic GameFactory test cards
+- Called in `printHand()`, `printField()` (Leader, Characters, Stage sections), and `announceCardPlayed()` — ability line prints in white beneath each card's stats line
+- "Use Leader's Ability" menu option added as a commented-out stub in `runMainPhases()` with a `// TODO: ACTIVATED_MAIN` note; case 7 handler also stubbed and commented
+
+**GameFactory named ability cards (collab):**
+
+**Developer decision:** The test decks needed named cards to exercise each Phase 2 tier manually in the CLI. The GameFactoryTest pins exactly 42 Characters / 5 Events / 3 Stages = 50 total, so named cards had to replace generic cards rather than expand the deck.
+
+| Card | Trigger | Effect | Tier |
+|---|---|---|---|
+| Nami (×2) | ON_PLAY | Draw 1 card | 1 (done) |
+| Sanji (×2) | WHEN_ATTACKING | +1000 power this turn | 1 (done) |
+| Coby (×2) | ON_KO | Draw 1 card | 1 (done) |
+| Marco (×2) | END_OF_YOUR_TURN (DON!! ×1) | Rest 1 opponent's Character | 1 (done) |
+| Vivi (×1) | TRIGGER | Draw 1 card | 2 (stub) |
+| Perona (×1) | ON_PLAY | Gains [Blocker] until end of turn | 2 (stub) |
+| Kuzan (×1) | ON_PLAY | MODAL — draw 2 or bounce | 3 (stub) |
+
+Generic character counts reduced proportionally (Lieutenants 9→6, Captains 9→7, Commanders 7→5, Admirals 5→2, Yonko Officers 2→1) to maintain the 42-card total. All existing `GameFactoryTest` assertions pass unchanged.
+
+---
+
+### Multi-color `List<Color>` (collab)
+
+**Problem:** `ColorDeserializer` handled the space-separated multi-color API format (`"Green Yellow"`) by silently dropping all colors after the first. `CardData.color` was a single `Color`, losing information for every dual-color card in the set.
+
+**Developer decision:**
+> "Replace `Color color` with `List<Color> colors`. No `color()` convenience accessor — both colors are primary, neither takes precedence. Callers use `colors()` directly."
+
+**Changes:**
+- `ColorDeserializer` → `StdDeserializer<List<Color>>`: splits on space, maps each valid token to a `Color` enum value, skips dirty/unknown tokens, returns an immutable list
+- `CardData` — component renamed from `color` to `colors` (`List<Color>`); compact constructor normalises `null` → `List.of()`; `toString()` updated; no `color()` bridge method
+- `CliController` — added `ansiCode(Color)` private helper (returns raw ANSI string); added `colorize(String, List<Color>)` and `boldColorize(String, List<Color>)` overloads: single-color delegates to existing method, multi-color alternates ANSI codes per character (e.g. "Yamato" in Green/Yellow → Y(green)a(yellow)m(green)a(yellow)t(green)o(yellow)); all `.getData().color()` call sites replaced with `.getData().colors()` using `replace_all`
+- `GameFactory.makeLeader` — parameter changed to `List<Color>` — caller passes `List.of(Color.Red)` / `List.of(Color.Green)`
+- `CardDatabaseTest` — two `assertEquals(Color.Red, data.color())` assertions changed to `assertTrue(data.colors().contains(Color.Red))`
+
+**Developer reasoning on display:** Per-character alternation was chosen over per-word alternation because most dual-color card names in OP TCG are single words (Sanji, Nami, Yamato). Per-word would produce no visible alternation in those cases.
+
+**Result:** 224 tests, 0 failures.
+
+---
+
 ## What Was Never AI-Generated
 
 - The overall phased architecture (CMU → Tmux → GUI → AI → Online)
@@ -546,7 +602,7 @@ DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST, COST_MODIFY, ADD_DON, SET_DO
 - The decision to separate BattleSystem from CliController
 - The CardData record field selection (what the engine actually needs vs. API noise)
 - The [DON!! xX] condition vs. cost ruling (found in the official PDF)
-- The multi-color deferral decision (out of scope for CMU)
+- The multi-color `List<Color>` design decision — no `color()` bridge accessor (both colors are equally primary), per-character ANSI alternation chosen over per-word
 - The sub_types tokenization analysis (developer identified the multi-word problem)
 - The Tmux 3-pane layout concept
 - The GameStateServer/GameStateClient socket architecture (developer specified the pattern; AI described implementation details)
