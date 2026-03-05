@@ -211,20 +211,20 @@ public class GameFactory {
 
     /** [On Play] Draw 1 card. */
     private static AbilityData onPlayDraw1() {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null);
         return new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(draw));
     }
 
     /** [When Attacking] Give this Character +1000 power this turn. */
     private static AbilityData whenAttackingPowerBoost() {
         Target self = new Target(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
-        EffectData boost = new EffectData(EffectType.POWER_BOOST, 1000, self, null, Duration.THIS_TURN);
+        EffectData boost = new EffectData(EffectType.POWER_BOOST, 1000, self, null, Duration.THIS_TURN, null);
         return new AbilityData(Trigger.WHEN_ATTACKING, 0, null, true, null, null, List.of(boost));
     }
 
     /** [On K.O.] Draw 1 card. */
     private static AbilityData onKoDraw1() {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null);
         return new AbilityData(Trigger.ON_KO, 0, null, false, null, null, List.of(draw));
     }
 
@@ -235,7 +235,7 @@ public class GameFactory {
     private static AbilityData endTurnRestOpponent() {
         Target opp = new Target(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
                 CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectData rest = new EffectData(EffectType.REST, 0, opp, null, null);
+        EffectData rest = new EffectData(EffectType.REST, 0, opp, null, null, null);
         return new AbilityData(Trigger.END_OF_YOUR_TURN, 1, null, true, null, null, List.of(rest));
     }
 
@@ -247,7 +247,7 @@ public class GameFactory {
      * (Tier 2 item #5 — not yet wired in BattleSystem.)
      */
     private static AbilityData triggerDraw1() {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null);
         return new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
     }
 
@@ -257,7 +257,7 @@ public class GameFactory {
      */
     private static AbilityData onPlayGrantBlocker() {
         Target self = new Target(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
-        EffectData grant = new EffectData(EffectType.GRANT_KEYWORD, 0, self, null, Duration.THIS_TURN);
+        EffectData grant = new EffectData(EffectType.GRANT_KEYWORD, 0, self, null, Duration.THIS_TURN, Keyword.BLOCKER);
         return new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(grant));
     }
 
@@ -269,7 +269,7 @@ public class GameFactory {
      * Uses MODAL — a stub in EffectFactory (Tier 3 item #12).
      */
     private static AbilityData onPlayModal() {
-        EffectData modal = new EffectData(EffectType.MODAL, 0, null, null, null);
+        EffectData modal = new EffectData(EffectType.MODAL, 0, null, null, null, null);
         return new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(modal));
     }
 }

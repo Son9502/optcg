@@ -23,6 +23,7 @@ public class Card {
     protected List<Ability> abilities;
     protected int bonusPower;
     protected int bonusCost;
+    protected List<Keyword> grantedKeywords;
 
     public Card(String card_id, CardData data, Player owner) {
         this(card_id, data, owner, null);
@@ -40,6 +41,7 @@ public class Card {
         this.abilities = new ArrayList<Ability>();
         this.bonusPower = 0;
         this.bonusCost = 0;
+        this.grantedKeywords = new ArrayList<>();
     }
 
     // Accessor methods
@@ -96,10 +98,22 @@ public class Card {
         abilities.addAll(newAbilities);
     }
 
-    /** Returns true if this card has a KEYWORD ability matching {@code k}. */
+    /** Returns true if this card has a KEYWORD ability matching {@code k}, or was granted it temporarily. */
     public boolean hasKeyword(Keyword k) {
-        return abilities.stream()
-                .anyMatch(a -> a.getTriggerType() == Trigger.KEYWORD && k == a.getKeyword());
+        return grantedKeywords.contains(k)
+                || abilities.stream().anyMatch(a -> a.getTriggerType() == Trigger.KEYWORD && k == a.getKeyword());
+    }
+
+    /** Temporarily grants a keyword to this card (cleared each turn via clearGrantedKeywords). */
+    public void grantKeyword(Keyword k) {
+        if (!grantedKeywords.contains(k)) {
+            grantedKeywords.add(k);
+        }
+    }
+
+    /** Removes all temporarily granted keywords. Permanent keywords (in abilities) are unaffected. */
+    public void clearGrantedKeywords() {
+        grantedKeywords.clear();
     }
 
     // Mutator methods

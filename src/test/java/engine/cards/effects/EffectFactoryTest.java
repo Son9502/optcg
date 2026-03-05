@@ -9,6 +9,7 @@ import engine.cards.types.CardType;
 import engine.core.GameState;
 import engine.player.Player;
 import engine.zones.ZoneType;
+import engine.cards.keywords.Keyword;
 
 import java.util.List;
 
@@ -45,8 +46,8 @@ class EffectFactoryTest {
     }
 
     private EffectData eff(EffectType type, int value, Target target,
-                           Condition condition, Duration duration) {
-        return new EffectData(type, value, target, condition, duration);
+                           Condition condition, Duration duration, Keyword keyword) {
+        return new EffectData(type, value, target, condition, duration, keyword);
     }
 
     private DonCard newDon(Player owner) {
@@ -61,7 +62,7 @@ class EffectFactoryTest {
         gs.moveCard(TestUtils.makeCard(source, 2000), source.getDeck());
         gs.moveCard(TestUtils.makeCard(source, 3000), source.getDeck());
 
-        EffectFactory.build(eff(EffectType.DRAW, 2, null, null, null), null)
+        EffectFactory.build(eff(EffectType.DRAW, 2, null, null, null, null), null)
                      .apply(gs, source);
 
         assertEquals(2, source.getHand().getCards().size());
@@ -72,7 +73,7 @@ class EffectFactoryTest {
     void draw_zeroValueDefaultsToOne() {
         gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
 
-        EffectFactory.build(eff(EffectType.DRAW, 0, null, null, null), null)
+        EffectFactory.build(eff(EffectType.DRAW, 0, null, null, null, null), null)
                      .apply(gs, source);
 
         assertEquals(1, source.getHand().getCards().size());
@@ -88,7 +89,7 @@ class EffectFactoryTest {
 
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
                        CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.REST, 0, t, null, null), null)
+        EffectFactory.build(eff(EffectType.REST, 0, t, null, null, null), null)
                      .apply(gs, source);
 
         assertTrue(c.isRested());
@@ -103,7 +104,7 @@ class EffectFactoryTest {
 
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
                        CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.REST, 0, t, null, null), null)
+        EffectFactory.build(eff(EffectType.REST, 0, t, null, null, null), null)
                      .apply(gs, source);
 
         long restedCount = opponent.getField().getCards().stream()
@@ -121,7 +122,7 @@ class EffectFactoryTest {
 
         Target t = tgt(Target.TargetPlayer.SELF, ZoneType.CHARACTER,
                        CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.UNREST, 0, t, null, null), null)
+        EffectFactory.build(eff(EffectType.UNREST, 0, t, null, null, null), null)
                      .apply(gs, source);
 
         assertFalse(c.isRested());
@@ -136,7 +137,7 @@ class EffectFactoryTest {
 
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
                        CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.KO, 0, t, null, null), null)
+        EffectFactory.build(eff(EffectType.KO, 0, t, null, null, null), null)
                      .apply(gs, source);
 
         assertTrue(opponent.getField().getCards().isEmpty());
@@ -151,7 +152,7 @@ class EffectFactoryTest {
 
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
                        CardType.CHARACTER, 1, 2, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.KO, 0, t, null, null), null)
+        EffectFactory.build(eff(EffectType.KO, 0, t, null, null, null), null)
                      .apply(gs, source);
 
         assertFalse(opponent.getField().getCards().isEmpty(), "Card should NOT be KO'd (cost too high)");
@@ -165,7 +166,7 @@ class EffectFactoryTest {
         gs.moveCard(c, source.getHand());
 
         Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, null, 1, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.TRASH, 0, t, null, null), null)
+        EffectFactory.build(eff(EffectType.TRASH, 0, t, null, null, null), null)
                      .apply(gs, source);
 
         assertTrue(source.getHand().getCards().isEmpty());
@@ -181,7 +182,7 @@ class EffectFactoryTest {
 
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
                        CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.RETURN_TO_HAND, 0, t, null, null), null)
+        EffectFactory.build(eff(EffectType.RETURN_TO_HAND, 0, t, null, null, null), null)
                      .apply(gs, source);
 
         assertTrue(opponent.getField().getCards().isEmpty());
@@ -196,7 +197,7 @@ class EffectFactoryTest {
         gs.moveCard(sourceCard, source.getField());
 
         Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.POWER_BOOST, 2000, t, null, null), sourceCard)
+        EffectFactory.build(eff(EffectType.POWER_BOOST, 2000, t, null, null, null), sourceCard)
                      .apply(gs, source);
 
         assertEquals(6000, sourceCard.getTotalPower());
@@ -223,7 +224,7 @@ class EffectFactoryTest {
 
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
                        CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.POWER_REDUCE, 2000, t, null, null), null)
+        EffectFactory.build(eff(EffectType.POWER_REDUCE, 2000, t, null, null, null), null)
                      .apply(gs, source);
 
         assertEquals(3000, c.getTotalPower());
@@ -237,7 +238,7 @@ class EffectFactoryTest {
         gs.moveCard(c, source.getField());
 
         Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.COST_MODIFY, -2, t, null, null), c)
+        EffectFactory.build(eff(EffectType.COST_MODIFY, -2, t, null, null, null), c)
                      .apply(gs, source);
 
         assertEquals(1, c.getEffectiveCost(), "Cost should be 3 + (-2) = 1");
@@ -249,7 +250,7 @@ class EffectFactoryTest {
         gs.moveCard(c, source.getField());
 
         Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.COST_MODIFY, -5, t, null, null), c)
+        EffectFactory.build(eff(EffectType.COST_MODIFY, -5, t, null, null, null), c)
                      .apply(gs, source);
 
         assertEquals(0, c.getEffectiveCost(), "Effective cost should not go below 0");
@@ -274,7 +275,7 @@ class EffectFactoryTest {
         DonCard don = newDon(source);
         gs.moveCard(don, source.getDonDeck());
 
-        EffectFactory.build(eff(EffectType.ADD_DON, 1, null, null, null), null)
+        EffectFactory.build(eff(EffectType.ADD_DON, 1, null, null, null, null), null)
                      .apply(gs, source);
 
         assertEquals(1, source.getCost().getCards().size());
@@ -290,7 +291,7 @@ class EffectFactoryTest {
         don.rest();
         assertTrue(don.isRested());
 
-        EffectFactory.build(eff(EffectType.SET_DON_ACTIVE, 1, null, null, null), null)
+        EffectFactory.build(eff(EffectType.SET_DON_ACTIVE, 1, null, null, null, null), null)
                      .apply(gs, source);
 
         assertFalse(don.isRested());
@@ -303,7 +304,7 @@ class EffectFactoryTest {
         don.rest();
         don.setAttached(true);
 
-        EffectFactory.build(eff(EffectType.SET_DON_ACTIVE, 1, null, null, null), null)
+        EffectFactory.build(eff(EffectType.SET_DON_ACTIVE, 1, null, null, null, null), null)
                      .apply(gs, source);
 
         assertTrue(don.isRested(), "Attached DON!! should not be activated");
@@ -319,7 +320,7 @@ class EffectFactoryTest {
         gs.moveCard(don, source.getCost());
 
         Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.ATTACH_DON, 1, t, null, null), character)
+        EffectFactory.build(eff(EffectType.ATTACH_DON, 1, t, null, null, null), character)
                      .apply(gs, source);
 
         assertEquals(1, character.getAttachedDons().size());
@@ -336,7 +337,7 @@ class EffectFactoryTest {
         don.rest(); // DON is now rested
 
         Target t = tgt(Target.TargetPlayer.SELF, null, CardType.RESTED_DON, 1, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.ATTACH_DON, 0, t, null, null), null)
+        EffectFactory.build(eff(EffectType.ATTACH_DON, 0, t, null, null, null), null)
                      .apply(gs, source);
 
         assertTrue(don.isAttached(), "Rested DON!! should be attached");
@@ -353,7 +354,7 @@ class EffectFactoryTest {
         // don is NOT rested (default state)
 
         Target t = tgt(Target.TargetPlayer.SELF, null, CardType.RESTED_DON, 1, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.ATTACH_DON, 0, t, null, null), null)
+        EffectFactory.build(eff(EffectType.ATTACH_DON, 0, t, null, null, null), null)
                      .apply(gs, source);
 
         assertFalse(don.isAttached(), "Active DON!! should not be attached by a RESTED_DON filter");
@@ -370,7 +371,7 @@ class EffectFactoryTest {
         // don is NOT rested (active) — matches ACTIVE_DON filter
 
         Target t = tgt(Target.TargetPlayer.SELF, null, CardType.ACTIVE_DON, 1, 0, 0, 0, 0);
-        EffectFactory.build(eff(EffectType.ATTACH_DON, 0, t, null, null), null)
+        EffectFactory.build(eff(EffectType.ATTACH_DON, 0, t, null, null, null), null)
                      .apply(gs, source);
 
         assertTrue(don.isAttached(), "Active DON!! should be attached by ACTIVE_DON filter");
@@ -384,7 +385,7 @@ class EffectFactoryTest {
         Card c = TestUtils.makeCard(source, 1000);
         gs.moveCard(c, source.getDeck());
 
-        EffectFactory.build(eff(EffectType.ADD_LIFE, 1, null, null, null), null)
+        EffectFactory.build(eff(EffectType.ADD_LIFE, 1, null, null, null, null), null)
                      .apply(gs, source);
 
         assertEquals(1, source.getLife().getCards().size());
@@ -400,7 +401,7 @@ class EffectFactoryTest {
         sourceCard.rest();
         gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
 
-        EffectFactory.build(eff(EffectType.DRAW, 1, null, Condition.IF_RESTED, null), sourceCard)
+        EffectFactory.build(eff(EffectType.DRAW, 1, null, Condition.IF_RESTED, null, null), sourceCard)
                      .apply(gs, source);
 
         assertEquals(1, source.getHand().getCards().size());
@@ -413,7 +414,7 @@ class EffectFactoryTest {
         assertFalse(sourceCard.isRested());
         gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
 
-        EffectFactory.build(eff(EffectType.DRAW, 1, null, Condition.IF_RESTED, null), sourceCard)
+        EffectFactory.build(eff(EffectType.DRAW, 1, null, Condition.IF_RESTED, null, null), sourceCard)
                      .apply(gs, source);
 
         assertTrue(source.getHand().getCards().isEmpty());
@@ -423,7 +424,7 @@ class EffectFactoryTest {
     void condition_null_alwaysFires() {
         gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
 
-        EffectFactory.build(eff(EffectType.DRAW, 1, null, null, null), null)
+        EffectFactory.build(eff(EffectType.DRAW, 1, null, null, null, null), null)
                      .apply(gs, source);
 
         assertEquals(1, source.getHand().getCards().size());
@@ -433,21 +434,21 @@ class EffectFactoryTest {
 
     @Test
     void nullEffectType_doesNotThrow() {
-        EffectData e = new EffectData(null, 0, null, null, null);
+        EffectData e = new EffectData(null, 0, null, null, null, null);
         assertDoesNotThrow(() -> EffectFactory.build(e, null).apply(gs, source));
     }
 
     @Test
     void stubEffect_costModify_isNoOp() {
         assertDoesNotThrow(() ->
-            EffectFactory.build(eff(EffectType.COST_MODIFY, -2, null, null, null), null)
+            EffectFactory.build(eff(EffectType.COST_MODIFY, -2, null, null, null, null), null)
                          .apply(gs, source));
     }
 
     @Test
     void stubEffect_grantKeyword_isNoOp() {
         assertDoesNotThrow(() ->
-            EffectFactory.build(eff(EffectType.GRANT_KEYWORD, 0, null, null, null), null)
+            EffectFactory.build(eff(EffectType.GRANT_KEYWORD, 0, null, null, null, null), null)
                          .apply(gs, source));
     }
 
@@ -475,12 +476,26 @@ class EffectFactoryTest {
         // KO up to 1 of opponent's Characters
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER,
                 1, 0, 0, 0, 0);
-        EffectData e = eff(EffectType.KO, 0, t, null, null);
+        EffectData e = eff(EffectType.KO, 0, t, null, null, null);
         EffectFactory.build(e, null).apply(gs, source);
 
         // c1 was chosen by the selector and KO'd; c2 survives
         assertFalse(opponent.getField().getCards().contains(c1), "c1 should be KO'd");
         assertTrue(opponent.getField().getCards().contains(c2),  "c2 should survive");
         assertTrue(opponent.getTrash().getCards().contains(c1),  "c1 should be in trash");
+    }
+    // -- Grant Keyword ─────────────────────────────────────────────────────────────
+
+    @Test
+    void grantKeyword_thisCard() {
+        Card sourceCard = TestUtils.makeCard(source, 3000);
+        gs.moveCard(sourceCard, source.getField());
+        assertFalse(sourceCard.hasKeyword(Keyword.BLOCKER));
+        Target t = tgt(Target.TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 0, 0, 0, 0, 0);
+        EffectData e = eff(EffectType.GRANT_KEYWORD, 0, t, null, Duration.THIS_TURN, Keyword.BLOCKER);
+        EffectFactory.build(e, sourceCard).apply(gs, source);
+        assertTrue(sourceCard.hasKeyword(Keyword.BLOCKER));
+        sourceCard.clearGrantedKeywords();
+        assertFalse(sourceCard.hasKeyword(Keyword.BLOCKER), "Granted keyword should be cleared after clearGrantedKeywords()");
     }
 }

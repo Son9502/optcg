@@ -367,7 +367,7 @@ public class BattleHandlerTest {
         // (the draw from Trigger)
         // Trigger card should be moved to trash after being drawn to hand and triggering, so assert that as well
         // Assert: p2.getLife().size() == 0
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null);
         AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
         Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
         p2.getLife().add(triggerCard);
@@ -399,7 +399,7 @@ public class BattleHandlerTest {
     @Test
     void noTriggerWhenBanished(){
         Card banishCard = TestUtils.makeCardWithKeyword(p1, 8000, Keyword.BANISH);  
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null,null);
         AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
         Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
         p2.getLife().add(triggerCard);
@@ -414,7 +414,7 @@ public class BattleHandlerTest {
 
     @Test
     void noTriggerifNotActivated() {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null,null);
         AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
         Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
         p2.getLife().add(triggerCard);
@@ -428,4 +428,5 @@ public class BattleHandlerTest {
         assertEquals(0, p2.getTrash().size()); 
 
     }
+    
 }

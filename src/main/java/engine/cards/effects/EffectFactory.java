@@ -52,11 +52,16 @@ public class EffectFactory {
                 case ADD_LIFE     -> applyAddLife(effectData, gameState, source);
                 case COST_MODIFY  -> resolveTargets(effectData, gameState, source, sourceCard)
                                          .forEach(c -> c.addCostModifier(effectData.value()));
-
+                case SHUFFLE_DECK -> sourceCard.getOwner().getDeck().shuffle();
+                case GRANT_KEYWORD -> {
+                    if (effectData.keyword() != null) {
+                        resolveTargets(effectData, gameState, source, sourceCard)
+                                .forEach(c -> c.grantKeyword(effectData.keyword()));
+                    }
+                }
                 // Phase-2 stubs — no-op until implemented
-                case GRANT_KEYWORD,
-                     PREVENT_ATTACK, PREVENT_BLOCK, PREVENT_KO, NEGATE,
-                     MODAL, SEARCH_DECK, SHUFFLE_DECK,
+                case PREVENT_ATTACK, PREVENT_BLOCK, PREVENT_KO, NEGATE,
+                     MODAL, SEARCH_DECK,
                      MOVE_TO_BOTTOM_DECK, MOVE_TO_TOP_DECK, PLAY_CARD -> {}
             }
         };
