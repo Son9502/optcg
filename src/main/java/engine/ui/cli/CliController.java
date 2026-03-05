@@ -124,14 +124,15 @@ public class CliController {
      * string if color is null.
      */
     private String ansiCode(Color color) {
-        if (color == null) return "";
+        if (color == null)
+            return "";
         return switch (color) {
-            case Red    -> RED;
-            case Green  -> GREEN;
-            case Blue   -> BLUE;
+            case Red -> RED;
+            case Green -> GREEN;
+            case Blue -> BLUE;
             case Yellow -> YELLOW;
             case Purple -> PURPLE;
-            case Black  -> BLACK;
+            case Black -> BLACK;
         };
     }
 
@@ -143,8 +144,10 @@ public class CliController {
      * each letter between the two codes).
      */
     private String colorize(String text, List<Color> colors) {
-        if (colors.isEmpty()) return text;
-        if (colors.size() == 1) return colorize(text, colors.get(0));
+        if (colors.isEmpty())
+            return text;
+        if (colors.size() == 1)
+            return colorize(text, colors.get(0));
         String[] codes = colors.stream().map(this::ansiCode).toArray(String[]::new);
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < text.length(); i++) {
@@ -159,8 +162,10 @@ public class CliController {
      * each character is also rendered in bold.
      */
     private String boldColorize(String text, List<Color> colors) {
-        if (colors.isEmpty()) return boldColorize(text, (Color) null);
-        if (colors.size() == 1) return boldColorize(text, colors.get(0));
+        if (colors.isEmpty())
+            return boldColorize(text, (Color) null);
+        if (colors.size() == 1)
+            return boldColorize(text, colors.get(0));
         String[] codes = colors.stream().map(c -> BOLD + ansiCode(c)).toArray(String[]::new);
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < text.length(); i++) {
@@ -172,19 +177,22 @@ public class CliController {
     /**
      * Returns a single-line ability/effect description for {@code card}.
      *
-     * <p>Priority order:
+     * <p>
+     * Priority order:
      * <ol>
-     *   <li>The card's {@code description} field (set from JSON or the GameFactory
-     *       ability text) — used for all real cards and named test cards.</li>
-     *   <li>A bracketed list of keyword abilities derived from the runtime ability
-     *       list — used for generic test cards whose description is empty.</li>
-     *   <li>Empty string — no abilities, nothing printed.</li>
+     * <li>The card's {@code description} field (set from JSON or the GameFactory
+     * ability text) — used for all real cards and named test cards.</li>
+     * <li>A bracketed list of keyword abilities derived from the runtime ability
+     * list — used for generic test cards whose description is empty.</li>
+     * <li>Empty string — no abilities, nothing printed.</li>
      * </ol>
      */
     private String cardAbilityLine(Card card) {
-        if (card.getData() == null) return "";
+        if (card.getData() == null)
+            return "";
         String desc = card.getData().description();
-        if (desc != null && !desc.isBlank()) return desc;
+        if (desc != null && !desc.isBlank())
+            return desc;
         // Fall back: format keyword abilities (e.g. "[Rush]", "[Blocker]")
         return card.getAbilities().stream()
                 .filter(a -> a.getTriggerType() == Trigger.KEYWORD && a.getKeyword() != null)
@@ -192,7 +200,27 @@ public class CliController {
                 .collect(Collectors.joining(" "));
     }
 
-    /** Formats a Keyword enum value as a bracket tag, e.g. DOUBLE_ATTACK → "[Double Attack]". */
+    /**
+     * Returns a single-line trigger description for {@code card}, showing all
+     * TRIGGER abilities.
+     * 
+     * @param card The card whose trigger abilities to format. If the card has no
+     *             TRIGGER abilities, returns an empty string.
+     * @return A string describing the card's TRIGGER abilities, concatenated with "
+     *         | " if there are multiple. Returns an empty string if the card has no
+     *         TRIGGER abilities or if card data is null.
+     */
+    private String cardTriggerLine(Card card) {
+        if (card.getData() == null) return "";
+        boolean hasTrigger = card.getAbilities().stream()
+                .anyMatch(a -> a.getTriggerType() == Trigger.TRIGGER);
+        return hasTrigger ? card.getData().description() : "";
+    }
+
+    /**
+     * Formats a Keyword enum value as a bracket tag, e.g. DOUBLE_ATTACK → "[Double
+     * Attack]".
+     */
     private String formatKeyword(Keyword k) {
         String raw = k.name().replace('_', ' ').toLowerCase();
         return "[" + Character.toUpperCase(raw.charAt(0)) + raw.substring(1) + "]";
@@ -493,8 +521,8 @@ public class CliController {
                     attachDon(currentPlayer);
                     break;
                 // case 7: Use Leader's Ability — stub, uncomment when ACTIVATED_MAIN is wired
-                //     System.out.println("Leader ability not yet implemented.");
-                //     break;
+                // System.out.println("Leader ability not yet implemented.");
+                // break;
                 case 7:
                     finished = true;
                     turnManager.advancePhase();
@@ -571,7 +599,8 @@ public class CliController {
             }
         }
 
-        // Step 2: counter window against the final target (loop allows multiple counters)
+        // Step 2: counter window against the final target (loop allows multiple
+        // counters)
         List<Card> counters = battleSystem.getValidCounters(otherPlayer);
         while (!counters.isEmpty() && inputHandler.confirm("Play a counter card?")) {
             Card counterCard = selectCard(counters, "Counter card: ");
@@ -587,13 +616,66 @@ public class CliController {
         boolean targetIsLeader = target instanceof Leader;
         int lifesBefore = targetIsLeader ? target.getOwner().getLife().size() : 0;
 
-        battleSystem.resolve(attacker, target, counterBoost);
+        List<Card> triggers = battleSystem.resolve(attacker, target, counterBoost);
 
         int lifesAfter = targetIsLeader ? target.getOwner().getLife().size() : 0;
         boolean attackerWon = targetIsLeader
                 ? lifesAfter < lifesBefore
                 : !target.getOwner().getField().getCards().contains(target);
         announceBattleResult(attacker, target, attackerWon, lifesAfter, lifesBefore - lifesAfter);
+
+        // Step 4: trigger window for any triggers generated by the battle resolution
+        trigger(target.getOwner(), triggers);
+    }
+
+    /**
+     * Handles the trigger resolution phase after a battle, allowing the attacking
+     * player to choose whether to activate each trigger in order. This method is
+     * called from the battle system after resolving an attack, passing in any
+     * triggers that were generated by the battle resolution (e.g. "When this card
+     * destroys a character, draw a card"). The player can choose to activate each
+     * trigger immediately or skip it. This allows the player to respond to triggers
+     * in a timely manner while also giving them the option to delay or forego
+     * certain triggers based on the evolving game state.
+     * 
+     * @param player   The player who controls the triggers (usually the attacker,
+     *                 but could be the defender if they had a trigger that
+     *                 activated during defense).
+     * @param triggers The list of trigger cards generated by the battle resolution
+     *                 that the player has the option to activate. This list may be
+     *                 empty if no triggers were generated.
+     */
+    public void trigger(Player player, List<Card> triggers) {
+        if (triggers.isEmpty()) {
+            return;
+        }
+        for (Card triggerCard : triggers) {
+            String desc = cardTriggerLine(triggerCard);
+            if (!desc.isEmpty()) {
+                System.out.println("  [Trigger] " + WHITE + desc + RESET);
+            }
+            boolean proceed = inputHandler.confirm("Activate trigger?");
+            if (proceed) {
+                announceTrigger(player, triggerCard);
+                battleSystem.resolveTrigger(player, triggerCard);
+            } else {
+                System.out.println("  Trigger skipped.");
+            }
+        }
+    }
+
+    /**
+     * Printed when a player chooses to activate a [Trigger] ability revealed
+     * from their life area.
+     *
+     * @param player      the player activating the trigger
+     * @param triggerCard the life card whose [Trigger] ability is firing
+     */
+    public void announceTrigger(Player player, Card triggerCard) {
+        String name = boldColorize(triggerCard.getData().name(), triggerCard.getData().colors());
+        String desc = cardTriggerLine(triggerCard);
+        System.out.println("  → " + player.getName() + " activates " + name
+                + "'s [Trigger]" + (desc.isEmpty() ? "!" : ": " + WHITE + desc + RESET));
     }
 
     /**
@@ -718,7 +800,8 @@ public class CliController {
      * {@code EffectFactory} when an ability effect needs the player to pick
      * targets from a filtered pool (e.g. "K.O. 1 of your opponent's Characters").
      *
-     * <p>Loops up to {@code count} times, each time calling {@link #selectCard}
+     * <p>
+     * Loops up to {@code count} times, each time calling {@link #selectCard}
      * to present the remaining candidates. The player may cancel (enter 0) at any
      * point, which stops selection early (useful for optional "up to N" effects).
      */
@@ -728,7 +811,8 @@ public class CliController {
         for (int i = 0; i < count && !remaining.isEmpty(); i++) {
             String p = count > 1 ? prompt + " (" + (i + 1) + "/" + count + ")" : prompt;
             Card card = selectCard(remaining, p);
-            if (card == null) break; // player cancelled (entered 0)
+            if (card == null)
+                break; // player cancelled (entered 0)
             chosen.add(card);
             remaining.remove(card);
         }
@@ -736,7 +820,7 @@ public class CliController {
     }
 
     // -------------------------------------------------------------------------
-    // Game-event announcements  (called by GameEngine — keeps System.out out of
+    // Game-event announcements (called by GameEngine — keeps System.out out of
     // the engine layer)
     // -------------------------------------------------------------------------
 
@@ -808,19 +892,25 @@ public class CliController {
     }
 
     /**
-     * Printed after {@code BattleSystem.resolve()} finishes, summarising the outcome.
+     * Printed after {@code BattleSystem.resolve()} finishes, summarising the
+     * outcome.
      *
-     * <p>State is observed by the caller ({@link #defend}) before and after resolve
+     * <p>
+     * State is observed by the caller ({@link #defend}) before and after resolve
      * so that the method needs no access to BattleSystem internals.
      *
-     * @param attacker        the attacking card
-     * @param target          the card that was ultimately attacked (may be a blocker)
-     * @param attackerWon     true if the attacker's power met or exceeded the defender's
-     * @param defenderLifeAfter life count of the target's owner after resolve (0 for Characters)
-     * @param lifesTaken      how many life cards were taken this attack (0, 1, or 2 for DOUBLE_ATTACK)
+     * @param attacker          the attacking card
+     * @param target            the card that was ultimately attacked (may be a
+     *                          blocker)
+     * @param attackerWon       true if the attacker's power met or exceeded the
+     *                          defender's
+     * @param defenderLifeAfter life count of the target's owner after resolve (0
+     *                          for Characters)
+     * @param lifesTaken        how many life cards were taken this attack (0, 1, or
+     *                          2 for DOUBLE_ATTACK)
      */
     public void announceBattleResult(Card attacker, Card target,
-                                     boolean attackerWon, int defenderLifeAfter, int lifesTaken) {
+            boolean attackerWon, int defenderLifeAfter, int lifesTaken) {
         String tgtName = colorize(target.getData().name(), target.getData().colors());
         String atkName = boldColorize(attacker.getData().name(), attacker.getData().colors());
         if (!attackerWon) {

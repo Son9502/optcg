@@ -163,6 +163,21 @@ public class BattleSystem {
     }
 
     /**
+     * Simulates activating a trigger ability by moving the trigger card to the
+     * player's hand and then resolving the trigger.
+     * Used by BattleSystem trigger tests to test the effect of a trigger ability
+     * when it is
+     * 
+     * @param owner       The player who owns the trigger card.
+     * @param triggerCard The card with the trigger ability to activate.
+     */
+    public void resolveTrigger(Player owner, Card triggerCard) {
+        AbilityManager abilityManager = gameState.getAbilityManager();
+        abilityManager.dispatch(Trigger.TRIGGER, triggerCard, owner);
+        gameState.trash(owner, triggerCard);
+    }
+
+    /**
      * Resolves a battle between an attacker and a target. Compares the attacker's
      * effective power against the target's effective power plus any counter boost.
      * If the
@@ -174,9 +189,11 @@ public class BattleSystem {
      * @param target       The defending card.
      * @param counterBoost Additional power added to the defender by counters.
      */
-    public void resolve(Card attacker, Card target, int counterBoost) {
-        // Fire WHEN_ATTACKING before the attacker rests (effects happen on attack declaration)
+    public List<Card> resolve(Card attacker, Card target, int counterBoost) {
+        // Fire WHEN_ATTACKING before the attacker rests (effects happen on attack
+        // declaration)
         AbilityManager am = gameState.getAbilityManager();
+        List<Card> lives = new ArrayList<>();
         if (am != null) {
             am.dispatch(Trigger.WHEN_ATTACKING, attacker, attacker.getOwner());
         }
@@ -184,21 +201,22 @@ public class BattleSystem {
 
         int attackerPower = getEffectivePower(attacker);
         int defenderPower = getEffectivePower(target) + counterBoost;
-
         if (attackerPower >= defenderPower) {
             Player targetOwner = target.getOwner();
             if (target instanceof Leader) {
                 boolean banish = attacker.hasKeyword(Keyword.BANISH);
                 if (banish) {
-                    gameState.removeLifeBanished(targetOwner);
+                    gameState.banishLife(targetOwner);
                 } else {
-                    gameState.removeLife(targetOwner);
+                    Card removedCard = gameState.removeLife(targetOwner);
+                    lives.add(removedCard);
                 }
                 if (attacker.hasKeyword(Keyword.DOUBLE_ATTACK)) {
                     if (banish) {
-                        gameState.removeLifeBanished(targetOwner);
+                        gameState.banishLife(targetOwner);
                     } else {
-                        gameState.removeLife(targetOwner);
+                        Card removedCard = gameState.removeLife(targetOwner);
+                        lives.add(removedCard);
                     }
                 }
             } else {
@@ -208,5 +226,6 @@ public class BattleSystem {
             }
         }
         // If attacker power < defender power, attack fails — no consequence
+        return lives;
     }
 }

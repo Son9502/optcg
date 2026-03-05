@@ -13,7 +13,7 @@
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | 4 | `conditionValue` in EffectData + parser extraction | pending | IF_LIFE_COUNT etc. always return true currently |
-| 5 | Life card [Trigger] effect | pending | BattleSystem takes life but doesn't fire Trigger.TRIGGER |
+| 5 | Life card [Trigger] effect | done | `BattleSystem.resolve()` returns `List<Card>` triggers; `resolveTrigger(Player, Card)` dispatches + trashes; `CliController.trigger()` offers player choice; BANISH path skips trigger (card → trash); 228 tests green |
 | 6 | `SHUFFLE_DECK` effect | pending | Trivial; needed by SEARCH_DECK |
 | 7 | `GRANT_KEYWORD` effect | pending | Runtime keyword grant (e.g. gains [Rush] until end of turn) |
 | 8 | `SEARCH_DECK` effect | pending | Look top N, choose, rest to bottom |
@@ -43,6 +43,6 @@
 - `WHEN_ATTACKING` → `BattleSystem` after attacker is declared
 - `ON_KO` → `GameState.trash()` when source was on field (CHARACTER zone)
 - `END_OF_YOUR_TURN` / `END_OF_OPPONENTS_TURN` → `TurnManager.endTurn()` / `advancePhase(END)`
-- `TRIGGER` → `BattleSystem.takeLifeDamage()` when a life card is revealed
+- `TRIGGER` → `BattleSystem.resolveTrigger(Player, Card)` — called by `CliController.trigger()` after player confirms; card trashed post-effect
 - `ACTIVATED_MAIN` → player activates manually in CliController (spends DON cost first)
 - `OPPONENTS_ATTACK` → after opponent's WHEN_ATTACKING fires

@@ -24,15 +24,25 @@ public class GameState {
 
     private AbilityManager abilityManager;
 
-    public AbilityManager getAbilityManager() { return abilityManager; }
-    public void setAbilityManager(AbilityManager am) { this.abilityManager = am; }
+    public AbilityManager getAbilityManager() {
+        return abilityManager;
+    }
+
+    public void setAbilityManager(AbilityManager am) {
+        this.abilityManager = am;
+    }
 
     /** Default: auto-select first N candidates (deterministic, no player input). */
-    private TargetSelector targetSelector =
-            (candidates, count, prompt) -> candidates.subList(0, Math.min(count, candidates.size()));
+    private TargetSelector targetSelector = (candidates, count, prompt) -> candidates.subList(0,
+            Math.min(count, candidates.size()));
 
-    public TargetSelector getTargetSelector() { return targetSelector; }
-    public void setTargetSelector(TargetSelector ts) { this.targetSelector = ts; }
+    public TargetSelector getTargetSelector() {
+        return targetSelector;
+    }
+
+    public void setTargetSelector(TargetSelector ts) {
+        this.targetSelector = ts;
+    }
 
     public GameState(Player player1, Player player2) {
         this.player1 = player1;
@@ -152,6 +162,7 @@ public class GameState {
         moveCard(card, player.getTrash());
         if (wasOnField && abilityManager != null) {
             abilityManager.dispatch(Trigger.ON_KO, card, player);
+            card.detachDonCards(); // Detach any Dons from the card as it leaves the field
         }
     }
 
@@ -170,7 +181,8 @@ public class GameState {
                     + " because it is not in their hand.");
             return;
         }
-        // Pay the Don cost before moving the card (use effective cost to respect COST_MODIFY)
+        // Pay the Don cost before moving the card (use effective cost to respect
+        // COST_MODIFY)
         int cardCost = card.getEffectiveCost();
         if (cardCost > 0) {
             Cost cost = new Cost();
@@ -334,60 +346,29 @@ public class GameState {
      * and move a card from the life zone to the hand.
      * If the player has no more life points,
      * it will print a message indicating that the player has been defeated.
-     * 
+     * @return The card that was moved from the life zone to the hand, or null if the player has no more life points.
      */
-    public void removeLife(Player player) {
+    public Card removeLife(Player player) {
         if (player.getLife().isEmpty()) {
             System.out.println(player.getName() + " has no more life points and has been defeated.");
             System.out.println((player == player1 ? player2.getName() : player1.getName()) + " wins the game!");
             gameOver = true;
             winner = (player == player1) ? player2 : player1;
-            return;
+            return null;
         }
         Card cardToRemove = player.getLife().draw();
         moveCard(cardToRemove, player.getHand());
         Leader leader = player.getLeader();
         if (leader != null)
             leader.takeLife();
-    }
-
-    /**
-     * Remove a specified amount of life points from a player. This method will
-     * decrease the player's life points by the specified amount and move the
-     * corresponding number of cards from the life zone to the hand. If the player
-     * has no more life points after the removal, it will print a message indicating
-     * that the player has been defeated.
-     * 
-     * @param player The player whose life points will be removed. This is the
-     *               player who will lose life points and have cards moved from
-     *               their life zone to their hand.
-     * @param amount The number of life points to be removed. This is the amount by
-     *               which the player's life points will be decreased, and it will
-     *               determine how many cards are moved from the life zone to the
-     *               hand.
-     */
-    public void removeLife(Player player, int amount) {
-        for (int i = 0; i < amount; i++) {
-            if (player.getLife().isEmpty()) {
-                System.out.println(player.getName() + " has no more life points and has been defeated.");
-                System.out.println((player == player1 ? player2.getName() : player1.getName()) + " wins the game!");
-                gameOver = true;
-                winner = (player == player1) ? player2 : player1;
-                return;
-            }
-            Card cardToRemove = player.getLife().draw();
-            moveCard(cardToRemove, player.getHand());
-        }
-        Leader leader = player.getLeader();
-        if (leader != null)
-            leader.takeLife(amount);
+        return cardToRemove;
     }
 
     /**
      * Lose a life point with BANISH — the life card goes to trash instead of hand.
      * Game-over logic is identical to removeLife().
      */
-    public void removeLifeBanished(Player player) {
+    public void banishLife(Player player) {
         if (player.getLife().isEmpty()) {
             gameOver = true;
             winner = (player == player1) ? player2 : player1;
@@ -419,9 +400,10 @@ public class GameState {
     public void refreshField(Player player) {
         for (Card card : player.getField().getCards()) {
             card.setSummonSick(false); // Clear summon sickness at the start of each new turn
-            card.clearPowerBoosts();   // Clear end-of-turn power modifications
+            card.clearPowerBoosts(); // Clear end-of-turn power modifications
             card.clearCostModifiers(); // Clear end-of-turn cost modifications
-            for (Ability ability : card.getAbilities()) ability.resetTurn(); // Reset once-per-turn gate
+            for (Ability ability : card.getAbilities())
+                ability.resetTurn(); // Reset once-per-turn gate
             if (card.isRested()) {
                 card.activate();
             } else {
@@ -449,9 +431,10 @@ public class GameState {
         Leader leader = player.getLeader();
         if (leader == null)
             return;
-        leader.clearPowerBoosts();   // Clear end-of-turn power modifications
+        leader.clearPowerBoosts(); // Clear end-of-turn power modifications
         leader.clearCostModifiers(); // Clear end-of-turn cost modifications
-        for (Ability ability : leader.getAbilities()) ability.resetTurn(); // Reset once-per-turn gate
+        for (Ability ability : leader.getAbilities())
+            ability.resetTurn(); // Reset once-per-turn gate
         if (leader.isRested()) {
             leader.activate();
         }

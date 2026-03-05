@@ -4,7 +4,14 @@ import engine.TestUtils;
 import engine.cards.Card;
 import engine.cards.CardData;
 import engine.cards.keywords.Keyword;
+import engine.cards.types.CardType;
+import engine.cards.types.Color;
 import engine.cards.Leader;
+import engine.cards.abilities.AbilityData;
+import engine.cards.abilities.Cost;
+import engine.cards.abilities.Trigger;
+import engine.cards.effects.EffectData;
+import engine.cards.effects.EffectType;
 import engine.core.GameState;
 import engine.player.Player;
 import engine.core.TurnManager;
@@ -33,6 +40,7 @@ public class BattleHandlerTest {
         p2.setLeader(new Leader("l2", leaderData, p2));
 
         gameState = new GameState(p1, p2);
+        gameState.setAbilityManager(new engine.core.AbilityManager(gameState));
         turnManager = new TurnManager(gameState);
         battleSystem = new BattleSystem(gameState, turnManager);
     }
@@ -230,6 +238,7 @@ public class BattleHandlerTest {
         assertTrue(gameState.isGameOver());
         assertEquals(p1, gameState.getWinner());
     }
+
     // --- KeyWords Tests ---
     @Test
     /**
@@ -332,22 +341,91 @@ public class BattleHandlerTest {
         assertEquals(trashSizeBefore + 1, p2.getTrash().size()); // life → trash
     }
 
-    // TRIGGER deferred — per-card effect activation requires the effect execution
-    // system to be wired first (Phase 3). The test below is a placeholder only.
-    // @Test
-    // void testTriggerKeyword() { ... }
+    /*
+     * @Test
+     * void testRushCharacterKeyword() {
+     * // A card with RUSH_CHARACTER should be able to give other characters the
+     * // ability to attack the turn they are played
+     * Card rushCharacterCard = TestUtils.makeCardWithKeyword(p1, 0,
+     * Keyword.RUSH_CHARACTER);
+     * Card normalCharacterCard = TestUtils.makeCard(p1, 3000);
+     * p1.getHand().add(rushCharacterCard);
+     * p1.getHand().add(normalCharacterCard);
+     * gameState.playCard(p1, rushCharacterCard);
+     * gameState.playCard(p1, normalCharacterCard);
+     * assertFalse(normalCharacterCard.isSummonSick());
+     * }
+     */
 
-    /*@Test
-    void testRushCharacterKeyword() {
-        // A card with RUSH_CHARACTER should be able to give other characters the
-        // ability to attack the turn they are played
-        Card rushCharacterCard = TestUtils.makeCardWithKeyword(p1, 0, Keyword.RUSH_CHARACTER);
-        Card normalCharacterCard = TestUtils.makeCard(p1, 3000);
-        p1.getHand().add(rushCharacterCard);
-        p1.getHand().add(normalCharacterCard);
-        gameState.playCard(p1, rushCharacterCard);
-        gameState.playCard(p1, normalCharacterCard);
-        assertFalse(normalCharacterCard.isSummonSick());
+    // -- TriggerTests
+
+    @Test
+    void triggerAbilityWhenLifeLost() {
+        // Arrange: p2 has a Vivi (TRIGGER → DRAW 1) as their only life card
+        // Act: p1 attacks p2 leader; attack succeeds
+        // Assert: p2.getHand().size() == initialHandSize + 1 
+        // (the draw from Trigger)
+        // Trigger card should be moved to trash after being drawn to hand and triggering, so assert that as well
+        // Assert: p2.getLife().size() == 0
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null);
+        AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
+        Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
+        p2.getLife().add(triggerCard);
+        Card attacker = TestUtils.makeCard(p1, 6000);
+        Card deckCard = TestUtils.makeCard(p2, 2000);
+        p2.getDeck().add(deckCard);
+        List<Card> triggers = battleSystem.resolve(attacker, p2.getLeader(), 0);
+        battleSystem.resolveTrigger(p2, triggers.get(0)); // Simulate the trigger activating by moving the card to the hand and then resolving the trigger
+        assertEquals(1, p2.getHand().size()); // 1 life card + 1 draw from trigger
+        assertEquals(0, p2.getDeck().size());
+        assertEquals(0, p2.getLife().size());
+        assertEquals(1, p2.getTrash().size()); // the trigger card should be trashed after being drawn to hand and triggering
+
     }
-    */
+
+    @Test
+    void noTriggerAbilityWhenCardPlayed() {
+        // Arrange: p2 has a plain Character as their only life card
+        // Act: p1 attacks p2 leader; attack succeeds
+        // Assert: p2.getHand().size() == initialHandSize + 1 (only the life card)
+        Card nonTriggerCard = TestUtils.makeCard(p2, 3000);
+        p2.getLife().add(nonTriggerCard);
+        Card attacker = TestUtils.makeCard(p1, 6000);
+        battleSystem.resolve(attacker, p2.getLeader(), 0);
+        assertEquals(1, p2.getHand().size()); // only the life card,
+        assertEquals(0, p2.getLife().size());
+    }
+
+    @Test
+    void noTriggerWhenBanished(){
+        Card banishCard = TestUtils.makeCardWithKeyword(p1, 8000, Keyword.BANISH);  
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null);
+        AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
+        Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
+        p2.getLife().add(triggerCard);
+        Card deckCard = TestUtils.makeCard(p2, 2000);
+        p2.getDeck().add(deckCard);
+        battleSystem.resolve(banishCard, p2.getLeader(), 0);
+        assertEquals(0, p2.getHand().size()); // only the life card,
+        assertEquals(0, p2.getLife().size());
+        assertEquals(1, p2.getDeck().size()); // the draw from trigger did not occur
+        assertEquals(1, p2.getTrash().size()); // the banished card should be in the trash
+    }
+
+    @Test
+    void noTriggerifNotActivated() {
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null);
+        AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
+        Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
+        p2.getLife().add(triggerCard);
+        Card attacker = TestUtils.makeCard(p1, 6000);
+        Card deckCard = TestUtils.makeCard(p2, 2000);
+        p2.getDeck().add(deckCard);
+        battleSystem.resolve(attacker, p2.getLeader(), 0);
+        assertEquals(1, p2.getHand().size()); // 1 life card + 1 draw from trigger
+        assertEquals(1, p2.getDeck().size());
+        assertEquals(0, p2.getLife().size());
+        assertEquals(0, p2.getTrash().size()); 
+
+    }
 }
