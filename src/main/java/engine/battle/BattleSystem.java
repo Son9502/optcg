@@ -30,7 +30,8 @@ public class BattleSystem {
      * @return true if the card can attack, false otherwise.
      */
     public boolean canAttack(Card attacker) {
-        return !attacker.isRested() && !attacker.isSummonSick();
+        return !attacker.isRested() && !attacker.isSummonSick()
+                && !attacker.hasKeyword(Keyword.CANNOT_ATTACK);
     }
 
     /**
@@ -190,20 +191,32 @@ public class BattleSystem {
      * @param counterBoost Additional power added to the defender by counters.
      */
     public List<Card> resolve(Card attacker, Card target, int counterBoost) {
-        // Fire WHEN_ATTACKING before the attacker rests (effects happen on attack
-        // declaration)
         AbilityManager am = gameState.getAbilityManager();
         List<Card> lives = new ArrayList<>();
+
+        // CANNOT_ATTACK: abort before resting or firing any triggers
+        if (attacker.hasKeyword(Keyword.CANNOT_ATTACK)) {
+            return lives;
+        }
+
+        // Fire WHEN_ATTACKING before the attacker rests (effects happen on attack declaration)
         if (am != null) {
             am.dispatch(Trigger.WHEN_ATTACKING, attacker, attacker.getOwner());
         }
         attacker.rest();
 
+        // UNBLOCKABLE: if a Character intercepted, redirect the attack to the leader
+        Card effectiveTarget = target;
+        if (attacker.hasKeyword(Keyword.UNBLOCKABLE) && !(target instanceof Leader)) {
+            effectiveTarget = target.getOwner().getLeader();
+        }
+        if (effectiveTarget == null) return lives;
+
         int attackerPower = getEffectivePower(attacker);
-        int defenderPower = getEffectivePower(target) + counterBoost;
+        int defenderPower = getEffectivePower(effectiveTarget) + counterBoost;
         if (attackerPower >= defenderPower) {
-            Player targetOwner = target.getOwner();
-            if (target instanceof Leader) {
+            Player targetOwner = effectiveTarget.getOwner();
+            if (effectiveTarget instanceof Leader) {
                 boolean banish = attacker.hasKeyword(Keyword.BANISH);
                 if (banish) {
                     gameState.banishLife(targetOwner);
@@ -220,9 +233,11 @@ public class BattleSystem {
                     }
                 }
             } else {
-                gameState.trash(targetOwner, target);
-                // Detach any Dons from the target as it leaves the field
-                target.detachDonCards();
+                // CANNOT_KO: character survives a battle it would otherwise lose
+                if (!effectiveTarget.hasKeyword(Keyword.CANNOT_KO)) {
+                    gameState.trash(targetOwner, effectiveTarget);
+                    effectiveTarget.detachDonCards();
+                }
             }
         }
         // If attacker power < defender power, attack fails — no consequence

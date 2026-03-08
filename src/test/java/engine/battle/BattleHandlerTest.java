@@ -11,12 +11,17 @@ import engine.cards.abilities.AbilityData;
 import engine.cards.abilities.Cost;
 import engine.cards.abilities.Trigger;
 import engine.cards.effects.EffectData;
+import engine.cards.effects.EffectFactory;
 import engine.cards.effects.EffectType;
+import engine.cards.effects.Target;
+import engine.cards.effects.Target.TargetPlayer;
 import engine.core.GameState;
 import engine.player.Player;
+import engine.zones.ZoneType;
 import engine.core.TurnManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
 
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
@@ -428,5 +433,47 @@ public class BattleHandlerTest {
         assertEquals(0, p2.getTrash().size()); 
 
     }
-    
+    // -- Prevent Keywords ────────────────────────────────────────────────────────────────
+    @Test
+    void preventKo_opponentCharacter() {
+        Card defender = TestUtils.makeCard(p2, 3000);
+        p2.getField().add(defender);
+        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0);
+        EffectData e = new EffectData(EffectType.PREVENT_KO, 0, t, null, null, null);
+        EffectFactory.build(e, defender).apply(gameState, p1);
+        Card attacker = TestUtils.makeCard(p1, 4000);
+        battleSystem.resolve(attacker, defender, 0);
+        assertFalse(defender.getZone().getType() == ZoneType.TRASH, "Defender should not be sent to trash when KO is prevented");
+    }
+
+    @Test
+    void preventAttack_opponentCharacter() {
+        Card attacker = TestUtils.makeCard(p2, 4000);
+        p2.getField().add(attacker);
+        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0);
+        EffectData e = new EffectData(EffectType.PREVENT_ATTACK, 0, t, null, null, null);
+        EffectFactory.build(e, attacker).apply(gameState, p1);
+        Card defender = TestUtils.makeCard(p1, 3000);
+        p1.getField().add(defender);
+        battleSystem.resolve(attacker, defender, 0);
+        assertFalse(defender.getZone().getType() == ZoneType.TRASH, "Defender should not be sent to trash when attack is prevented");
+    }
+
+    @Test
+    void preventBlock_opponentCharacter() {
+        Card blocker = TestUtils.makeCard(p1, 8000);
+        Card attacker = TestUtils.makeCard(p2, 6000); // must exceed leader power (5000) after block redirect
+        Card lifCard = TestUtils.makeCard(p1, 0);
+        p1.getLife().add(lifCard);
+        p1.getField().add(blocker);
+        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0);
+        EffectData e = new EffectData(EffectType.PREVENT_BLOCK, 0, t, null, null, null);
+        EffectFactory.build(e, attacker).apply(gameState, p1);
+        battleSystem.resolve(attacker, blocker, 0);
+        assertFalse(blocker.getZone().getType() == ZoneType.TRASH, "Blocker should not be sent to trash when block is prevented");
+        assertTrue(p1.getHand().size() == 1, "1 life should be lost when block is prevented");
+        assertTrue(p1.getLife().size() == 0, "");
+        assertTrue(p1.getTrash().size() == 0, "Blocker should not be sent to trash when block is prevented");
+    }
+
 }

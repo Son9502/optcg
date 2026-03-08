@@ -13,7 +13,7 @@ public enum EffectType {
 
     // ── Power and cost modification ───────────────────────────────────────────
     POWER_BOOST,        // Give +N power to a Leader or Character (until end of turn or permanent)
-    POWER_REDUCE,       // Give -N power to an opponent's Character
+    POWER_REDUCE,       // Give -N power to a Leader or Character (until end of turn or permanent)
     COST_MODIFY,        // Change a Character's cost by ±N; negative = harder to target, positive = easier
 
     // ── Card movement ─────────────────────────────────────────────────────────
@@ -31,6 +31,7 @@ public enum EffectType {
 
     // ── Life zone ─────────────────────────────────────────────────────────────
     ADD_LIFE,           // Place N card(s) into a player's Life area
+    FLIP_LIFE,          // Flip N card(s) in a player's Life area (face-up <-> face-down)
 
     // ── Keyword granting ──────────────────────────────────────────────────────
     GRANT_KEYWORD,      // Give a Character a keyword (Rush, Blocker, Double Attack, etc.)

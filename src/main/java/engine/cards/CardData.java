@@ -29,7 +29,6 @@ public record CardData(
         @JsonProperty("card_power") Integer power,
         Integer life,
         @JsonProperty("counter_amount") Integer counter,
-
         @JsonProperty("market_price") Double marketPrice,
         @JsonProperty("abilities")    List<AbilityData> abilities) {
     public CardData {

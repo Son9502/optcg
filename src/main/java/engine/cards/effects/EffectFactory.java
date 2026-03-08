@@ -3,6 +3,7 @@ package engine.cards.effects;
 import engine.cards.Card;
 import engine.cards.DonCard;
 import engine.cards.abilities.Condition;
+import engine.cards.keywords.Keyword;
 import engine.cards.types.CardType;
 import engine.core.GameState;
 import engine.player.Player;
@@ -59,10 +60,19 @@ public class EffectFactory {
                                 .forEach(c -> c.grantKeyword(effectData.keyword()));
                     }
                 }
+                case MOVE_TO_TOP_DECK -> resolveTargets(effectData, gameState, source, sourceCard)
+                                             .forEach(c -> gameState.moveCard(c, c.getOwner().getDeck()));
+                case MOVE_TO_BOTTOM_DECK -> resolveTargets(effectData, gameState, source, sourceCard)
+                                             .forEach(c -> gameState.moveCardtoBottom(c, c.getOwner().getDeck()));
+                case SEARCH_DECK -> applySearchDeck(effectData, gameState, source, sourceCard);
+                case PREVENT_ATTACK -> resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> c.grantKeyword(Keyword.CANNOT_ATTACK));
+                case PREVENT_BLOCK -> resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> c.grantKeyword(Keyword.UNBLOCKABLE));
+                case PREVENT_KO -> resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> c.grantKeyword(Keyword.CANNOT_KO));
+                case PLAY_CARD -> resolveTargets(effectData, gameState, source, sourceCard)
+                                         .forEach(c -> gameState.playCardFree(source, c));
                 // Phase-2 stubs — no-op until implemented
-                case PREVENT_ATTACK, PREVENT_BLOCK, PREVENT_KO, NEGATE,
-                     MODAL, SEARCH_DECK,
-                     MOVE_TO_BOTTOM_DECK, MOVE_TO_TOP_DECK, PLAY_CARD -> {}
+                case NEGATE,
+                     MODAL, FLIP_LIFE -> {}
             }
         };
     }
@@ -259,6 +269,71 @@ public class EffectFactory {
                     attached++;
                 }
             }
+        }
+    }
+
+    /**
+     * Look at the top N cards of the source zone (DECK or LIFE), let the player
+     * select up to target.max() matching cards to add to hand, then return the
+     * rest to the TOP of the same zone in their original order.
+     *
+     * Placement of the rest (top vs bottom) is handled by a subsequent
+     * MOVE_TO_TOP_DECK or MOVE_TO_BOTTOM_DECK effect in the effect chain.
+     */
+    private static void applySearchDeck(EffectData e, GameState gs,
+                                         Player source, Card sourceCard) {
+        Target t = e.target();
+        if (t == null) return;
+
+        Player targetPlayer = (t.player() == Target.TargetPlayer.OPPONENT)
+                ? getOpponent(gs, source) : source;
+
+        ZoneType sourceZoneType = (t.zone() != null) ? t.zone() : ZoneType.DECK;
+        Zone sourceZone = getZone(targetPlayer, sourceZoneType);
+        if (sourceZone == null || sourceZone.isEmpty()) return;
+
+        // Snapshot top N cards (index 0 = top of zone)
+        List<Card> zoneCards = new ArrayList<>(sourceZone.getCards());
+        int lookCount = e.value() > 0 ? Math.min(e.value(), zoneCards.size()) : zoneCards.size();
+        List<Card> looked = new ArrayList<>(zoneCards.subList(0, lookCount));
+
+        // Temporarily remove from zone (card.getZone() becomes null)
+        for (Card c : looked) {
+            sourceZone.remove(c);
+        }
+
+        // Selectable = looked cards matching the filter
+        List<Card> selectable = looked.stream()
+                .filter(c -> matchesFilters(c, t))
+                .collect(Collectors.toList());
+
+        // Player selects up to max from selectable
+        int selectLimit = t.max() > 0 ? t.max() : selectable.size();
+        List<Card> selected;
+        if (selectable.isEmpty() || selectLimit <= 0) {
+            selected = Collections.emptyList();
+        } else if (selectable.size() > selectLimit) {
+            TargetSelector selector = gs.getTargetSelector();
+            String prompt = "Select card to add to hand (search):";
+            selected = selector != null
+                    ? new ArrayList<>(selector.select(selectable, selectLimit, prompt))
+                    : new ArrayList<>(selectable.subList(0, selectLimit));
+        } else {
+            selected = new ArrayList<>(selectable);
+        }
+
+        // Selected → hand (card.getZone() is null so moveCard skips origin.remove)
+        for (Card c : selected) {
+            gs.moveCard(c, targetPlayer.getHand());
+        }
+
+        // Rest → top of source zone in original order
+        // Add in reverse so the first card in the original order ends up on top
+        List<Card> rest = new ArrayList<>(looked);
+        rest.removeAll(selected);
+        Collections.reverse(rest);
+        for (Card c : rest) {
+            sourceZone.add(c); // addFirst; also calls card.setZone(sourceZone)
         }
     }
 
