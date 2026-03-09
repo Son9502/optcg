@@ -3,6 +3,7 @@ import engine.cards.keywords.Keyword;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import engine.cards.abilities.Condition;
+import java.util.List;
 
 public record EffectData(
     @JsonProperty("type")      EffectType type,
@@ -10,5 +11,6 @@ public record EffectData(
     @JsonProperty("target")    Target     target,
     @JsonProperty("condition") Condition  condition,
     @JsonProperty("duration")  Duration   duration,
-    @JsonProperty("keyword")   Keyword    keyword
+    @JsonProperty("keyword")   Keyword    keyword,
+    @JsonProperty("choices")   List<List<EffectData>> choices
 ) {}

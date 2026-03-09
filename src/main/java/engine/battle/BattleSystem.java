@@ -121,20 +121,35 @@ public class BattleSystem {
     /**
      * Returns all valid attack targets for the given opponent per OP TCG rules:
      * the opponent's leader is always a valid target; rested characters are also
-     * valid targets.
+     * valid targets. If the attacker has {@link Keyword#RUSH_CHARACTER}, the leader
+     * is excluded — only rested characters may be targeted.
      *
      * @param opponent The defending player.
+     * @param attacker The attacking card; may be null (falls back to no restriction).
      * @return List of cards that can legally be targeted.
      */
-    public List<Card> getValidTargets(Player opponent) {
+    public List<Card> getValidTargets(Player opponent, Card attacker) {
         List<Card> targets = new ArrayList<>();
-        targets.add(opponent.getLeader());
+        boolean rushCharOnly = attacker != null && attacker.hasKeyword(Keyword.RUSH_CHARACTER);
+        if (!rushCharOnly) {
+            targets.add(opponent.getLeader());
+        }
         for (Card card : opponent.getField().getCards()) {
             if (card.isRested()) {
                 targets.add(card);
             }
         }
         return targets;
+    }
+
+    /**
+     * Convenience overload — no attacker restriction applied.
+     *
+     * @param opponent The defending player.
+     * @return List of cards that can legally be targeted.
+     */
+    public List<Card> getValidTargets(Player opponent) {
+        return getValidTargets(opponent, null);
     }
 
     /**

@@ -34,13 +34,17 @@ import java.util.List;
  *   "Coby"   — [On K.O.] Draw 1 card
  *   "Marco"  — [DON!! x1][End of Your Turn] Rest 1 of opponent's Characters
  *
- *  Tier 2 (stub — fires once implemented):
+ *  Tier 2 (implemented):
  *   "Vivi"   — [Trigger] Draw 1 card  (life-card trigger)
  *   "Perona" — [On Play] This Character gains [Blocker] until end of turn
  *
- *  Tier 3 (stub — fires once implemented):
+ *  Tier 3 (implemented — engine picks branch 0 by default; CliController menu pending):
  *   "Kuzan"  — [On Play] Choose: Draw 2 cards. Or, return 1 opponent Character
  *              with cost 3 or less to owner's hand.
+ *
+ *  Keywords across generic tiers:
+ *   RUSH (Pirate Grunt), RUSH_CHARACTER (Pirate Scout), BLOCKER (Pirate Captain),
+ *   DOUBLE_ATTACK (Pirate Admiral), BANISH (Yonko Officer), UNBLOCKABLE (Yonko)
  */
 public class GameFactory {
 
@@ -81,9 +85,10 @@ public class GameFactory {
         String pid = owner.getPlayerId();
 
         // ── Generic Characters (31 total) ────────────────────────────────────
-        addCardsWithKeyword(deck, owner, pid + "-C1", "Pirate Grunt",      1, 1000, CardType.CHARACTER, 9, Keyword.RUSH);
-        addCards           (deck, owner, pid + "-C2", "Pirate Lieutenant", 2, 2000, CardType.CHARACTER, 6);
-        addCardsWithKeyword(deck, owner, pid + "-C3", "Pirate Captain",    3, 3000, CardType.CHARACTER, 7, Keyword.BLOCKER);
+        addCardsWithKeyword(deck, owner, pid + "-C1",  "Pirate Grunt",      1, 1000, CardType.CHARACTER, 9, Keyword.RUSH);
+        addCards           (deck, owner, pid + "-C2",  "Pirate Lieutenant", 2, 2000, CardType.CHARACTER, 5);
+        addCardsWithKeyword(deck, owner, pid + "-C2r", "Pirate Scout",      2, 2000, CardType.CHARACTER, 1, Keyword.RUSH_CHARACTER);
+        addCardsWithKeyword(deck, owner, pid + "-C3",  "Pirate Captain",    3, 3000, CardType.CHARACTER, 7, Keyword.BLOCKER);
         addCards           (deck, owner, pid + "-C4", "Pirate Commander",  4, 4000, CardType.CHARACTER, 5);
         addCardsWithKeyword(deck, owner, pid + "-C5", "Pirate Admiral",    5, 5000, CardType.CHARACTER, 2, Keyword.DOUBLE_ATTACK);
         addCardsWithKeyword(deck, owner, pid + "-C6", "Yonko Officer",     6, 6000, CardType.CHARACTER, 1, Keyword.BANISH);
@@ -211,20 +216,20 @@ public class GameFactory {
 
     /** [On Play] Draw 1 card. */
     private static AbilityData onPlayDraw1() {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
         return new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(draw));
     }
 
     /** [When Attacking] Give this Character +1000 power this turn. */
     private static AbilityData whenAttackingPowerBoost() {
         Target self = new Target(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
-        EffectData boost = new EffectData(EffectType.POWER_BOOST, 1000, self, null, Duration.THIS_TURN, null);
+        EffectData boost = new EffectData(EffectType.POWER_BOOST, 1000, self, null, Duration.THIS_TURN, null, null);
         return new AbilityData(Trigger.WHEN_ATTACKING, 0, null, true, null, null, List.of(boost));
     }
 
     /** [On K.O.] Draw 1 card. */
     private static AbilityData onKoDraw1() {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
         return new AbilityData(Trigger.ON_KO, 0, null, false, null, null, List.of(draw));
     }
 
@@ -235,7 +240,7 @@ public class GameFactory {
     private static AbilityData endTurnRestOpponent() {
         Target opp = new Target(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
                 CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectData rest = new EffectData(EffectType.REST, 0, opp, null, null, null);
+        EffectData rest = new EffectData(EffectType.REST, 0, opp, null, null, null, null);
         return new AbilityData(Trigger.END_OF_YOUR_TURN, 1, null, true, null, null, List.of(rest));
     }
 
@@ -247,7 +252,7 @@ public class GameFactory {
      * (Tier 2 item #5 — not yet wired in BattleSystem.)
      */
     private static AbilityData triggerDraw1() {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
         return new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
     }
 
@@ -257,7 +262,7 @@ public class GameFactory {
      */
     private static AbilityData onPlayGrantBlocker() {
         Target self = new Target(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
-        EffectData grant = new EffectData(EffectType.GRANT_KEYWORD, 0, self, null, Duration.THIS_TURN, Keyword.BLOCKER);
+        EffectData grant = new EffectData(EffectType.GRANT_KEYWORD, 0, self, null, Duration.THIS_TURN, Keyword.BLOCKER, null);
         return new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(grant));
     }
 
@@ -266,10 +271,19 @@ public class GameFactory {
     /**
      * [On Play] Choose one: Draw 2 cards. Or, return 1 of your opponent's
      * Characters with a cost of 3 or less to the owner's hand.
-     * Uses MODAL — a stub in EffectFactory (Tier 3 item #12).
+     * Branch 0 (default): Draw 2 cards.
+     * Branch 1: Return 1 opponent Character (cost ≤3) to hand.
+     * CliController interactive menu is pending; engine defaults to branch 0.
      */
     private static AbilityData onPlayModal() {
-        EffectData modal = new EffectData(EffectType.MODAL, 0, null, null, null, null);
+        // Branch 0: Draw 2 cards
+        EffectData draw2 = new EffectData(EffectType.DRAW, 2, null, null, null, null, null);
+        // Branch 1: Return 1 opponent Character with cost 3 or less to owner's hand
+        Target opp = new Target(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
+                CardType.CHARACTER, 1, 3, 0, 0, 0);
+        EffectData bounce = new EffectData(EffectType.RETURN_TO_HAND, 0, opp, null, null, null, null);
+        List<List<EffectData>> choices = List.of(List.of(draw2), List.of(bounce));
+        EffectData modal = new EffectData(EffectType.MODAL, 0, null, null, null, null, choices);
         return new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(modal));
     }
 }

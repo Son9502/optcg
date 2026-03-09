@@ -22,7 +22,6 @@ import engine.core.TurnManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -346,33 +345,18 @@ public class BattleHandlerTest {
         assertEquals(trashSizeBefore + 1, p2.getTrash().size()); // life → trash
     }
 
-    /*
-     * @Test
-     * void testRushCharacterKeyword() {
-     * // A card with RUSH_CHARACTER should be able to give other characters the
-     * // ability to attack the turn they are played
-     * Card rushCharacterCard = TestUtils.makeCardWithKeyword(p1, 0,
-     * Keyword.RUSH_CHARACTER);
-     * Card normalCharacterCard = TestUtils.makeCard(p1, 3000);
-     * p1.getHand().add(rushCharacterCard);
-     * p1.getHand().add(normalCharacterCard);
-     * gameState.playCard(p1, rushCharacterCard);
-     * gameState.playCard(p1, normalCharacterCard);
-     * assertFalse(normalCharacterCard.isSummonSick());
-     * }
-     */
-
     // -- TriggerTests
 
     @Test
     void triggerAbilityWhenLifeLost() {
         // Arrange: p2 has a Vivi (TRIGGER → DRAW 1) as their only life card
         // Act: p1 attacks p2 leader; attack succeeds
-        // Assert: p2.getHand().size() == initialHandSize + 1 
+        // Assert: p2.getHand().size() == initialHandSize + 1
         // (the draw from Trigger)
-        // Trigger card should be moved to trash after being drawn to hand and triggering, so assert that as well
+        // Trigger card should be moved to trash after being drawn to hand and
+        // triggering, so assert that as well
         // Assert: p2.getLife().size() == 0
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
         AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
         Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
         p2.getLife().add(triggerCard);
@@ -380,11 +364,13 @@ public class BattleHandlerTest {
         Card deckCard = TestUtils.makeCard(p2, 2000);
         p2.getDeck().add(deckCard);
         List<Card> triggers = battleSystem.resolve(attacker, p2.getLeader(), 0);
-        battleSystem.resolveTrigger(p2, triggers.get(0)); // Simulate the trigger activating by moving the card to the hand and then resolving the trigger
+        battleSystem.resolveTrigger(p2, triggers.get(0)); // Simulate the trigger activating by moving the card to the
+                                                          // hand and then resolving the trigger
         assertEquals(1, p2.getHand().size()); // 1 life card + 1 draw from trigger
         assertEquals(0, p2.getDeck().size());
         assertEquals(0, p2.getLife().size());
-        assertEquals(1, p2.getTrash().size()); // the trigger card should be trashed after being drawn to hand and triggering
+        assertEquals(1, p2.getTrash().size()); // the trigger card should be trashed after being drawn to hand and
+                                               // triggering
 
     }
 
@@ -402,9 +388,9 @@ public class BattleHandlerTest {
     }
 
     @Test
-    void noTriggerWhenBanished(){
-        Card banishCard = TestUtils.makeCardWithKeyword(p1, 8000, Keyword.BANISH);  
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null,null);
+    void noTriggerWhenBanished() {
+        Card banishCard = TestUtils.makeCardWithKeyword(p1, 8000, Keyword.BANISH);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
         AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
         Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
         p2.getLife().add(triggerCard);
@@ -419,7 +405,7 @@ public class BattleHandlerTest {
 
     @Test
     void noTriggerifNotActivated() {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null,null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
         AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
         Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
         p2.getLife().add(triggerCard);
@@ -430,20 +416,23 @@ public class BattleHandlerTest {
         assertEquals(1, p2.getHand().size()); // 1 life card + 1 draw from trigger
         assertEquals(1, p2.getDeck().size());
         assertEquals(0, p2.getLife().size());
-        assertEquals(0, p2.getTrash().size()); 
+        assertEquals(0, p2.getTrash().size());
 
     }
-    // -- Prevent Keywords ────────────────────────────────────────────────────────────────
+
+    // -- Prevent Keywords
+    // ────────────────────────────────────────────────────────────────
     @Test
     void preventKo_opponentCharacter() {
         Card defender = TestUtils.makeCard(p2, 3000);
         p2.getField().add(defender);
         Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectData e = new EffectData(EffectType.PREVENT_KO, 0, t, null, null, null);
+        EffectData e = new EffectData(EffectType.PREVENT_KO, 0, t, null, null, null, null);
         EffectFactory.build(e, defender).apply(gameState, p1);
         Card attacker = TestUtils.makeCard(p1, 4000);
         battleSystem.resolve(attacker, defender, 0);
-        assertFalse(defender.getZone().getType() == ZoneType.TRASH, "Defender should not be sent to trash when KO is prevented");
+        assertFalse(defender.getZone().getType() == ZoneType.TRASH,
+                "Defender should not be sent to trash when KO is prevented");
     }
 
     @Test
@@ -451,12 +440,13 @@ public class BattleHandlerTest {
         Card attacker = TestUtils.makeCard(p2, 4000);
         p2.getField().add(attacker);
         Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectData e = new EffectData(EffectType.PREVENT_ATTACK, 0, t, null, null, null);
+        EffectData e = new EffectData(EffectType.PREVENT_ATTACK, 0, t, null, null, null, null);
         EffectFactory.build(e, attacker).apply(gameState, p1);
         Card defender = TestUtils.makeCard(p1, 3000);
         p1.getField().add(defender);
         battleSystem.resolve(attacker, defender, 0);
-        assertFalse(defender.getZone().getType() == ZoneType.TRASH, "Defender should not be sent to trash when attack is prevented");
+        assertFalse(defender.getZone().getType() == ZoneType.TRASH,
+                "Defender should not be sent to trash when attack is prevented");
     }
 
     @Test
@@ -467,13 +457,53 @@ public class BattleHandlerTest {
         p1.getLife().add(lifCard);
         p1.getField().add(blocker);
         Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectData e = new EffectData(EffectType.PREVENT_BLOCK, 0, t, null, null, null);
+        EffectData e = new EffectData(EffectType.PREVENT_BLOCK, 0, t, null, null, null, null);
         EffectFactory.build(e, attacker).apply(gameState, p1);
         battleSystem.resolve(attacker, blocker, 0);
-        assertFalse(blocker.getZone().getType() == ZoneType.TRASH, "Blocker should not be sent to trash when block is prevented");
+        assertFalse(blocker.getZone().getType() == ZoneType.TRASH,
+                "Blocker should not be sent to trash when block is prevented");
         assertTrue(p1.getHand().size() == 1, "1 life should be lost when block is prevented");
         assertTrue(p1.getLife().size() == 0, "");
         assertTrue(p1.getTrash().size() == 0, "Blocker should not be sent to trash when block is prevented");
+    }
+
+    // -- Rush:Character Tests
+    @Test
+    void rushCharacter_notSummonSick() {
+        // A card with RUSH_CHARACTER should be able to give other characters the
+        // ability to attack the turn they are played
+        Card rushCharacterCard = TestUtils.makeCardWithKeyword(p1, 0,
+                Keyword.RUSH_CHARACTER);
+        p1.getHand().add(rushCharacterCard);
+        gameState.playCard(p1, rushCharacterCard);
+        assertFalse(rushCharacterCard.isSummonSick());
+    }
+
+    @Test
+    void rushCharacter_canAttackCharacter() {
+        // A card with RUSH_CHARACTER should be able to attack other characters the
+        // turn they are played, but not the leader
+        Card rushCharacterCard = TestUtils.makeCardWithKeyword(p1, 4000,
+                Keyword.RUSH_CHARACTER);
+        p1.getHand().add(rushCharacterCard);
+        gameState.playCard(p1, rushCharacterCard);
+        Card defender = TestUtils.makeCard(p2, 3000);
+        p2.getField().add(defender);
+        defender.rest(); // defender must be rested to be a valid target
+        List<Card> targets = battleSystem.getValidTargets(p2, rushCharacterCard);
+        assertTrue(targets.contains(defender), "Defender should be a valid target for RUSH_CHARACTER");
+    }
+
+    @Test
+    void rushCharacter_cantAttackLeader() {
+        // A card with RUSH_CHARACTER should not be able to attack the leader the turn
+        // they are played
+        Card rushCharacterCard = TestUtils.makeCardWithKeyword(p1, 4000,
+                Keyword.RUSH_CHARACTER);
+        p1.getHand().add(rushCharacterCard);
+        gameState.playCard(p1, rushCharacterCard);
+        List<Card> targets = battleSystem.getValidTargets(p2, rushCharacterCard);
+        assertFalse(targets.contains(p2.getLeader()), "Leader should not be a valid target for RUSH_CHARACTER");
     }
 
 }

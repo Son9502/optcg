@@ -70,9 +70,9 @@ public class EffectFactory {
                 case PREVENT_KO -> resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> c.grantKeyword(Keyword.CANNOT_KO));
                 case PLAY_CARD -> resolveTargets(effectData, gameState, source, sourceCard)
                                          .forEach(c -> gameState.playCardFree(source, c));
+                case MODAL -> applyModal(effectData, gameState, source, sourceCard);
                 // Phase-2 stubs — no-op until implemented
-                case NEGATE,
-                     MODAL, FLIP_LIFE -> {}
+                case NEGATE, FLIP_LIFE -> {}
             }
         };
     }
@@ -334,6 +334,21 @@ public class EffectFactory {
         Collections.reverse(rest);
         for (Card c : rest) {
             sourceZone.add(c); // addFirst; also calls card.setZone(sourceZone)
+        }
+    }
+
+    /**
+     * Present the player with the MODAL choice branches and execute the selected one.
+     */
+    private static void applyModal(EffectData e, GameState gs,
+                                    Player source, Card sourceCard) {
+        List<List<EffectData>> choices = e.choices();
+        if (choices == null || choices.isEmpty()) return;
+        ModalSelector selector = gs.getModalSelector();
+        int idx = (selector != null) ? selector.select(choices, "Choose one:") : 0;
+        idx = Math.max(0, Math.min(idx, choices.size() - 1));
+        for (EffectData sub : choices.get(idx)) {
+            build(sub, sourceCard).apply(gs, source);
         }
     }
 

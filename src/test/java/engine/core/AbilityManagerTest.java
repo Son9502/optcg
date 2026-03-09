@@ -37,14 +37,14 @@ class AbilityManagerTest {
 
     /** Ability with a single DRAW effect and configurable once-per-turn flag. */
     private Ability drawAbility(Trigger trigger, int drawCount, boolean oncePerTurn) {
-        EffectData draw = new EffectData(EffectType.DRAW, drawCount, null, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, drawCount, null, null, null, null, null);
         AbilityData data = new AbilityData(trigger, 0, null, oncePerTurn, null, null, List.of(draw));
         return new Ability(data);
     }
 
     /** Ability gated by a [DON!! xX] requirement. */
     private Ability donGatedDrawAbility(Trigger trigger, int donRequired) {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
         AbilityData data = new AbilityData(trigger, donRequired, null, false, null, null, List.of(draw));
         return new Ability(data);
     }

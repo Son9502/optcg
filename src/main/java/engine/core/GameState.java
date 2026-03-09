@@ -4,6 +4,7 @@ import engine.cards.Card;
 import engine.cards.abilities.Ability;
 import engine.cards.abilities.Cost;
 import engine.cards.abilities.Trigger;
+import engine.cards.effects.ModalSelector;
 import engine.cards.effects.TargetSelector;
 import engine.cards.keywords.Keyword;
 import engine.player.Player;
@@ -44,6 +45,17 @@ public class GameState {
         this.targetSelector = ts;
     }
 
+    /** Default: always pick branch 0 (deterministic, no player input). */
+    private ModalSelector modalSelector = (choices, prompt) -> 0;
+
+    public ModalSelector getModalSelector() {
+        return modalSelector;
+    }
+
+    public void setModalSelector(ModalSelector ms) {
+        this.modalSelector = ms;
+    }
+
     public GameState(Player player1, Player player2) {
         this.player1 = player1;
         this.player2 = player2;
@@ -69,6 +81,24 @@ public class GameState {
             origin.remove(card);
         }
         target.add(card);
+        card.setZone(target);
+    }
+
+    /**
+     * Moving the card from one Zone to another, but placing it on the bottom of the
+     * target zone instead of the top.
+     * 
+     * @param card   The card to be moved. This is the card that will be removed
+     *               from the origin zone and added to the target zone.
+     * @param target The zone to which the card will be moved. This is the new
+     *               location of the card after it is moved.
+     */
+    public void moveCardtoBottom(Card card, Zone target) {
+        Zone origin = card.getZone();
+        if (origin != null) {
+            origin.remove(card);
+        }
+        target.addBottom(card);
         card.setZone(target);
     }
 
@@ -201,7 +231,7 @@ public class GameState {
                     return;
                 }
                 targetZone = player.getField();
-                if (!card.hasKeyword(Keyword.RUSH)) {
+                if (!card.hasKeyword(Keyword.RUSH) && !card.hasKeyword(Keyword.RUSH_CHARACTER)) {
                     card.setSummonSick(true);
                 }
                 break;
@@ -217,6 +247,42 @@ public class GameState {
                 break;
             default:
                 System.out.println("Unknown card type for " + card.getData().name());
+                return;
+        }
+        moveCard(card, targetZone);
+        if (abilityManager != null) {
+            abilityManager.dispatch(Trigger.ON_PLAY, card, player);
+        }
+    }
+
+    /**
+     * Plays a card for free (no cost payment). Used by effect-driven plays such as
+     * PLAY_CARD effects. Follows the same zone-routing and ON_PLAY dispatch as
+     * {@link #playCard}, but skips cost payment and the hand-membership check
+     * (the caller's {@code resolveTargets} already located the card).
+     *
+     * @param player The player playing the card.
+     * @param card   The card to play.
+     */
+    public void playCardFree(Player player, Card card) {
+        if (card.getData() == null || card.getData().cardType() == null) return;
+        Zone targetZone;
+        switch (card.getData().cardType()) {
+            case CHARACTER:
+                if (player.getField().getCards().size() >= 5) return;
+                targetZone = player.getField();
+                if (!card.hasKeyword(Keyword.RUSH) && !card.hasKeyword(Keyword.RUSH_CHARACTER)) {
+                    card.setSummonSick(true);
+                }
+                break;
+            case EVENT:
+                targetZone = player.getTrash();
+                break;
+            case STAGE:
+                if (!player.getStage().isEmpty()) return;
+                targetZone = player.getStage();
+                break;
+            default:
                 return;
         }
         moveCard(card, targetZone);
@@ -346,7 +412,9 @@ public class GameState {
      * and move a card from the life zone to the hand.
      * If the player has no more life points,
      * it will print a message indicating that the player has been defeated.
-     * @return The card that was moved from the life zone to the hand, or null if the player has no more life points.
+     * 
+     * @return The card that was moved from the life zone to the hand, or null if
+     *         the player has no more life points.
      */
     public Card removeLife(Player player) {
         if (player.getLife().isEmpty()) {
