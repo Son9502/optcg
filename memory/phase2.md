@@ -14,21 +14,23 @@
 |---|------|--------|-------|
 | 4 | `conditionValue` in EffectData + parser extraction | pending | IF_LIFE_COUNT etc. always return true currently |
 | 5 | Life card [Trigger] effect | done | `BattleSystem.resolve()` returns `List<Card>` triggers; `resolveTrigger(Player, Card)` dispatches + trashes; `CliController.trigger()` offers player choice; BANISH path skips trigger (card → trash); 228 tests green |
-| 6 | `SHUFFLE_DECK` effect | pending | Trivial; needed by SEARCH_DECK |
-| 7 | `GRANT_KEYWORD` effect | pending | Runtime keyword grant (e.g. gains [Rush] until end of turn) |
-| 8 | `SEARCH_DECK` effect | pending | Look top N, choose, rest to bottom |
-| 9 | `MOVE_TO_TOP_DECK` / `MOVE_TO_BOTTOM_DECK` | pending | Used by search effects |
-| 10 | `PREVENT_ATTACK` / `PREVENT_KO` | pending | Flag on Card; checked in BattleSystem |
-| 11 | `PLAY_CARD` effect | pending | Play a card from hand for free |
+| 6 | `SHUFFLE_DECK` effect | done | `Deck.shuffle()` added; wired in `EffectFactory` as `sourceCard.getOwner().getDeck().shuffle()` |
+| 7 | `GRANT_KEYWORD` effect | done | `Card.grantKeyword(Keyword)`, `clearGrantedKeywords()`; `hasKeyword()` checks abilities list then grantedKeywords; `refreshField()` clears each turn; 232 tests green |
+| 8 | `SEARCH_DECK` effect | done | look top N → TargetSelector picks M → hand; rest returned to top; chained MOVE_TO_BOTTOM_DECK handles placement; LIFE zone supported via target.zone(); 240 tests green |
+| 9 | `MOVE_TO_TOP_DECK` / `MOVE_TO_BOTTOM_DECK` | done | resolveTargets → moveCard/moveCardtoBottom to c.getOwner().getDeck(); LIFE-destination deferred with MODAL |
+| 10 | `PREVENT_ATTACK` / `PREVENT_KO` | done | Implemented as temporary keywords (CANNOT_ATTACK, CANNOT_KO, CANNOT_BLOCK + UNBLOCKABLE); enforced in BattleSystem.canAttack() and resolve(); cleared by refreshField(); 246 tests green |
+| 11 | `PLAY_CARD` effect | done | `GameState.playCardFree(Player, Card)` — zone routing + ON_PLAY, no cost; `applyPlayCard` via `resolveTargets` → `playCardFree`; source zone from `target.zone()` (HAND or TRASH); 257 tests green |
+| 16 | `FLIP_LIFE` effect | pending | Flip N life cards face-up (Charlotte Pudding mechanic); requires `faceUp` state on life-zone cards |
 
 ## Tier 3 — Quality / Correctness
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 12 | `MODAL` choices in CliController | pending | Present branches, fire chosen one |
+| 12 | `MODAL` choices in CliController | done | `ModalSelector` interface; `GameState.setModalSelector()`; `applyModal()` in EffectFactory executes chosen branch; default picks idx 0; 263 tests green |
 | 13 | Multi-color card support | done | `CardData.color` → `List<Color> colors`; `ColorDeserializer` returns all tokens; `colorize()`/`boldColorize()` alternate ANSI codes per character; no MULTI_COLOR enum value needed |
 | 14 | `IF_LEADER_COLOR` condition (real check) | pending | `CardData.colors()` now available; condition evaluation still always returns true |
 | 15 | `IF_LEADER_TYPE` condition | pending | Requires leader subtype metadata on CardData |
+| 17 | Attribute filtering in `Target` + `IF_LEADER_ATTRIBUTE` condition | pending | `Attribute` enum + `CardData.attribute` already exist; `Target` needs `attribute` field; `matchesFilters()` needs attribute check; `IF_LEADER_ATTRIBUTE` in `evaluateCondition()`; every `new Target(...)` call needs a 9th arg |
 
 ## CliController — completed display work
 - All `System.out` removed from `GameEngine`; moved to dedicated announcement methods (`announcePhase`, `announceDrawPhaseResult`, `announceDonPhaseResult`, `announceAttack`, `announceBlocker`, `announceCounter`, `announceBattleResult`, `announceCardPlayed`, `announceGameOver`)
@@ -36,7 +38,7 @@
 - `formatKeyword(Keyword)`: converts enum to bracket tag (e.g. `DOUBLE_ATTACK` → `[Double Attack]`)
 - `ansiCode(Color)`: returns raw ANSI escape string; used by multi-color overloads
 - "Use Leader's Ability" menu option stubbed and commented out — uncomment when `ACTIVATED_MAIN` trigger is wired
-- `GameFactory` named ability cards: Nami (ON_PLAY draw), Sanji (WHEN_ATTACKING boost), Coby (ON_KO draw), Marco (END_OF_YOUR_TURN rest opponent), Vivi (TRIGGER stub), Perona (GRANT_KEYWORD stub), Kuzan (MODAL stub)
+- `GameFactory` named ability cards: Nami (ON_PLAY draw), Sanji (WHEN_ATTACKING boost), Coby (ON_KO draw), Marco (END_OF_YOUR_TURN rest opponent), Vivi (TRIGGER — done), Perona (GRANT_KEYWORD Blocker until end of turn — done), Kuzan (MODAL stub)
 
 ## AbilityManager — trigger dispatch points
 - `ON_PLAY` → `GameState.playCard()` after card enters zone

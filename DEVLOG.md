@@ -616,3 +616,163 @@ Generic character counts reduced proportionally (Lieutenants 9→6, Captains 9�
 - The `IF_RESTED` condition priority — checking FILTER tokens for `RESTED` before the CARD_TYPE token prevents misclassification of "if this Character is rested" as `IF_CHARACTER_COUNT`
 - The `@JsonCreator` absorb-all-cases strategy for `CardType` — reserializing compiled JSON to uppercase was rejected in favour of tolerating past and future case variation at the deserialization boundary
 - The `buildTargetNode()` null-return contract — emitting `"target": null` instead of `{}` when all targeting fields are absent, keeping compiled JSON clean for the engine's null checks
+
+---
+
+### Life card Trigger system — #5 (collab + manual tests)
+
+**Goal:** When an attack resolves and a life card is revealed, the defending player may activate a TRIGGER ability on that card.
+
+**Architecture decisions (developer):**
+
+*Return type change:* `BattleSystem.resolve()` return type changed from `void` to `List<Card>` — the revealed life cards. BANISH sends the life card to trash and returns an empty list (no trigger eligible). The caller (`CliController.defend()`) passes the list to `trigger()`.
+
+*Trigger card destination:* After a trigger activates, the card is moved to TRASH (not kept in hand). This diverges from the physical OP TCG rules but was the developer's explicit design choice for this engine.
+
+*Player identity:* `CliController.trigger()` receives the defending player (target's owner), not the attacker. An early draft incorrectly passed `attacker.getOwner()` — caught and corrected during review.
+
+**Key methods added:**
+- `BattleSystem.resolveTrigger(Player owner, Card triggerCard)` — dispatches via `AbilityManager.dispatch(Trigger.TRIGGER, ...)`, then calls `gameState.trash(owner, triggerCard)`
+- `GameState.banishLife(Player)` — routes the life card to trash, mirrors `removeLife()` game-over logic
+- `CliController.trigger(Player, List<Card>)` — loops triggers, shows effect text preview (`[Trigger] <text>`) before the confirm prompt, calls `announceTrigger()` on activation
+- `CliController.announceTrigger(Player, Card)` — prints activation announcement matching existing announce style
+
+**`cardTriggerLine()` fix:** Draft version called `a.getDescription()` on `Ability` — method doesn't exist. Fixed to use `card.getData().description()` with a `hasTrigger` guard.
+
+**Test suite for trigger (manual tests, collab fixes):**
+Developer wrote 4 new tests in `BattleHandlerTest`: `triggerAbilityWhenLifeLost`, `noTriggerAbilityWhenCardPlayed`, `noTriggerWhenBanished`, `noTriggerifNotActivated`. Multiple logic errors corrected iteratively: wrong player zone seeded, wrong attacker owner, assertion counted 1 instead of 0 for BANISH path. `setUp()` needed `gameState.setAbilityManager(new AbilityManager(gameState))` — NPE caught on first run.
+
+**Result:** 228 tests, 0 failures. `BattleHandlerTest` grew from 25 → 29.
+
+---
+
+### SHUFFLE_DECK (#6) and GRANT_KEYWORD (#7) — EffectData keyword field (manual + collab)
+
+**SHUFFLE_DECK (manual):**
+Developer added `Deck.shuffle()` (converts internal `Deque<Card>` to list, shuffles, rebuilds) and wired the case in `EffectFactory` as `sourceCard.getOwner().getDeck().shuffle()`. No test file changes needed — existing `ZoneTest.shuffle` already covered the method.
+
+**EffectData keyword field (manual):**
+Developer added `@JsonProperty("keyword") Keyword keyword` as the 6th field of the `EffectData` record. This broke 7 existing constructor calls in `GameFactory.java` — all updated with trailing `, null` (or `, Keyword.BLOCKER` for Perona). Test helper `eff()` in `EffectFactoryTest` updated to 6 args by user.
+
+**GRANT_KEYWORD (collab — test-first):**
+Developer wrote tests first (3 in `CardTest`, 2 in `EffectFactoryTest`), then implementation followed:
+
+- `Card.grantKeyword(Keyword k)` — adds to a `grantedKeywords` list (deduplicated)
+- `Card.clearGrantedKeywords()` — clears the list; permanent keywords in `abilities` survive
+- `Card.hasKeyword(Keyword k)` — checks `grantedKeywords.contains(k)` before the abilities stream; permanent keywords are still found if the runtime list is empty
+- `EffectFactory` GRANT_KEYWORD case — resolves targets via `resolveTargets()`, calls `grantKeyword(effectData.keyword())` on each
+- `GameState.refreshField()` — added `card.clearGrantedKeywords()` alongside the existing power/cost clears
+
+**Key test case (`testhasKeyword`):** Verifies that a card with a permanent `RUSH` keyword ability still returns `true` from `hasKeyword(Keyword.RUSH)` after `clearGrantedKeywords()` is called — permanent abilities must survive the clear.
+
+**Result:** 232 tests, 0 failures.
+
+---
+
+### SEARCH_DECK (#8), MOVE_TO_TOP_DECK / MOVE_TO_BOTTOM_DECK (#9) (collab — test-first)
+
+**Design decisions (developer):**
+- SEARCH_DECK source zone encoded in `target.zone()` — no new EffectData field needed; supports both DECK and LIFE as source
+- "Look top N, select up to M, return rest" is a single atomic operation: cards temporarily removed from the zone, selection delegated to `TargetSelector`, selected cards moved to hand, rest reinserted at top in original order
+- MOVE_TO_TOP_DECK and MOVE_TO_BOTTOM_DECK are separate effects (not a sub-case of SEARCH_DECK) because they appear independently in card text
+
+**Implementation:**
+- `applySearchDeck()` helper in `EffectFactory`: snapshots top N, removes them, delegates selection to `TargetSelector`, sends selected to hand, returns rest to top via `sourceZone.add()` (addFirst semantics) in reverse order
+- `MOVE_TO_TOP_DECK` → `resolveTargets()` → `gameState.moveCard(c, c.getOwner().getDeck())`
+- `MOVE_TO_BOTTOM_DECK` → `resolveTargets()` → `gameState.moveCardtoBottom(c, c.getOwner().getDeck())`
+
+**Developer constraint on rest placement:** The initial draft returned leftover cards to the bottom of the deck. Corrected to return to top in original order — this is the standard OP TCG ruling for look-and-add effects.
+
+**Result:** 240 tests, 0 failures.
+
+---
+
+### PREVENT_ATTACK / PREVENT_KO / PREVENT_BLOCK (#10) — temporary keywords (collab — test-first)
+
+**Design decision (developer):** Rather than separate enforcement paths, PREVENT effects are encoded as temporary keywords applied to the target card:
+- `PREVENT_ATTACK` → grants `CANNOT_ATTACK` keyword
+- `PREVENT_KO` → grants `CANNOT_KO` keyword
+- `PREVENT_BLOCK` → grants `UNBLOCKABLE` on the *opponent's* card (preventing them from blocking with it; reuses existing UNBLOCKABLE check in BattleSystem)
+
+All three are cleared by `refreshField()` via `clearGrantedKeywords()` each turn — no separate state to manage.
+
+**Enforcement points:**
+- `BattleSystem.canAttack()` — checks `CANNOT_ATTACK`
+- `BattleSystem.resolve()` — checks `CANNOT_KO` before KO'ing the losing card
+
+**Result:** 246 tests, 0 failures.
+
+---
+
+### PLAY_CARD (#11) — GameState.playCardFree() (collab — test-first)
+
+**Design decision (developer):** Two distinct play paths:
+- `playCard(Player, Card)` — pays DON cost, enforces hand requirement; used for normal player-initiated plays
+- `playCardFree(Player, Card)` — no cost, no hand check; used by the PLAY_CARD effect (e.g. "play a card from your trash")
+
+Source zone for `PLAY_CARD` effects is encoded in `target.zone()` (HAND or TRASH). No new EffectData field needed.
+
+**Zone routing in `playCardFree()`:**
+- `CHARACTER` → field (respects 5-card limit; sets summon sickness unless RUSH or RUSH_CHARACTER); dispatches `ON_PLAY`
+- `EVENT` → trash directly
+- `STAGE` → stage (respects 1-stage limit; replaces existing stage)
+
+**Tests written by developer (10):** fromHand_CharactertoField, eventCard_goesToTrash, stageCard_goesToStage, fromHand_NoCost (10 DON setup + rested count check), fromTrash_toField, respectsMaxCost, respectsMaxPower, respectsMinCost, respectsMinPower, fieldFull_doesNotPlay, stageFull_doesNotPlay.
+
+**Test fixes caught through iteration:**
+- `makeEventCard` / `makeStageCard` needed explicit `CardType` — `TestUtils.makeCard` has `cardType=null`; added to both local helpers and `TestUtils`
+- Two tests initially described RETURN_TO_HAND scenarios, not PLAY_CARD — deleted
+- `respectsMinPower` had `minCost=3000` instead of `minPower` in the `tgt()` call
+
+**Result:** 257 tests, 0 failures.
+
+---
+
+### RUSH_CHARACTER keyword enforcement (collab — test-first)
+
+**Design (developer):** RUSH_CHARACTER differs from RUSH in two ways:
+1. Bypasses summon sickness (same as RUSH)
+2. Restricts valid attack targets to rested Characters only — cannot attack the opponent's Leader
+
+**Implementation:**
+- `BattleSystem.getValidTargets(Player opponent, Card attacker)` — new overload: if attacker has `RUSH_CHARACTER`, excludes `opponent.getLeader()` from the target list; existing `getValidTargets(Player)` now delegates to this with `null`
+- `GameState.playCard()` + `playCardFree()` — summon-sick bypass extended to include `RUSH_CHARACTER`
+
+**Tests (3, written by developer):** `rushCharacter_notSummonSick`, `rushCharacter_canAttackCharacter` (uses `getValidTargets(p2, card)` with rested defender), `rushCharacter_cantAttackLeader` (asserts leader not in valid targets).
+
+**Key fix:** `canAttackCharacter` defender was not rested — `getValidTargets` only returns rested characters. Developer added `defender.rest()`.
+
+**Result:** 260 tests, 0 failures.
+
+---
+
+### EffectData.choices field — MODAL data model (developer)
+
+**Developer added** `@JsonProperty("choices") List<List<EffectData>> choices` as the 7th field of the `EffectData` record. Each inner `List<EffectData>` represents one branch of a choose-one effect.
+
+All existing 6-arg `new EffectData(...)` call sites updated with trailing `null` — 76 compile errors across `GameFactory`, `AbilityManagerTest`, `BattleHandlerTest`, and `EffectFactoryTest`. Fixed via targeted Edit passes and verified with `mvn test-compile`.
+
+**Design decision (developer):** A `ModalOption` wrapper class was considered and rejected — `List<List<EffectData>>` is sufficient for the engine; display labels for the CliController menu can be generated from effect data at presentation time without adding a new type.
+
+---
+
+### MODAL (#12) — EffectFactory.applyModal() (collab)
+
+**Design:**
+- `ModalSelector` functional interface: `int select(List<List<EffectData>> choices, String prompt)` — returns 0-based branch index
+- `GameState` stores a `ModalSelector` field (default: `(choices, prompt) -> 0`); getter/setter follow `TargetSelector` pattern
+- `applyModal()` in `EffectFactory`: retrieves choices from `effectData.choices()`, calls selector, clamps index, executes each `EffectData` in the selected branch via `build(sub, sourceCard).apply(gs, source)`
+
+**CliController integration:** Pending — the default selector (branch 0) is used in all CMU sessions until the interactive menu is wired.
+
+**GameFactory Kuzan update:** `onPlayModal()` now has real choices — branch 0: Draw 2; branch 1: Return 1 opponent Character (cost ≤3) to hand. Previously a no-op stub.
+
+**Tests (3, written by developer):** `modal_chooseFirst` (default → POWER_BOOST fires, DRAW does not), `modal_chooseSecond` (selector set to idx=1 → DRAW fires, POWER_BOOST does not), `modal_onlyOneChoiceFires` (default → REST fires, DRAW does not).
+
+**Key bugs caught:**
+- Incorrect `eff()` arg count on `secondOption` (tgt in condition slot instead of target slot)
+- Wrong ByteBuddy `Target` import auto-inserted by IDE — changed to `engine.cards.effects.Target`
+- `modal_chooseSecond` missing `gs.setModalSelector((c, p) -> 1)` — without it, branch 0 always fired
+- DRAW with empty deck drew 0 cards — added `TestUtils.makeCard` seeds to deck before firing
+
+**Result:** 263 tests, 0 failures.
