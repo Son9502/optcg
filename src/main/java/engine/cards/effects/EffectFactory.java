@@ -29,7 +29,7 @@ public class EffectFactory {
     public static Effect build(EffectData effectData, Card sourceCard) {
         return (gameState, source) -> {
             if (effectData == null || effectData.type() == null) return;
-            if (!evaluateCondition(effectData.condition(), gameState, source, sourceCard)) return;
+            if (!evaluateCondition(effectData.condition(), effectData.conditionValue(), gameState, source, sourceCard)) return;
 
             switch (effectData.type()) {
                 case DRAW         -> gameState.draw(source, Math.max(effectData.value(), 1));
@@ -71,16 +71,17 @@ public class EffectFactory {
                 case PLAY_CARD -> resolveTargets(effectData, gameState, source, sourceCard)
                                          .forEach(c -> gameState.playCardFree(source, c));
                 case MODAL -> applyModal(effectData, gameState, source, sourceCard);
+                case FLIP_LIFE -> applyFlipLife(effectData, gameState, source);
                 // Phase-2 stubs — no-op until implemented
-                case NEGATE, FLIP_LIFE -> {}
+                case NEGATE -> {}
             }
         };
     }
 
     // ── Condition gate ──────────────────────────────────────────────────────────
 
-    private static boolean evaluateCondition(Condition condition, GameState gs,
-                                              Player source, Card sourceCard) {
+    private static boolean evaluateCondition(Condition condition, int conditionValue,
+                                              GameState gs, Player source, Card sourceCard) {
         if (condition == null) return true;
         return switch (condition) {
             // Enforced externally by TurnManager / Ability.canActivate()
@@ -89,10 +90,19 @@ public class EffectFactory {
             case IF_YOU_DO -> true;
             // Precise: check whether the source card is currently rested
             case IF_RESTED -> sourceCard != null && sourceCard.isRested();
-            // Threshold stubs — no conditionValue in EffectData yet (Phase 2)
-            case IF_LIFE_COUNT, IF_HAND_COUNT, IF_DON_COUNT, IF_CHARACTER_COUNT -> true;
+            // Threshold conditions: check whether the relevant count meets the conditionValue
+            case IF_LIFE_COUNT        -> meetsThreshold(source.getLife().size(), conditionValue);
+            case IF_HAND_COUNT        -> meetsThreshold(source.getHand().size(), conditionValue);
+            case IF_DON_COUNT         -> meetsThreshold(source.getCost().getActive(), conditionValue);
+            case IF_CHARACTER_COUNT   -> meetsThreshold(source.getField().size(), conditionValue);
+            case IF_TRASH_COUNT       -> meetsThreshold(source.getTrash().size(), conditionValue);
+            case IF_DECK_COUNT        -> meetsThreshold(source.getDeck().size(), conditionValue);
+            case IF_FIELD_CHARACTER_COST -> source.getField().getCards().stream()
+                    .anyMatch(c -> c.getData() != null && meetsThreshold(c.getEffectiveCost(), conditionValue));
+            case IF_OPPONENT_LIFE_COUNT -> meetsThreshold(getOpponent(gs, source).getLife().size(), conditionValue);
+            case IF_OPPONENT_HAND_COUNT -> meetsThreshold(getOpponent(gs, source).getHand().size(), conditionValue);
             // Type / colour stubs — require Leader subtype metadata (Phase 2)
-            case IF_LEADER_TYPE, IF_LEADER_COLOR -> true;
+            case IF_LEADER_TYPE, IF_LEADER_COLOR, IF_FIELD_CHARACTER_TYPE -> true;
         };
     }
 
@@ -353,14 +363,58 @@ public class EffectFactory {
     }
 
     /**
-     * Draw the top N cards from the player's deck and place them in the Life area.
+     * Take the top N cards from the source zone (default: DECK) and place them in the Life area.
+     * The source zone is read from {@code e.target().zone()}; falls back to DECK if null.
      */
     private static void applyAddLife(EffectData e, GameState gs, Player source) {
+        ZoneType sourceZoneType = (e.target() != null && e.target().zone() != null)
+                ? e.target().zone() : ZoneType.DECK;
+        Zone sourceZone = getZone(source, sourceZoneType);
+        if (sourceZone == null) return;
         int count = Math.max(e.value(), 1);
         for (int i = 0; i < count; i++) {
-            if (source.getDeck().getCards().isEmpty()) break;
-            Card card = source.getDeck().draw();
+            if (sourceZone.isEmpty()) break;
+            Card card = sourceZone.remove();
             if (card != null) gs.addLife(source, card);
         }
+    }
+    /**
+     * Flip N life cards of the target player (toggle face-up ↔ face-down).
+     * N = {@code e.value()}, defaulting to 1 if zero.
+     * When a {@link TargetSelector} is registered (CLI / interactive), the player
+     * picks which cards to flip; otherwise the first N cards in the life zone are
+     * flipped automatically (fallback used by tests and AI).
+     */
+    private static void applyFlipLife(EffectData e, GameState gs, Player source) {
+        Target t = e.target();
+        Player targetPlayer = (t != null && t.player() == Target.TargetPlayer.OPPONENT)
+                ? getOpponent(gs, source) : source;
+        List<Card> lifeCards = new ArrayList<>(targetPlayer.getLife().getCards());
+        if (lifeCards.isEmpty()) return;
+
+        int count = Math.max(e.value(), 1);
+
+        List<Card> toFlip;
+        if (lifeCards.size() > count) {
+            TargetSelector selector = gs.getTargetSelector();
+            String prompt = "Choose " + count + " life card(s) to flip:";
+            toFlip = selector != null
+                    ? new ArrayList<>(selector.select(lifeCards, count, prompt))
+                    : new ArrayList<>(lifeCards.subList(0, count));
+        } else {
+            toFlip = lifeCards;
+        }
+
+        toFlip.forEach(Card::flip);
+    }
+
+    /**
+     * Helper for threshold-based conditions: checks whether the count meets the conditionValue threshold.
+     * @param count the actual count to compare against the threshold
+     * @param threshold the conditionValue from EffectData; negative means "less than -threshold", positive means "greater than or equal to threshold"
+     * @return true if the count meets the threshold condition, false otherwise
+     */
+    private static boolean meetsThreshold(int count, int threshold){
+        return threshold < 0 ? count <= -threshold : count >= threshold;
     }
 }

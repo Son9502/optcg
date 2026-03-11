@@ -356,7 +356,7 @@ public class BattleHandlerTest {
         // Trigger card should be moved to trash after being drawn to hand and
         // triggering, so assert that as well
         // Assert: p2.getLife().size() == 0
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null, null, 0);
         AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
         Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
         p2.getLife().add(triggerCard);
@@ -390,7 +390,7 @@ public class BattleHandlerTest {
     @Test
     void noTriggerWhenBanished() {
         Card banishCard = TestUtils.makeCardWithKeyword(p1, 8000, Keyword.BANISH);
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null, null, 0);
         AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
         Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
         p2.getLife().add(triggerCard);
@@ -405,7 +405,7 @@ public class BattleHandlerTest {
 
     @Test
     void noTriggerifNotActivated() {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null, null, 0);
         AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
         Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
         p2.getLife().add(triggerCard);
@@ -426,8 +426,8 @@ public class BattleHandlerTest {
     void preventKo_opponentCharacter() {
         Card defender = TestUtils.makeCard(p2, 3000);
         p2.getField().add(defender);
-        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectData e = new EffectData(EffectType.PREVENT_KO, 0, t, null, null, null, null);
+        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null);
+        EffectData e = new EffectData(EffectType.PREVENT_KO, 0, t, null, null, null, null, null, 0);
         EffectFactory.build(e, defender).apply(gameState, p1);
         Card attacker = TestUtils.makeCard(p1, 4000);
         battleSystem.resolve(attacker, defender, 0);
@@ -439,8 +439,8 @@ public class BattleHandlerTest {
     void preventAttack_opponentCharacter() {
         Card attacker = TestUtils.makeCard(p2, 4000);
         p2.getField().add(attacker);
-        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectData e = new EffectData(EffectType.PREVENT_ATTACK, 0, t, null, null, null, null);
+        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null);
+        EffectData e = new EffectData(EffectType.PREVENT_ATTACK, 0, t, null, null, null, null, null, 0);
         EffectFactory.build(e, attacker).apply(gameState, p1);
         Card defender = TestUtils.makeCard(p1, 3000);
         p1.getField().add(defender);
@@ -456,8 +456,8 @@ public class BattleHandlerTest {
         Card lifCard = TestUtils.makeCard(p1, 0);
         p1.getLife().add(lifCard);
         p1.getField().add(blocker);
-        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectData e = new EffectData(EffectType.PREVENT_BLOCK, 0, t, null, null, null, null);
+        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null);
+        EffectData e = new EffectData(EffectType.PREVENT_BLOCK, 0, t, null, null, null, null, null, 0);
         EffectFactory.build(e, attacker).apply(gameState, p1);
         battleSystem.resolve(attacker, blocker, 0);
         assertFalse(blocker.getZone().getType() == ZoneType.TRASH,

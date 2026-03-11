@@ -11,7 +11,8 @@ public record Target(
     int maxCost,
     int minCost,
     int maxPower,
-    int minPower){
+    int minPower,
+    String subtype){
         public enum TargetPlayer {
             SELF,OPPONENT,ALL,THIS_CARD
         }

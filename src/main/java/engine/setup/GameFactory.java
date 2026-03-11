@@ -133,9 +133,18 @@ public class GameFactory {
         // total characters: 31 generic + 8 T1 + 2 T2 + 1 T3 = 42
 
         // ── Events (5 total: 2+2+1) ────────────────────────────────────────
-        addCards(deck, owner, pid + "-E1", "Gomu Gomu no Pistol", 1, 0, CardType.EVENT, 2);
-        addCards(deck, owner, pid + "-E2", "Pirate's Charge",     2, 0, CardType.EVENT, 2);
-        addCards(deck, owner, pid + "-E3", "Conqueror's Haki",    4, 0, CardType.EVENT, 1);
+        // [Main] Give 1 of your Leader or Characters +2000 power this turn.
+        addAbilityCards(deck, owner, pid + "-E1", "Gomu Gomu no Pistol", 1, 0, CardType.EVENT, 2,
+                "[Main] Give 1 of your Leader or Characters +2000 power this turn.",
+                eventPowerBoost());
+        // [Main] Draw 2 cards.
+        addAbilityCards(deck, owner, pid + "-E2", "Pirate's Charge", 2, 0, CardType.EVENT, 2,
+                "[Main] Draw 2 cards.",
+                eventDraw2());
+        // [Main] K.O. up to 1 of your opponent's Characters with a cost of 5 or less.
+        addAbilityCards(deck, owner, pid + "-E3", "Conqueror's Haki", 4, 0, CardType.EVENT, 1,
+                "[Main] K.O. up to 1 of your opponent's Characters with a cost of 5 or less.",
+                eventKo());
 
         // ── Stages (3 total: 2+1) ─────────────────────────────────────────
         addCards(deck, owner, pid + "-S1", "Thousand Sunny", 1, 0, CardType.STAGE, 2);
@@ -216,20 +225,20 @@ public class GameFactory {
 
     /** [On Play] Draw 1 card. */
     private static AbilityData onPlayDraw1() {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null, null, 0);
         return new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(draw));
     }
 
     /** [When Attacking] Give this Character +1000 power this turn. */
     private static AbilityData whenAttackingPowerBoost() {
-        Target self = new Target(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
-        EffectData boost = new EffectData(EffectType.POWER_BOOST, 1000, self, null, Duration.THIS_TURN, null, null);
+        Target self = new Target(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0, null);
+        EffectData boost = new EffectData(EffectType.POWER_BOOST, 1000, self, null, null, Duration.THIS_TURN, null, null, 0);
         return new AbilityData(Trigger.WHEN_ATTACKING, 0, null, true, null, null, List.of(boost));
     }
 
     /** [On K.O.] Draw 1 card. */
     private static AbilityData onKoDraw1() {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null, null, 0);
         return new AbilityData(Trigger.ON_KO, 0, null, false, null, null, List.of(draw));
     }
 
@@ -239,8 +248,8 @@ public class GameFactory {
      */
     private static AbilityData endTurnRestOpponent() {
         Target opp = new Target(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 0, 0, 0, 0);
-        EffectData rest = new EffectData(EffectType.REST, 0, opp, null, null, null, null);
+                CardType.CHARACTER, 1, 0, 0, 0, 0, null);
+        EffectData rest = new EffectData(EffectType.REST, 0, opp, null, null, null, null, null, 0);
         return new AbilityData(Trigger.END_OF_YOUR_TURN, 1, null, true, null, null, List.of(rest));
     }
 
@@ -252,7 +261,7 @@ public class GameFactory {
      * (Tier 2 item #5 — not yet wired in BattleSystem.)
      */
     private static AbilityData triggerDraw1() {
-        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null, null, 0);
         return new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
     }
 
@@ -261,9 +270,33 @@ public class GameFactory {
      * Uses GRANT_KEYWORD — a stub in EffectFactory (Tier 2 item #7).
      */
     private static AbilityData onPlayGrantBlocker() {
-        Target self = new Target(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
-        EffectData grant = new EffectData(EffectType.GRANT_KEYWORD, 0, self, null, Duration.THIS_TURN, Keyword.BLOCKER, null);
+        Target self = new Target(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0, null);
+        EffectData grant = new EffectData(EffectType.GRANT_KEYWORD, 0, self, null, null, Duration.THIS_TURN, Keyword.BLOCKER, null, 0);
         return new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(grant));
+    }
+
+    // ── Events ──────────────────────────────────────────────────────────────
+
+    /** [Main] Give 1 of your Leader or Characters +2000 power this turn. */
+    private static AbilityData eventPowerBoost() {
+        Target self = new Target(Target.TargetPlayer.SELF, ZoneType.CHARACTER,
+                CardType.CHARACTER, 1, 0, 0, 0, 0, null);
+        EffectData boost = new EffectData(EffectType.POWER_BOOST, 2000, self, null, null, Duration.THIS_TURN, null, null, 0);
+        return new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(boost));
+    }
+
+    /** [Main] Draw 2 cards. */
+    private static AbilityData eventDraw2() {
+        EffectData draw = new EffectData(EffectType.DRAW, 2, null, null, null, null, null, null, 0);
+        return new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(draw));
+    }
+
+    /** [Main] K.O. up to 1 of your opponent's Characters with a cost of 5 or less. */
+    private static AbilityData eventKo() {
+        Target opp = new Target(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
+                CardType.CHARACTER, 1, 5, 0, 0, 0, null);
+        EffectData ko = new EffectData(EffectType.KO, 0, opp, null, null, null, null, null, 0);
+        return new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(ko));
     }
 
     // ── Tier 3 ──────────────────────────────────────────────────────────────
@@ -277,13 +310,13 @@ public class GameFactory {
      */
     private static AbilityData onPlayModal() {
         // Branch 0: Draw 2 cards
-        EffectData draw2 = new EffectData(EffectType.DRAW, 2, null, null, null, null, null);
+        EffectData draw2 = new EffectData(EffectType.DRAW, 2, null, null, null, null, null, null, 0);
         // Branch 1: Return 1 opponent Character with cost 3 or less to owner's hand
         Target opp = new Target(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 3, 0, 0, 0);
-        EffectData bounce = new EffectData(EffectType.RETURN_TO_HAND, 0, opp, null, null, null, null);
+                CardType.CHARACTER, 1, 3, 0, 0, 0, null);
+        EffectData bounce = new EffectData(EffectType.RETURN_TO_HAND, 0, opp, null, null, null, null, null, 0);
         List<List<EffectData>> choices = List.of(List.of(draw2), List.of(bounce));
-        EffectData modal = new EffectData(EffectType.MODAL, 0, null, null, null, null, choices);
+        EffectData modal = new EffectData(EffectType.MODAL, 0, null, null, null, null, null, choices, 0);
         return new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(modal));
     }
 }

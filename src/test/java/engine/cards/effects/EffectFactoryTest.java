@@ -59,12 +59,24 @@ class EffectFactoryTest {
 
     private Target tgt(Target.TargetPlayer player, ZoneType zone, CardType cardType,
             int max, int maxCost, int minCost, int maxPower, int minPower) {
-        return new Target(player, zone, cardType, max, maxCost, minCost, maxPower, minPower);
+        return new Target(player, zone, cardType, max, maxCost, minCost, maxPower, minPower, null);
+    }
+
+    private EffectData eff(EffectType type, int value, Target target, String subtype,
+            Condition condition, Duration duration, Keyword keyword, List<List<EffectData>> choices,
+            int conditionValue) {
+        return new EffectData(type, value, target, subtype, condition, duration, keyword, choices, conditionValue);
+    }
+
+    private EffectData eff(EffectType type, int value, Target target,
+            Condition condition, Duration duration, Keyword keyword, List<List<EffectData>> choices,
+            int conditionValue) {
+        return eff(type, value, target, null, condition, duration, keyword, choices, conditionValue);
     }
 
     private EffectData eff(EffectType type, int value, Target target,
             Condition condition, Duration duration, Keyword keyword, List<List<EffectData>> choices) {
-        return new EffectData(type, value, target, condition, duration, keyword, choices);
+        return eff(type, value, target, null, condition, duration, keyword, choices, 0);
     }
 
     private DonCard newDon(Player owner) {
@@ -452,7 +464,7 @@ class EffectFactoryTest {
 
     @Test
     void nullEffectType_doesNotThrow() {
-        EffectData e = new EffectData(null, 0, null, null, null, null, null);
+        EffectData e = new EffectData(null, 0, null, null, null, null, null, null, 0);
         assertDoesNotThrow(() -> EffectFactory.build(e, null).apply(gs, source));
     }
 
@@ -844,7 +856,7 @@ class EffectFactoryTest {
         List<List<EffectData>> options = List.of(
                 List.of(firstOption),
                 List.of(secondOption));
-        EffectData modal = new EffectData(EffectType.MODAL, 0, null, null, null, null, options);
+        EffectData modal = new EffectData(EffectType.MODAL, 0, null, null, null, null, null, options, 0);
         EffectFactory.build(modal, sourceCard).apply(gs, source);
         // Verify first option applied
         assertEquals(5000, sourceCard.getTotalPower(), "Source card should gain 2000 power");
@@ -865,7 +877,7 @@ class EffectFactoryTest {
         gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
         gs.moveCard(TestUtils.makeCard(source, 2000), source.getDeck());
         gs.setModalSelector((choices, prompt) -> 1); // always pick second option
-        EffectData modal = new EffectData(EffectType.MODAL, 0, null, null, null, null, options);
+        EffectData modal = new EffectData(EffectType.MODAL, 0, null, null, null, null, null, options, 0);
         Card sourceCard = makeCharCard(source, 3000, 0);
         EffectFactory.build(modal, sourceCard).apply(gs, source);
         // Verify first option applied
@@ -887,11 +899,330 @@ class EffectFactoryTest {
         List<List<EffectData>> options = List.of(
                 List.of(firstOption),
                 List.of(secondOption));
-        EffectData modal = new EffectData(EffectType.MODAL, 0, null, null, null, null, options);
+        EffectData modal = new EffectData(EffectType.MODAL, 0, null, null, null, null, null, options, 0);
         EffectFactory.build(modal, null).apply(gs, source);
         // Verify first option applied (second option should be auto-chosen since first
         // is not valid)
         assertTrue(opponentChar.isRested(), "Opponent character should be rested");
         assertEquals(0, source.getHand().getCards().size(), "No cards should be drawn");
+    }
+
+    // -- Condition Tests
+    // ────────────────────────────────────────────────────────────────
+    @Test
+    void condition_ifLifeCost_fires_when_life_low() {
+        for (int i = 0; i < 10; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        for (int i = 0; i < 2; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getLife());
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_LIFE_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw a card when life is 2 or less");
+    }
+
+    @Test
+    void condition_ifLifeCost_skips_when_life_high() {
+        for (int i = 0; i < 10; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getLife());
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_LIFE_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Should not draw a card when life is 5 or more");
+    }
+
+    @Test
+    void condition_ifOpponentLifeCost_fires_when_life_low() {
+        for (int i = 0; i < 10; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        for (int i = 0; i < 2; i++) {
+            gs.moveCard(TestUtils.makeCard(opponent, 1000), opponent.getLife());
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_LIFE_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw a card when life is 2 or less");
+
+    }
+
+    @Test
+    void condition_ifOpponentLifeCost_skips_when_life_high() {
+        for (int i = 0; i < 10; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(opponent, 1000), opponent.getLife());
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_LIFE_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Should not draw a card when life is 4 or more");
+    }
+
+    @Test
+    void condition_ifActiveDon_fires_when_active_don_low() {
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        for (int i = 0; i < 2; i++) {
+            opponent.getCost().add(newDon(opponent));
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_DON_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw a card when active Don is 2 or less");
+    }
+
+    @Test
+    void condition_ifActiveDon_skips_when_active_don_high() {
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        for (int i = 0; i < 5; i++) {
+            source.getCost().add(newDon(source)); // source has 5 active DON (> threshold of 3)
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_DON_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw a card when active Don is more than 3");
+    }
+
+    @Test
+    void condition_ifCharacterCount_fires_when_character_count_low() {
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        for (int i = 0; i < 2; i++) {
+            source.getField().add(makeCharCard(source, 3000, 0));
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_CHARACTER_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw a card when character count is 2 or less");
+
+    }
+
+    @Test
+    void condition_ifCharacterCount_skips_when_character_count_high() {
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        for (int i = 0; i < 5; i++) {
+            source.getField().add(makeCharCard(source, 3000, 0));
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_CHARACTER_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw a card when character count is 3 or more");
+    }
+
+    @Test
+    void condition_ifDeckCount_fires_when_deck_low() {
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_DECK_COUNT, null, null, null, -7);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw a card when deck count is 7 or less");
+    }
+
+    @Test
+    void condition_ifDeckCount_skips_when_deck_high() {
+        for (int i = 0; i < 10; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_DECK_COUNT, null, null, null, -7);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw a card when deck count is more than 7");
+    }
+
+    @Test
+    void condition_ifHandCount_fires_when_hand_low() {
+        for (int i = 0; i < 2; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        // source hand is empty (0 <= 3 → fires)
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_HAND_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw a card when hand count is 3 or less");
+
+    }
+
+    @Test
+    void condition_ifHandCount_skips_when_hand_high() {
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        for (int i = 0; i < 5; i++) {
+            source.getHand().add(makeCharCard(source, 3000, 0));
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_HAND_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(5, source.getHand().getCards().size(), "Shouldn't draw a card when hand count is more than 3");
+    }
+
+    @Test
+    void condition_ifOpponentHandCount_fires_when_hand_low() {
+        for (int i = 0; i < 2; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        // opponent hand is empty (0 <= 3 → fires)
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_HAND_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw a card when opponent hand count is 3 or less");
+
+    }
+
+    @Test
+    void condition_ifOpponentHandCount_skips_when_hand_high() {
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        for (int i = 0; i < 5; i++) {
+            opponent.getHand().add(makeCharCard(opponent, 3000, 0)); // opponent has 5 cards (> 3 → skips)
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_HAND_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(),
+                "Shouldn't draw a card when opponent hand count is more than 3");
+    }
+
+    @Test
+    void condition_ifCost_skips_when_cost_high() {
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        Card charCard = makeCharCard(source, 0, 5); // cost=5 on source's field (5 > 3 → skips)
+        gs.moveCard(charCard, source.getField());
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_FIELD_CHARACTER_COST, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw a card when cost is more than 3");
+    }
+
+    @Test
+    void condition_ifCost_fires_when_cost_low() {
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        Card charCard = makeCharCard(source, 0, 2); // cost=2 on source's field (2 <= 2 → fires)
+        gs.moveCard(charCard, source.getField());
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_FIELD_CHARACTER_COST, null, null, null, -2);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw a card when cost is 2 or less");
+    }
+
+    // -- flipLife Tests -------
+    @Test
+    void flipLife_topCard_becomesFaceUp() {
+        // Add 1 face-down card to life, apply FLIP_LIFE card.isFaceUp() == true
+        Card faceCard = TestUtils.makeCard(source, 1000);
+        gs.moveCard(faceCard, source.getLife());
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.FLIP_LIFE, 1, t, null, null, null, null, 0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertTrue(faceCard.isFaceUp(), "Top card of life should become face-up");
+    }
+
+    @Test
+    void flipLife_flipN_flipsOnlyN() {
+        // Add 3 life cards (all face-down), FLIP_LIFE value=2 first 2 are face-up, 3rd
+        for (int i = 0; i < 3; i++) {
+            Card faceCard = TestUtils.makeCard(source, 1000 + i);
+            gs.moveCard(faceCard, source.getLife());
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.FLIP_LIFE, 2, t, null, null, null, null, 0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        // still face-down
+        assertTrue(source.getLife().getCards().get(0).isFaceUp(), "1st card should be face-up");
+        assertTrue(source.getLife().getCards().get(1).isFaceUp(), "2nd card should be face-up");
+        assertFalse(source.getLife().getCards().get(2).isFaceUp(), "3rd card should still be face-down");
+    }
+
+    @Test
+    void flipLife_alreadyFaceUp_togglesFaceDown() {
+        // Add 1 face-up card to life, apply FLIP_LIFE card.isFaceUp() == true
+        Card faceCard = TestUtils.makeCard(source, 1000);
+        faceCard.flip(); // make it face-up
+        gs.moveCard(faceCard, source.getLife());
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.FLIP_LIFE, 1, t, null, null, null, null, 0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertFalse(faceCard.isFaceUp(), "Card should be face-down after flip");
+    }
+
+    @Test
+    void flipLife_emptyLife_isNoOp() {
+        // Empty life zone, apply FLIP_LIFE no throw, life still empty
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.FLIP_LIFE, 1, t, null, null, null, null, 0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertTrue(source.getLife().getCards().isEmpty(), "Life zone should remain empty");
+    }
+
+    @Test
+    void flipLife_value0_defaultsToOne() {
+        // Add 2 life cards, FLIP_LIFE value=0 only 1st flipped
+        for (int i = 0; i < 2; i++) {
+            Card faceCard = TestUtils.makeCard(source, 1000 + i);
+            gs.moveCard(faceCard, source.getLife());
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.FLIP_LIFE, 0, t, null, null, null, null, 0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertTrue(source.getLife().getCards().get(0).isFaceUp(), "1st card should be face-up");
+        assertFalse(source.getLife().getCards().get(1).isFaceUp(), "2nd card should still be face-down");
+    }
+
+    @Test
+    void flipLife_targetPlayer_self_vs_opponent() {
+        // FLIP_LIFE with Target.TargetPlayer.OPPONENT flips opponent's
+        // life, not source's
+        Card sourceCard = TestUtils.makeCard(source, 1000);
+        Card opponentCard = TestUtils.makeCard(opponent, 2000);
+        gs.moveCard(sourceCard, source.getLife());
+        gs.moveCard(opponentCard, opponent.getLife());
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.OPPONENT, null, null, 0, 0, 0, 0, 0);
+        EffectData effect = eff(EffectType.FLIP_LIFE, 1, t, null, null, null, null, 0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertFalse(sourceCard.isFaceUp(), "Source's life card should remain face-down");
+        assertTrue(opponentCard.isFaceUp(), "Opponent's life card should be flipped face-up");
     }
 }

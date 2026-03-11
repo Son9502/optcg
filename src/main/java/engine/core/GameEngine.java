@@ -1,5 +1,6 @@
 package engine.core;
 
+import engine.core.AbilityManager;
 import engine.core.Phase;
 import engine.history.GameHistoryManager;
 import engine.setup.GameSetup;
@@ -18,6 +19,7 @@ public class GameEngine {
         this.turnManager = new TurnManager(gameState);
         this.cliController = new CliController(gameState, turnManager);
         this.historyManager = new GameHistoryManager();
+        gameState.setAbilityManager(new AbilityManager(gameState));
     }
 
     /**

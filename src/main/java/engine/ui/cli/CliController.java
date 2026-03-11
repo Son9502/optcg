@@ -14,6 +14,9 @@ import engine.cards.Card;
 import engine.cards.DonCard;
 import engine.cards.Leader;
 import engine.cards.abilities.Trigger;
+import engine.cards.effects.EffectData;
+import engine.cards.effects.EffectType;
+import engine.cards.effects.ModalSelector;
 import engine.cards.effects.TargetSelector;
 import engine.cards.keywords.Keyword;
 import engine.cards.types.CardType;
@@ -47,6 +50,7 @@ public class CliController {
         this.turnManager = turnManager;
         this.battleSystem = new BattleSystem(gameState, turnManager);
         gameState.setTargetSelector(this::selectTargets);
+        gameState.setModalSelector(this::selectModal);
     }
 
     // -------------------------------------------------------------------------
@@ -272,20 +276,12 @@ public class CliController {
         System.out.println("=== " + boldColorize(active.getName(), activeColor)
                 + " vs " + boldColorize(opponent.getName(), opponentColor) + " ===");
 
-        // Don counts derived from cost zone (activeDon/restedDon fields are not yet
-        // updated)
-        long yourActiveDon = active.getCost().getCards().stream()
-                .filter(c -> c instanceof DonCard d && !d.isRested() && !d.isAttached()).count();
-        long yourAttachedDon = active.getCost().getCards().stream()
-                .filter(c -> c instanceof DonCard d && d.isAttached()).count();
-        long yourRestedDon = active.getCost().getCards().stream()
-                .filter(c -> c instanceof DonCard d && d.isRested()).count();
-        long oppActiveDon = opponent.getCost().getCards().stream()
-                .filter(c -> c instanceof DonCard d && !d.isRested() && !d.isAttached()).count();
-        long oppAttachedDon = opponent.getCost().getCards().stream()
-                .filter(c -> c instanceof DonCard d && d.isAttached()).count();
-        long oppRestedDon = opponent.getCost().getCards().stream()
-                .filter(c -> c instanceof DonCard d && d.isRested()).count();
+        int yourActiveDon   = active.getCost().getActive();
+        int yourAttachedDon = active.getCost().getAttached();
+        int yourRestedDon   = active.getCost().getRested();
+        int oppActiveDon    = opponent.getCost().getActive();
+        int oppAttachedDon  = opponent.getCost().getAttached();
+        int oppRestedDon    = opponent.getCost().getRested();
 
         // Stage cards
         String yourStage = active.getStage().isEmpty() ? "None"
@@ -451,6 +447,25 @@ public class CliController {
                         name, type, power, rested, dons);
             }
         }
+        // Life
+        List<Card> lifeCards = player.getLife().getCards();
+        System.out.println("  Life (" + lifeCards.size() + " cards):");
+        if (lifeCards.isEmpty()) {
+            System.out.println("    (none)");
+        } else {
+            for (Card card : lifeCards) {
+                if (card.isFaceUp() && card.getData() != null) {
+                    String name = boldColorize(card.getData().name(), card.getData().colors());
+                    String type = (card.getData().cardType() != null) ? " [" + card.getData().cardType() + "]" : "";
+                    int power = card.getBasePower();
+                    System.out.printf("    - %s%s  |  Power: %d%n", name, type, power);
+                } else {
+                    System.out.println("    - [???]");
+                }
+            }
+        }
+        // Deck (size only)
+        System.out.println("  Deck: " + player.getDeck().size() + " cards remaining");
     }
 
     // -------------------------------------------------------------------------
@@ -698,8 +713,7 @@ public class CliController {
             return;
         }
 
-        long availableDon = currentPlayer.getCost().getCards().stream()
-                .filter(c -> c instanceof DonCard && !c.isRested()).count();
+        int availableDon = currentPlayer.getCost().getActive();
 
         System.out.println("Select a card to play:");
         for (int i = 0; i < playable.size(); i++) {
@@ -760,7 +774,7 @@ public class CliController {
         // Get non-rested Dons from cost zone
         List<Card> availableDons = new ArrayList<>();
         for (Card card : currentPlayer.getCost().getCards()) {
-            if (card instanceof DonCard && !card.isRested() && !((DonCard) card).isAttached()) {
+            if (card instanceof DonCard don && !don.isRested() && !don.isAttached()) {
                 availableDons.add(card);
             }
         }
@@ -810,13 +824,99 @@ public class CliController {
         List<Card> remaining = new ArrayList<>(candidates);
         for (int i = 0; i < count && !remaining.isEmpty(); i++) {
             String p = count > 1 ? prompt + " (" + (i + 1) + "/" + count + ")" : prompt;
-            Card card = selectCard(remaining, p);
+            Card card = selectCardWithVisibility(remaining, p);
             if (card == null)
                 break; // player cancelled (entered 0)
             chosen.add(card);
             remaining.remove(card);
         }
         return chosen;
+    }
+
+    /**
+     * Like {@link #selectCard}, but respects face-down state: face-down cards are
+     * displayed as {@code [???]} so hidden-information rules are preserved when a
+     * player chooses among their life cards to flip.
+     */
+    private Card selectCardWithVisibility(List<Card> cards, String prompt) {
+        if (cards.isEmpty()) return null;
+        for (int i = 0; i < cards.size(); i++) {
+            Card card = cards.get(i);
+            String label;
+            if (!card.isFaceUp() && card.getZone() != null
+                    && card.getZone().getType() == engine.zones.ZoneType.LIFE) {
+                label = "[???]";
+            } else if (card instanceof DonCard) {
+                String raw = (card.getData() != null) ? card.getData().name() : "DON!!";
+                label = WHITE + raw + RESET;
+            } else if (card.getData() != null) {
+                label = colorize(card.getData().name(), card.getData().colors());
+            } else {
+                label = "Unknown Card";
+            }
+            System.out.printf("%d. %s%n", i + 1, label);
+        }
+        System.out.println("0. Cancel");
+        int choice = inputHandler.readInt(prompt, 0, cards.size());
+        return (choice == 0) ? null : cards.get(choice - 1);
+    }
+
+    /**
+     * Interactive {@link ModalSelector} implementation. Presents each branch as
+     * a numbered option and returns the 0-based index of the player's choice.
+     */
+    private int selectModal(List<List<EffectData>> choices, String prompt) {
+        System.out.println(prompt);
+        for (int i = 0; i < choices.size(); i++) {
+            System.out.printf("%d. %s%n", i + 1, describeBranch(choices.get(i)));
+        }
+        int choice = inputHandler.readInt("Choose: ", 1, choices.size());
+        return choice - 1;
+    }
+
+    /** Joins each effect in a branch with ", then ". */
+    private String describeBranch(List<EffectData> branch) {
+        if (branch == null || branch.isEmpty()) return "(no effect)";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < branch.size(); i++) {
+            if (i > 0) sb.append(", then ");
+            sb.append(describeEffect(branch.get(i)));
+        }
+        return sb.toString();
+    }
+
+    /** Produces a short human-readable description of a single EffectData. */
+    private String describeEffect(EffectData e) {
+        if (e == null) return "?";
+        EffectType type = e.type();
+        int val = e.value();
+        engine.cards.effects.Target tgt = e.target();
+        String player = (tgt != null && tgt.player() != null) ? tgt.player().name() : null;
+        String cardType = (tgt != null && tgt.cardType() != null) ? tgt.cardType().name().toLowerCase() : "card";
+        int max = (tgt != null) ? tgt.max() : 0;
+        int maxCost = (tgt != null) ? tgt.maxCost() : 0;
+
+        return switch (type) {
+            case DRAW            -> "Draw " + val + " card" + (val == 1 ? "" : "s");
+            case TRASH           -> "Trash " + val + " card" + (val == 1 ? "" : "s");
+            case REST            -> "Rest " + (max > 0 ? "up to " + max : "1") + " "
+                                    + (player != null ? player.toLowerCase() + "'s " : "") + cardType;
+            case KO              -> "K.O. " + (max > 0 ? max : 1)
+                                    + (maxCost > 0 ? " " + cardType + " with cost " + maxCost + " or less" : " " + cardType);
+            case RETURN_TO_HAND  -> "Return " + (max > 0 ? max : 1)
+                                    + (maxCost > 0 ? " " + cardType + " (cost ≤" + maxCost + ")" : " " + cardType)
+                                    + " to hand";
+            case POWER_BOOST     -> (val >= 0 ? "+" : "") + val + " power this turn";
+            case COST_MODIFY     -> (val >= 0 ? "+" : "") + val + " cost";
+            case GRANT_KEYWORD   -> "Gain " + (e.keyword() != null ? formatKeyword(e.keyword()) : "keyword");
+            case ADD_DON         -> "Add " + val + " DON!!";
+            case SET_DON_ACTIVE  -> "Set " + val + " DON!! active";
+            case SHUFFLE_DECK    -> "Shuffle your deck";
+            case SEARCH_DECK     -> "Look at top " + val + ", add " + (max > 0 ? max : 1) + " to hand";
+            case PLAY_CARD       -> "Play 1 card for free";
+            case MODAL           -> "Choose one";
+            default              -> type.name().toLowerCase().replace('_', ' ');
+        };
     }
 
     // -------------------------------------------------------------------------

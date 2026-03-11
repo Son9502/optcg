@@ -23,6 +23,7 @@ public class Card {
     protected List<Ability> abilities;
     protected int bonusPower;
     protected int bonusCost;
+    private boolean faceUp;
     protected List<Keyword> grantedKeywords;
 
     public Card(String card_id, CardData data, Player owner) {
@@ -42,6 +43,7 @@ public class Card {
         this.bonusPower = 0;
         this.bonusCost = 0;
         this.grantedKeywords = new ArrayList<>();
+        this.faceUp = false; // Cards are face-down by default until played or flipped face-up
     }
 
     // Accessor methods
@@ -67,6 +69,24 @@ public class Card {
 
     public boolean isRested() {
         return rested;
+    }
+
+    public boolean isFaceUp() {
+        return faceUp;
+    }
+
+    public void flipFaceUp() {
+        this.faceUp = true;
+    }
+    public void flipFaceDown() {
+        this.faceUp = false;
+    }
+
+    /**
+     * Flips the card face-up or face-down.
+     */
+    public void flip() {
+        this.faceUp = !this.faceUp;
     }
 
     /**

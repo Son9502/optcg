@@ -9,8 +9,10 @@ public record EffectData(
     @JsonProperty("type")      EffectType type,
     @JsonProperty("value")     int        value,
     @JsonProperty("target")    Target     target,
+    @JsonProperty("subtype")   String     subtype,
     @JsonProperty("condition") Condition  condition,
     @JsonProperty("duration")  Duration   duration,
     @JsonProperty("keyword")   Keyword    keyword,
-    @JsonProperty("choices")   List<List<EffectData>> choices
+    @JsonProperty("choices")   List<List<EffectData>> choices,
+    @JsonProperty("conditionValue") int conditionValue
 ) {}

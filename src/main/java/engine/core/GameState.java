@@ -253,6 +253,7 @@ public class GameState {
         if (abilityManager != null) {
             abilityManager.dispatch(Trigger.ON_PLAY, card, player);
         }
+        card.flipFaceUp(); // Cards are played face-up by default
     }
 
     /**
@@ -265,11 +266,13 @@ public class GameState {
      * @param card   The card to play.
      */
     public void playCardFree(Player player, Card card) {
-        if (card.getData() == null || card.getData().cardType() == null) return;
+        if (card.getData() == null || card.getData().cardType() == null)
+            return;
         Zone targetZone;
         switch (card.getData().cardType()) {
             case CHARACTER:
-                if (player.getField().getCards().size() >= 5) return;
+                if (player.getField().getCards().size() >= 5)
+                    return;
                 targetZone = player.getField();
                 if (!card.hasKeyword(Keyword.RUSH) && !card.hasKeyword(Keyword.RUSH_CHARACTER)) {
                     card.setSummonSick(true);
@@ -279,7 +282,8 @@ public class GameState {
                 targetZone = player.getTrash();
                 break;
             case STAGE:
-                if (!player.getStage().isEmpty()) return;
+                if (!player.getStage().isEmpty())
+                    return;
                 targetZone = player.getStage();
                 break;
             default:
@@ -289,6 +293,7 @@ public class GameState {
         if (abilityManager != null) {
             abilityManager.dispatch(Trigger.ON_PLAY, card, player);
         }
+        card.flipFaceUp(); // Cards are played face-up by default
     }
 
     /**
@@ -523,6 +528,47 @@ public class GameState {
         // cards and their effects, which will be developed once we have the card
         // effects system in place.
         return 0; // Placeholder return value
+    }
+
+    /**
+     * Flip a card in the player's life zone at the specified index. This method
+     * will
+     * check if the player has any life points and if the specified index is valid.
+     * If the conditions are met, it will flip the card at the specified index in
+     * the
+     * life zone. If the player has no more life points, it will print a message
+     * indicating there are no more cards to flip.
+     * 
+     * @param player The player whose life card will be flipped.
+     * @param index  The index of the life card to flip.
+     */
+    public void flipLife(Player player, int index) {
+        if (player.getLife().isEmpty()) {
+            System.out.println(player.getName() + " has no more life points and has been defeated.");
+        }
+        Card cardToFlip = player.getLife().getCards().get(index);
+        cardToFlip.flip();
+    }
+
+    /**
+     * Get the list of visible cards in the player's life zone. This method will
+     * return a list of cards in the player's life zone that are currently face-up.
+     * If the player has no life points, it will return an empty list.
+     * 
+     * @param owner The player whose life cards will be checked for visibility. This
+     *              is the player whose life zone will be accessed to retrieve the
+     *              list of visible cards.
+     * @return A list of cards in the player's life zone that are currently face-up.
+     *         If the player has no life points, it will return an empty list.
+     */
+    public List<Card> getVisibleLifeCards(Player owner) {
+        List<Card> visibleCards = new ArrayList<>();
+        for (Card card : owner.getLife().getCards()) {
+            if (card.isFaceUp()) {
+                visibleCards.add(card);
+            }
+        }
+        return visibleCards;
     }
 
     public boolean isGameOver() {
