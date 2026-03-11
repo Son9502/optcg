@@ -21,6 +21,8 @@
 | 10 | `PREVENT_ATTACK` / `PREVENT_KO` | done | Implemented as temporary keywords (CANNOT_ATTACK, CANNOT_KO, CANNOT_BLOCK + UNBLOCKABLE); enforced in BattleSystem.canAttack() and resolve(); cleared by refreshField(); 246 tests green |
 | 11 | `PLAY_CARD` effect | done | `GameState.playCardFree(Player, Card)` — zone routing + ON_PLAY, no cost; `applyPlayCard` via `resolveTargets` → `playCardFree`; source zone from `target.zone()` (HAND or TRASH); 257 tests green |
 | 16 | `FLIP_LIFE` effect | pending | Flip N life cards face-up (Charlotte Pudding mechanic); requires `faceUp` state on life-zone cards |
+| 18 | `COUNTER` trigger on event cards | pending | Fires when event is played from hand as a counter during defend step; requires `Trigger.COUNTER` enum value, dispatch in `BattleSystem.applyCounter()`, optional activation costs ("you may trash 1 card"), and `Duration.THIS_BATTLE` enforcement |
+| 19 | `NEGATE` effect | pending | Cancels the activation of a card (typically an opponent's Event) mid-resolution; requires a hook in `GameState.playCard()` or a dedicated cancellation stack; the effect targets the card-in-resolution by reference, not a zone; deferred until event-cancellation stack exists |
 
 ## Tier 3 — Quality / Correctness
 
