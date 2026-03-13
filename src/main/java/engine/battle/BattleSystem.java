@@ -43,11 +43,12 @@ public class BattleSystem {
      * @return The effective power of the card.
      */
     private int getEffectivePower(Card card) {
-        // Don boost applies only to the active player's cards
+        // DON!! boost applies only to the active player's cards.
+        // Effect-based boosts (bonusPower, bonusBattlePower) apply to both sides.
         if (card.getOwner() == turnManager.getActivePlayer()) {
-            return card.getTotalPower(); // base + Dons
+            return card.getTotalPower(); // base + DON!! + effect boosts
         }
-        return card.getBasePower(); // base only
+        return card.getPowerWithEffects(); // base + effect boosts, no DON!!
     }
 
     /**
@@ -172,6 +173,8 @@ public class BattleSystem {
         if (type == null || type == CardType.CHARACTER) {
             counterValue = counterCard.getData().counter();
         } else if (type == CardType.EVENT) {
+            AbilityManager am = gameState.getAbilityManager();
+            am.dispatch(Trigger.COUNTER, counterCard, defender);
             counterValue = gameState.playCounter(defender, counterCard, target);
         }
         gameState.trash(defender, counterCard);
@@ -256,6 +259,23 @@ public class BattleSystem {
             }
         }
         // If attacker power < defender power, attack fails — no consequence
+
+        // Clear THIS_BATTLE boosts on the direct battle participants first (covers cards
+        // that left the field due to KO and won't be reached by clearAllBattleBoosts).
+        attacker.clearBattlePowerBoosts();
+        if (effectiveTarget != null) effectiveTarget.clearBattlePowerBoosts();
+        // Sweep remaining field cards (handles counter boosts on non-targeted cards).
+        clearAllBattleBoosts();
         return lives;
+    }
+
+    /** Clears battle-scoped power boosts from both players' leaders and field characters. */
+    private void clearAllBattleBoosts() {
+        for (Player player : List.of(gameState.getPlayer1(), gameState.getPlayer2())) {
+            if (player.getLeader() != null) player.getLeader().clearBattlePowerBoosts();
+            for (Card c : player.getField().getCards()) {
+                c.clearBattlePowerBoosts();
+            }
+        }
     }
 }

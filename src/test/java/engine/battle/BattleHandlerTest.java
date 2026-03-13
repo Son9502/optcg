@@ -506,4 +506,106 @@ public class BattleHandlerTest {
         assertFalse(targets.contains(p2.getLeader()), "Leader should not be a valid target for RUSH_CHARACTER");
     }
 
+    // ── COUNTER event dispatch ───────────────────────────────────────────────
+
+    /** Builds an Event card carrying a COUNTER ability that grants +X power this battle. */
+    private Card makeCounterEventCard(Player owner, int powerBoost) {
+        engine.cards.effects.EffectData boostEffect = new engine.cards.effects.EffectData(
+                engine.cards.effects.EffectType.POWER_BOOST, powerBoost,
+                new engine.cards.effects.Target(
+                        engine.cards.effects.Target.TargetPlayer.SELF,
+                        null, null, 1, 0, 0, 0, 0, null),
+                null, null, engine.cards.effects.Duration.THIS_BATTLE, null, null, 0);
+        engine.cards.abilities.AbilityData abilityData = new engine.cards.abilities.AbilityData(
+                Trigger.COUNTER, 0, null, false, null, null, List.of(boostEffect));
+        CardData data = new CardData("TEST-EV", "TEST-SET", "EventCounter", "", "", "TestSet",
+                null, CardType.EVENT, null, null, 0, 0, 0, null, 0.0, List.of(abilityData));
+        Card card = new Card("ev-counter-" + powerBoost, data, owner);
+        card.addAbility(new engine.cards.abilities.Ability(abilityData));
+        return card;
+    }
+
+    @Test
+    void counterEvent_boostsFieldCharacter() {
+        // Defending character on p2's field; event counter should boost it
+        Card defender = TestUtils.makeCard(p2, 3000);
+        p2.getField().add(defender);
+
+        Card counterEvent = makeCounterEventCard(p2, 2000);
+        p2.getHand().add(counterEvent);
+
+        battleSystem.applyCounter(p2, counterEvent, defender);
+
+        assertEquals(5000, defender.getPowerWithEffects(),
+                "Counter event should boost defender's battle power by 2000");
+    }
+
+    @Test
+    void counterEvent_boostsLeader_whenNoFieldCards() {
+        // No field cards — only the leader should be in the candidate pool
+        Card counterEvent = makeCounterEventCard(p2, 3000);
+        p2.getHand().add(counterEvent);
+
+        battleSystem.applyCounter(p2, counterEvent, p2.getLeader());
+
+        assertEquals(8000, p2.getLeader().getPowerWithEffects(),
+                "Counter event should boost leader when no field chars present");
+    }
+
+    @Test
+    void counterEvent_boostIsCountedInBattle_defenderSurvives() {
+        // Attacker 5000 vs defender 3000 + counter boost 3000 = 6000 > 5000 → defender survives
+        Card attacker = TestUtils.makeCard(p1, 5000);
+        Card defender = TestUtils.makeCard(p2, 3000);
+        p1.getField().add(attacker);
+        p2.getField().add(defender);
+        defender.rest();
+
+        Card counterEvent = makeCounterEventCard(p2, 3000);
+        p2.getHand().add(counterEvent);
+        battleSystem.applyCounter(p2, counterEvent, defender);
+
+        battleSystem.resolve(attacker, defender, 0);
+
+        // 5000 < 6000 → attacker loses → defender survives on field
+        assertTrue(p2.getField().getCards().contains(defender),
+                "Defender should survive: base 3000 + counter boost 3000 > attacker 5000");
+    }
+
+    @Test
+    void counterEvent_eventCardTrashedAfterCounter() {
+        Card defender = TestUtils.makeCard(p2, 3000);
+        p2.getField().add(defender);
+
+        Card counterEvent = makeCounterEventCard(p2, 1000);
+        p2.getHand().add(counterEvent);
+
+        battleSystem.applyCounter(p2, counterEvent, defender);
+
+        assertFalse(p2.getHand().getCards().contains(counterEvent),
+                "Counter event card should leave hand after use");
+        assertTrue(p2.getTrash().getCards().contains(counterEvent),
+                "Counter event card should be trashed after use");
+    }
+
+    @Test
+    void battleBoostsCleared_afterCounterEventBattle() {
+        // Attacker 6000 vs defender 3000 + boost 1000 = 4000 → attacker wins, defender KO'd
+        Card attacker = TestUtils.makeCard(p1, 6000);
+        Card defender = TestUtils.makeCard(p2, 3000);
+        p1.getField().add(attacker);
+        p2.getField().add(defender);
+        defender.rest();
+
+        Card counterEvent = makeCounterEventCard(p2, 1000);
+        p2.getHand().add(counterEvent);
+        battleSystem.applyCounter(p2, counterEvent, defender);
+        assertEquals(4000, defender.getPowerWithEffects(), "Boost active before resolve");
+
+        battleSystem.resolve(attacker, defender, 0);
+
+        // resolve() calls clearAllBattleBoosts() — battle boost must be gone
+        assertEquals(3000, defender.getPowerWithEffects(),
+                "Battle boost cleared after resolve()");
+    }
 }

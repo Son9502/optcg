@@ -1225,4 +1225,67 @@ class EffectFactoryTest {
         assertFalse(sourceCard.isFaceUp(), "Source's life card should remain face-down");
         assertTrue(opponentCard.isFaceUp(), "Opponent's life card should be flipped face-up");
     }
+
+    // ── THIS_BATTLE power boost ──────────────────────────────────────────────
+
+    @Test
+    void powerBoost_thisBattle_usesBoostBucket() {
+        Card c = makeCharCard(source, 3000, 0);
+        gs.moveCard(c, source.getField());
+        Target t = tgt(Target.TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 0, 0, 0, 0, 0);
+        EffectData e = eff(EffectType.POWER_BOOST, 2000, t, null, Duration.THIS_BATTLE, null, null);
+        EffectFactory.build(e, c).apply(gs, source);
+
+        assertEquals(5000, c.getTotalPower(), "Battle boost should be included in total power");
+        assertEquals(3000, c.getBasePower(),  "Base power should remain unchanged");
+    }
+
+    @Test
+    void powerBoost_thisTurn_usesTurnBucket() {
+        Card c = makeCharCard(source, 3000, 0);
+        gs.moveCard(c, source.getField());
+        Target t = tgt(Target.TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 0, 0, 0, 0, 0);
+        EffectData e = eff(EffectType.POWER_BOOST, 2000, t, null, Duration.THIS_TURN, null, null);
+        EffectFactory.build(e, c).apply(gs, source);
+
+        assertEquals(5000, c.getTotalPower(), "Turn boost should be included in total power");
+        c.clearPowerBoosts();
+        assertEquals(3000, c.getTotalPower(), "After clearPowerBoosts() turn boost should be gone");
+    }
+
+    @Test
+    void powerBoost_thisBattle_clearedAfterBattle() {
+        engine.core.TurnManager tm = new engine.core.TurnManager(gs);
+        engine.battle.BattleSystem battleSys = new engine.battle.BattleSystem(gs, tm);
+        gs.setAbilityManager(new engine.core.AbilityManager(gs));
+
+        // Give attacker a THIS_BATTLE boost
+        Card attacker = makeCharCard(source, 3000, 0);
+        Card target   = makeCharCard(opponent, 2000, 0);
+        gs.moveCard(attacker, source.getField());
+        gs.moveCard(target, opponent.getField());
+        target.rest();
+
+        attacker.addBattlePowerBoost(1000); // manual injection
+        assertEquals(4000, attacker.getTotalPower());
+
+        // Resolve battle — attacker wins, target KO'd
+        battleSys.resolve(attacker, target, 0);
+
+        // Battle boost must be cleared after resolve()
+        assertEquals(3000, attacker.getTotalPower(), "Battle boost must be cleared after resolve()");
+    }
+
+    @Test
+    void powerReduce_thisBattle_usesBattleBucket() {
+        Card c = makeCharCard(opponent, 5000, 0);
+        gs.moveCard(c, opponent.getField());
+        Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0);
+        EffectData e = eff(EffectType.POWER_REDUCE, 2000, t, null, Duration.THIS_BATTLE, null, null);
+        EffectFactory.build(e, null).apply(gs, source);
+
+        assertEquals(3000, c.getTotalPower(), "Battle reduce should lower total power");
+        c.clearBattlePowerBoosts();
+        assertEquals(5000, c.getTotalPower(), "After clearing battle boosts, power should be restored");
+    }
 }

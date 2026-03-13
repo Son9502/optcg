@@ -26,9 +26,10 @@ package tools;
  *   minCost       = 0
  *   maxPower      = 0
  *   minPower      = 0
- *   condition     = null
- *   duration      = null
- *   optional      = false
+ *   condition        = null
+ *   conditionSubtype = null
+ *   duration         = null
+ *   optional         = false
  */
 public record ParsedEffect(
         String  effectType,      // EffectType enum name: "DRAW", "REST", "ADD_DON", etc.
@@ -41,7 +42,8 @@ public record ParsedEffect(
         int     minCost,         // lower cost filter ("with a cost of N or more"); 0 = none
         int     maxPower,        // upper power filter ("with N power or less"); 0 = none
         int     minPower,        // lower power filter ("with N power or more"); 0 = none
-        String  condition,       // Condition enum name: "IF_LIFE_COUNT", "IF_CHARACTER_COUNT", etc. | null
-        String  duration,        // Duration enum name: "THIS_TURN" | "THIS_BATTLE" | "OPPONENTS_NEXT_TURN" | "PERMANENT"
-        boolean optional         // true if preceded by "may" (player chooses whether to execute)
+        String  condition,        // Condition enum name: "IF_LIFE_COUNT", "IF_CHARACTER_COUNT", etc. | null
+        String  conditionSubtype, // name/subtype/attribute value for string-based conditions; null if not applicable
+        String  duration,         // Duration enum name: "THIS_TURN" | "THIS_BATTLE" | "OPPONENTS_NEXT_TURN" | "PERMANENT"
+        boolean optional          // true if preceded by "may" (player chooses whether to execute)
 ) {}

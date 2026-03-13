@@ -218,6 +218,9 @@ public class CardCompiler {
         if (pe.condition() != null) node.put("condition", pe.condition());
         else                        node.putNull("condition");
 
+        if (pe.conditionSubtype() != null) node.put("subtype", pe.conditionSubtype());
+        else                               node.putNull("subtype");
+
         if (pe.duration() != null) node.put("duration", pe.duration());
         else                       node.putNull("duration");
 

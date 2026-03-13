@@ -277,6 +277,27 @@ public class EffectParserTest {
         assertEquals("IF_LEADER_COLOR", effects.get(0).condition());
     }
 
+    // ── Condition: IF_LEADER_NAME ─────────────────────────────────────────────
+
+    @Test
+    void parse_ifLeaderIsSanji_conditionIsLeaderNameWithSubtype() {
+        ParsedEffect e = one("If your Leader is [Sanji], draw 1 card.");
+        assertEquals("IF_LEADER_NAME", e.condition());
+        assertEquals("sanji",          e.conditionSubtype());
+        assertEquals("DRAW",           e.effectType());
+        assertEquals(1,                e.value());
+    }
+
+    // ── Condition: IF_LEADER_TYPE ─────────────────────────────────────────────
+
+    @Test
+    void parse_ifLeaderHasSubtype_conditionIsLeaderTypeWithSubtype() {
+        ParsedEffect e = one("If your Leader has the {Animal Kingdom Pirates} type, draw 1 card.");
+        assertEquals("IF_LEADER_TYPE",          e.condition());
+        assertEquals("animal kingdom pirates",  e.conditionSubtype());
+        assertEquals("DRAW",                    e.effectType());
+    }
+
     // ── Condition: IF_HAND_COUNT ──────────────────────────────────────────────
 
     @Test

@@ -35,7 +35,7 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 - `CardData` record carries a `subTypes` field (normalized from API `sub_types` strings)
 - `CardDatabase` secondary index: `getByName()` (O(1)), `getBySubtype()` (O(n)), `getAllCards()`
 - `CsvGenerator`: offline tool that rebuilds `card_names_subtypes.csv` from compiled (or raw) JSON with name normalization and deduplication
-- 263 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty)
+- 300 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty)
 
 ---
 
@@ -153,7 +153,7 @@ mvn exec:java -Dexec.mainClass="tools.CsvGenerator"
 mvn test
 ```
 
-**Current test suite: 263 tests, 0 failures, 0 errors.**
+**Current test suite: 300 tests, 0 failures, 0 errors.**
 10 `CardDatabaseTest` cases are data-dependent and skip automatically (via `assumeTrue`) when `raw/data/` is empty — run `CardScraper` first to populate.
 
 | Test class | Tests | Coverage area |
@@ -172,8 +172,8 @@ mvn test
 | `ParserTest` | 21 | Ability parsing: triggers, conditions, costs, keywords, multi-ability blocks, Blocker+On Block inline split |
 | `GameFactoryTest` | 9 | Pre-built test deck construction, card type breakdown, ownership, field/stage/don counts |
 | `TokenTest` | 8 | `Token` record field access, value types (int/String/null), record equality, toString |
-| `EffectLexerTest` | 34 | All 10 token types, bracket detection, regex filters, K.O. normalisation, phrase-length preference, 6 verbatim card text examples from CSV |
-| `EffectParserTest` | 30 | All EffectTypes (DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST, COST_MODIFY, ADD_DON, SET_DON_ACTIVE, GRANT_KEYWORD, PLAY_CARD, NEGATE, PREVENT_ATTACK, UNREST, ATTACH_DON), optional flag, conditions (IF_YOU_DO, IF_RESTED, IF_LEADER_TYPE), multi-clause chains, subject-first clauses |
+| `EffectLexerTest` | 34 | All 13 token types, bracket detection (NAME_FILTER/SUBTYPE_FILTER/ATTRIBUTE_FILTER), regex filters, K.O. normalisation, phrase-length preference, 6 verbatim card text examples from CSV |
+| `EffectParserTest` | 32 | All EffectTypes (DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST, COST_MODIFY, ADD_DON, SET_DON_ACTIVE, GRANT_KEYWORD, PLAY_CARD, NEGATE, PREVENT_ATTACK, UNREST, ATTACH_DON), optional flag, conditions (IF_YOU_DO, IF_RESTED, IF_LEADER_COLOR, IF_LEADER_NAME + conditionSubtype, IF_LEADER_TYPE + conditionSubtype), multi-clause chains, subject-first clauses |
 
 ---
 
@@ -230,7 +230,7 @@ src/
 │   │       ├── CsvGenerator.java                ← Rebuilds card_names_subtypes.csv from compiled/raw data
 │   │       ├── Parser.java                      ← Parses card text into structured abilities
 │   │       ├── ParsedAbility.java               ← Record: trigger, condition, cost, character, effect
-│   │       ├── TokenType.java                   ← 10-value enum (VERB, QUANTITY, PLAYER, CARD_TYPE, FILTER, ZONE, DURATION, CONDITION, CONNECTOR, MODIFIER)
+│   │       ├── TokenType.java                   ← 13-value enum (VERB, QUANTITY, PLAYER, CARD_TYPE, FILTER, SUBTYPE_FILTER, NAME_FILTER, ATTRIBUTE_FILTER, ZONE, DURATION, CONDITION, CONNECTOR, MODIFIER)
 │   │       ├── Token.java                       ← Record: (TokenType type, String raw, Object value)
 │   │       ├── EffectTables.java                ← All phrase→TokenType entries, sorted lists, regex filter Patterns (shared by EffectLexer and EffectParser)
 │   │       ├── EffectLexer.java                 ← Word-level scanner; produces List<Token> from raw effect text
@@ -313,7 +313,7 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
   - **Unblockable**: opponent's blocker window is skipped entirely
 - CLI defend window: sequential blocker → counter loop → single `BattleSystem.resolve()`
 - Card text corpus analysed (3,115 cards) → `effect_templates_generic.csv` + `effect_templates_unique.csv`; `EffectType` enum redesigned to 23 types; `EFFECT_GRAMMAR.md` written
-- `EffectLexer` word-level scanner backed by `EffectTables` (shared phrase→TokenType map): longest-phrase-first matching; bracket detection for `[Keyword]`/`{Type}`/`(Attribute)`/`"TypeName"` filters; 7 regex patterns for numeric cost/power filters; normalisations for K.O., en-dash, and `"TypeName"` quoted spans
+- `EffectLexer` word-level scanner backed by `EffectTables` (shared phrase→TokenType map): longest-phrase-first matching; bracket detection emits distinct types — `[Name/Keyword]` → `NAME_FILTER`, `{Subtype}` → `SUBTYPE_FILTER`, `(Attribute)` → `ATTRIBUTE_FILTER`; 7 regex patterns for numeric cost/power filters; normalisations for K.O., en-dash, and `"TypeName"` quoted spans
 - `EffectTemplateCsvGenerator`: reads compiled JSON, re-runs `Parser.parse()`, generalises effect text, splits compound effects on `•`/`. Then, `/`If X, Y.`, strips modal trigger labels, deduplicates on `(simplified, trigger)`, writes generic/unique CSV pair
 - `LexerCoverageReport`: runs `EffectLexer` on all CSV templates, reports fully-tokenised vs. UNKNOWN, lists top unknown tokens by frequency — current coverage **99.0% generic / 96.0% unique**
 - `Parser.splitOnEmbeddedTriggers`: fixed `[Blocker] (explanation) [On Block] effect` being parsed as one ability; added `sawKeyword` tracking + parenthetical skip so the embedded trigger fires the split
@@ -321,6 +321,7 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 - `ParsedEffect` record: intermediate structured representation of a single parsed effect clause (tools pipeline; not part of game runtime)
 - `MODIFIER` token type added to `TokenType` (10th value): `may` (optional action) and `must` (forced action); `EffectParser` reads the MODIFIER flag to populate `ParsedEffect.optional`
 - `EffectParser` Phase 1 complete: `List<Token>` → `List<ParsedEffect>`; covers DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST, COST_MODIFY, ADD_DON, SET_DON_ACTIVE, GRANT_KEYWORD, PLAY_CARD, NEGATE, PREVENT_ATTACK, UNREST, ATTACH_DON; clause splitting on CONNECTOR; condition classification; optional flag from MODIFIER tokens; subject-first clause handling
+- `SUBTYPE_FILTER`, `NAME_FILTER`, `ATTRIBUTE_FILTER` added to `TokenType` (11th–13th values): `{Subtype}` / `[Name]` / `(Attribute)` bracket forms now emit distinct token types; `EffectParser.classifyConditionClause()` uses them to classify `IF_LEADER_TYPE`, `IF_LEADER_NAME`, `IF_LEADER_ATTRIBUTE`, `IF_FIELD_CHARACTER_TYPE` conditions; `conditionSubtype` field added to `ParsedEffect` and written as `"subtype"` in compiled JSON
 - `CardCompiler.toEffectJson()` implemented: each non-KEYWORD ability's `effects[]` is now populated from `EffectParser.parse()` output; `buildTargetNode()`, `mapZone()`, `mapParsedCardType()` helpers produce engine-compatible field names
 - `CardChecklistCsvGenerator`: called automatically at the end of `CardCompiler.main()`; writes `csv/card_checklist.csv` with columns `card_name`, `card_set_id`, `card_text`, `generic_card_text`, `unknown_tokens`, `needs_override`; deduplicates across sets/decks/promos by `card_set_id`
 - `CardType.fromValue()` `@JsonCreator` added: case-insensitive Jackson deserialization (`"Character"` → `CHARACTER`) so compiled JSON written before the enum rename round-trips correctly
@@ -328,11 +329,12 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 - **`SHUFFLE_DECK`** effect: `Deck.shuffle()` implemented; wired in `EffectFactory`
 - **`GRANT_KEYWORD`** effect: `Card.grantKeyword(Keyword)` / `clearGrantedKeywords()`; `hasKeyword()` checks runtime grants before permanent abilities; `GameState.refreshField()` clears grants each turn; `EffectData.keyword` field added
 
+- `EffectFactory.evaluateCondition()` real implementations: `IF_LEADER_COLOR` (`colors().size() > 1`), `IF_LEADER_NAME` (name equalsIgnoreCase), `IF_LEADER_TYPE` (`containsSubtype`), `IF_LEADER_ATTRIBUTE` (attribute enum name match), `IF_FIELD_CHARACTER_TYPE` (field scan); `Condition` enum gained `IF_LEADER_NAME` and `IF_LEADER_ATTRIBUTE`
+
 **Remaining:**
-- **Counter**: actual boost value from `CardData.counter()` (currently a placeholder returning 0)
 - **MODAL** — CliController interactive menu (engine picks branch 0 by default; `ModalSelector` and `applyModal()` are wired)
-- Custom effect template parser: map each unique card text pattern to a deterministic `EffectData` object using regex templates (no NLP / external dependencies)
-- Full `Condition` / `Cost` / `EffectData` evaluation system (conditionValue field, IF_LIFE_COUNT, IF_LEADER_COLOR, IF_LEADER_TYPE, Attribute filtering)
+- Attribute + subtype/name filtering in `Target.matchesFilters()` (items #17 partial, #21)
+- Cross-turn effect tracking for `OPPONENTS_NEXT_TURN` duration; enforce `YOUR_TURN` / `OPPONENTS_TURN` / `ONCE_PER_TURN` conditions at runtime (item #20)
 - Event card resolution: play → resolve effect → move to trash
 - `[Activate:Main]` effects: player-activated abilities during the Main Phase
 

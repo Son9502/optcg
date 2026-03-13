@@ -776,3 +776,71 @@ All existing 6-arg `new EffectData(...)` call sites updated with trailing `null`
 - DRAW with empty deck drew 0 cards — added `TestUtils.makeCard` seeds to deck before firing
 
 **Result:** 263 tests, 0 failures.
+
+---
+
+### THIS_BATTLE power boost routing + bonusBattlePower (collab)
+
+**Problem:** `POWER_BOOST` effects with `duration = THIS_BATTLE` were applied to `bonusPower` (cleared at turn start) rather than a battle-scoped bucket, so counter event boosts would persist across turns.
+
+**Developer decision:** Two separate power buckets on `Card`:
+- `bonusPower` — cleared at turn start via `refreshField()`
+- `bonusBattlePower` — cleared at battle end in `BattleSystem.resolve()`
+
+`getPowerWithEffects()` added to `Card`: returns `base + bonusPower + bonusBattlePower` (no DON!! boost). Used by `getEffectivePower()` for the defending player so that counter boosts count in battle resolution without granting a DON!! bonus.
+
+**EffectFactory:** `POWER_BOOST` and `POWER_REDUCE` route by duration: `THIS_BATTLE` → `addBattlePowerBoost()`, all others → `addPowerBoost()`. Duration distribution across compiled decks: THIS_BATTLE (20), THIS_TURN (28), OPPONENTS_NEXT_TURN (11), null (16) — confirmed before implementing.
+
+**BattleSystem cleanup:** `resolve()` explicitly calls `attacker.clearBattlePowerBoosts()` and `effectiveTarget.clearBattlePowerBoosts()` before sweeping field cards — necessary because KO'd cards leave the field and would be missed by the field sweep.
+
+**Result:** 298 tests, 0 failures.
+
+---
+
+### COUNTER trigger on event cards — #18 (collab — test-first)
+
+**Developer decisions:**
+- `am.dispatch(Trigger.COUNTER, counterCard, defender)` in `applyCounter()` fires COUNTER trigger effects on counter event cards
+- `null` zone in `addZoneCards` now defaults to `ZoneType.CHARACTER` — 125/186 COUNTER POWER_BOOST effects had `null` zone; previously returned empty pool
+- Leader included in target pool for `cardType = LEADER` and `(cardType = null, zone = null)` cases (not just `LEADER_OR_CHARACTER`)
+- `getPowerWithEffects()` used for defender power in `getEffectivePower()` — base + effect boosts, no DON!!
+
+**Tests (5):** counterEvent_boostsFieldCharacter, counterEvent_boostsLeader_whenNoFieldCards, counterEvent_boostIsCountedInBattle_defenderSurvives, counterEvent_eventCardTrashedAfterCounter, battleBoostsCleared_afterCounterEventBattle.
+
+**Bug caught:** KO'd defender moves to trash before field sweep — battle boosts not cleared. Fixed by explicit `clearBattlePowerBoosts()` calls on attacker and effectiveTarget before the sweep.
+
+**Result:** 298 tests, 0 failures.
+
+---
+
+### TokenType bracket differentiation + Condition classification — #14, #15 (collab)
+
+**Problem:** All three bracket forms (`[Name]`, `{Subtype}`, `(Attribute)`) emitted `TokenType.FILTER`. Condition classification in `EffectParser` used raw-string prefix inspection (`r.startsWith("{")`, `r.startsWith("[")`) — fragile and mixed with unrelated text filters.
+
+**Developer decision:** Option A (separate token types) chosen for long-term cleanliness:
+- `NAME_FILTER` — `[Sanji]`, `[Blocker]` — named card or keyword reference
+- `SUBTYPE_FILTER` — `{Straw Hat Crew}` — subtype / type identifier
+- `ATTRIBUTE_FILTER` — `(Slash)` — attribute identifier
+- `FILTER` — retained for numeric/text filters (`"with cost 4 or less"`, `"active"`, `"top"`, `"bottom"`)
+
+**New `Condition` enum values:**
+- `IF_LEADER_NAME` — `[Name]` token in condition window; subtype value = card name string
+- `IF_LEADER_ATTRIBUTE` — `(Attribute)` token in condition window
+
+**`conditionSubtype` field added to `ParsedEffect`:** The string value of the NAME_FILTER / SUBTYPE_FILTER / ATTRIBUTE_FILTER token found in the condition window. `CardCompiler` writes it as `"subtype"` in compiled JSON; `EffectFactory.evaluateCondition()` receives it as `subtype` parameter.
+
+**`classifyConditionClause()` updated:** Dispatches cleanly on token type instead of raw prefix. Additionally distinguishes `IF_LEADER_TYPE` from `IF_FIELD_CHARACTER_TYPE` by checking whether a CARD_TYPE token containing `"character"` precedes the SUBTYPE_FILTER in the condition window.
+
+**`EffectFactory.evaluateCondition()` real implementations:**
+- `IF_LEADER_COLOR` → `leader.getData().colors().size() > 1`
+- `IF_LEADER_NAME` → `leader.getData().name().equalsIgnoreCase(subtype)`
+- `IF_LEADER_TYPE` → `containsSubtype(leader.getData().subTypes(), subtype)`
+- `IF_LEADER_ATTRIBUTE` → `leader.getData().attribute().name().equalsIgnoreCase(subtype)`
+- `IF_FIELD_CHARACTER_TYPE` → any field card's `subTypes()` contains subtype
+
+**Syntax error fixed:** Linter had corrupted the `IF_LEADER_COLOR` case in `evaluateCondition()` (empty `->` body falling into the next case); replaced with the full correct switch block during this session.
+
+**Tests updated:** 3 `EffectLexerTest` bracket tests renamed and updated to `NAME_FILTER`/`SUBTYPE_FILTER`/`ATTRIBUTE_FILTER`. 2 new `EffectParserTest` tests: `IF_LEADER_NAME` with conditionSubtype="sanji"; `IF_LEADER_TYPE` with conditionSubtype="animal kingdom pirates".
+
+**Result:** 300 tests, 0 failures.
+

@@ -22,6 +22,7 @@ public class Card {
     protected List<DonCard> attachedDons;
     protected List<Ability> abilities;
     protected int bonusPower;
+    protected int bonusBattlePower;
     protected int bonusCost;
     private boolean faceUp;
     protected List<Keyword> grantedKeywords;
@@ -222,7 +223,7 @@ public class Card {
         return Math.max(0, data.cost() + bonusCost);
     }
 
-    /** Adds a temporary power modification (positive or negative). */
+    /** Adds a temporary power modification (positive or negative). Lasts until turn start. */
     public void addPowerBoost(int n) {
         this.bonusPower += n;
     }
@@ -230,6 +231,16 @@ public class Card {
     /** Clears all temporary power boosts. Called at the start of each turn. */
     public void clearPowerBoosts() {
         this.bonusPower = 0;
+    }
+
+    /** Adds a battle-scoped power boost (THIS_BATTLE duration). Cleared at end of each battle. */
+    public void addBattlePowerBoost(int n) {
+        this.bonusBattlePower += n;
+    }
+
+    /** Clears battle-scoped power boosts. Called at the end of each battle in BattleSystem.resolve(). */
+    public void clearBattlePowerBoosts() {
+        this.bonusBattlePower = 0;
     }
 
     /** Adds a temporary cost modification (negative = cheaper, positive = more expensive). */
@@ -243,13 +254,29 @@ public class Card {
     }
 
     /**
-     * Calculate the total power of this card, including bonus power and any
-     * attached Don cards.
+     * Returns power including all effect-based boosts but excluding DON!! card attachments.
+     * Used for the defending player's cards in battle — DON!! boosts only apply to the
+     * active player, but counter/turn-effect boosts apply to both sides.
+     *
+     * @return base power + {@code bonusPower} + {@code bonusBattlePower}
+     */
+    public int getPowerWithEffects() {
+        return data.power() + bonusPower + bonusBattlePower;
+    }
+
+    /**
+     * Calculate the total power of this card, including all temporary boosts and any
+     * attached Don cards. This includes:
+     * <ul>
+     *   <li>{@code bonusPower}       — turn-scoped boosts (cleared each turn start)</li>
+     *   <li>{@code bonusBattlePower} — battle-scoped boosts (cleared each battle end)</li>
+     *   <li>Don card boosts          — from attached DON!! cards</li>
+     * </ul>
      *
      * @return The total power of this card.
      */
     public int getTotalPower() {
-        int totalPower = data.power() + bonusPower;
+        int totalPower = data.power() + bonusPower + bonusBattlePower;
         for (DonCard don : attachedDons) {
             totalPower += don.getBoost();
         }

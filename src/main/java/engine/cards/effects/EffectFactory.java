@@ -29,7 +29,7 @@ public class EffectFactory {
     public static Effect build(EffectData effectData, Card sourceCard) {
         return (gameState, source) -> {
             if (effectData == null || effectData.type() == null) return;
-            if (!evaluateCondition(effectData.condition(), effectData.conditionValue(), gameState, source, sourceCard)) return;
+            if (!evaluateCondition(effectData.condition(), effectData.conditionValue(), effectData.subtype(), gameState, source, sourceCard)) return;
 
             switch (effectData.type()) {
                 case DRAW         -> gameState.draw(source, Math.max(effectData.value(), 1));
@@ -45,10 +45,18 @@ public class EffectFactory {
                                          .forEach(c -> gameState.trash(c.getOwner(), c));
                 case RETURN_TO_HAND -> resolveTargets(effectData, gameState, source, sourceCard)
                                          .forEach(c -> gameState.moveCard(c, c.getOwner().getHand()));
-                case POWER_BOOST  -> resolveTargets(effectData, gameState, source, sourceCard)
-                                         .forEach(c -> c.addPowerBoost(effectData.value()));
-                case POWER_REDUCE -> resolveTargets(effectData, gameState, source, sourceCard)
-                                         .forEach(c -> c.addPowerBoost(-effectData.value()));
+                case POWER_BOOST  -> {
+                    boolean isBattle = effectData.duration() == Duration.THIS_BATTLE;
+                    resolveTargets(effectData, gameState, source, sourceCard)
+                            .forEach(c -> { if (isBattle) c.addBattlePowerBoost(effectData.value());
+                                            else c.addPowerBoost(effectData.value()); });
+                }
+                case POWER_REDUCE -> {
+                    boolean isBattle = effectData.duration() == Duration.THIS_BATTLE;
+                    resolveTargets(effectData, gameState, source, sourceCard)
+                            .forEach(c -> { if (isBattle) c.addBattlePowerBoost(-effectData.value());
+                                            else c.addPowerBoost(-effectData.value()); });
+                }
                 case ATTACH_DON   -> applyAttachDon(effectData, gameState, source, sourceCard);
                 case ADD_LIFE     -> applyAddLife(effectData, gameState, source);
                 case COST_MODIFY  -> resolveTargets(effectData, gameState, source, sourceCard)
@@ -81,6 +89,7 @@ public class EffectFactory {
     // ── Condition gate ──────────────────────────────────────────────────────────
 
     private static boolean evaluateCondition(Condition condition, int conditionValue,
+                                              String subtype,
                                               GameState gs, Player source, Card sourceCard) {
         if (condition == null) return true;
         return switch (condition) {
@@ -101,9 +110,45 @@ public class EffectFactory {
                     .anyMatch(c -> c.getData() != null && meetsThreshold(c.getEffectiveCost(), conditionValue));
             case IF_OPPONENT_LIFE_COUNT -> meetsThreshold(getOpponent(gs, source).getLife().size(), conditionValue);
             case IF_OPPONENT_HAND_COUNT -> meetsThreshold(getOpponent(gs, source).getHand().size(), conditionValue);
-            // Type / colour stubs — require Leader subtype metadata (Phase 2)
-            case IF_LEADER_TYPE, IF_LEADER_COLOR, IF_FIELD_CHARACTER_TYPE -> true;
+            // Leader is multicolored (has more than one color)
+            case IF_LEADER_COLOR -> source.getLeader() != null
+                    && source.getLeader().getData() != null
+                    && source.getLeader().getData().colors() != null
+                    && source.getLeader().getData().colors().size() > 1;
+            // Leader has the required named card (e.g. "if your Leader is [Sanji]")
+            case IF_LEADER_NAME -> source.getLeader() != null
+                    && source.getLeader().getData() != null
+                    && subtype != null
+                    && source.getLeader().getData().name().equalsIgnoreCase(subtype);
+            // Leader has the required subtype (e.g. "if your Leader has the {Straw Hat} type")
+            case IF_LEADER_TYPE -> source.getLeader() != null
+                    && source.getLeader().getData() != null
+                    && (subtype == null || containsSubtype(source.getLeader().getData().subTypes(), subtype));
+            // Leader has the required attribute (e.g. "if your Leader has the (Slash) attribute")
+            case IF_LEADER_ATTRIBUTE -> source.getLeader() != null
+                    && source.getLeader().getData() != null
+                    && (subtype == null || attributeMatches(source.getLeader(), subtype));
+            // Any Character on your field has the required subtype
+            case IF_FIELD_CHARACTER_TYPE -> subtype == null || source.getField().getCards().stream()
+                    .filter(c -> c.getData() != null)
+                    .anyMatch(c -> containsSubtype(c.getData().subTypes(), subtype));
         };
+    }
+
+    /** True if the space-separated subTypes string contains the given token (case-insensitive). */
+    private static boolean containsSubtype(String subTypes, String subtype) {
+        if (subTypes == null || subTypes.isBlank() || subtype == null) return false;
+        String target = subtype.toLowerCase();
+        for (String token : subTypes.toLowerCase().split(" ")) {
+            if (token.equals(target)) return true;
+        }
+        return false;
+    }
+
+    /** True if the card's attribute enum name matches the given string (case-insensitive). */
+    private static boolean attributeMatches(Card card, String subtype) {
+        if (card.getData() == null || card.getData().attribute() == null || subtype == null) return false;
+        return card.getData().attribute().name().equalsIgnoreCase(subtype);
     }
 
     // ── Target resolution ───────────────────────────────────────────────────────
@@ -136,9 +181,15 @@ public class EffectFactory {
             default -> {}
         }
 
-        // LEADER_OR_CHARACTER: also include the relevant Leader(s) since Leaders
-        // live outside the CHARACTER zone and are not returned by addZoneCards.
-        if (t.cardType() == CardType.LEADER_OR_CHARACTER) {
+        // Include Leaders when explicitly requested or when zone+cardType are both null
+        // (which the compiler emits for "Leader or Character" phrasing).
+        // LEADER-only: zone=null + cardType=LEADER (field chars filtered out by matchesFilters).
+        // LEADER_OR_CHARACTER: explicit type (test/GameFactory paths).
+        // null/null: compiled counter cards — treat as in-play (field + leader).
+        boolean includeLeader = t.cardType() == CardType.LEADER_OR_CHARACTER
+                || t.cardType() == CardType.LEADER
+                || (t.cardType() == null && t.zone() == null);
+        if (includeLeader) {
             if (t.player() == Target.TargetPlayer.SELF || t.player() == Target.TargetPlayer.ALL) {
                 Card leader = source.getLeader();
                 if (leader != null) pool.add(leader);
@@ -170,8 +221,11 @@ public class EffectFactory {
     }
 
     private static void addZoneCards(List<Card> pool, Player p, ZoneType zone) {
-        if (zone == null || p == null) return;
-        Zone z = getZone(p, zone);
+        if (p == null) return;
+        // null zone means "in play" — default to CHARACTER (field) zone.
+        // Specific zones (HAND, DECK, etc.) are always explicit in compiled data.
+        ZoneType effectiveZone = (zone != null) ? zone : ZoneType.CHARACTER;
+        Zone z = getZone(p, effectiveZone);
         if (z != null) pool.addAll(z.getCards());
     }
 

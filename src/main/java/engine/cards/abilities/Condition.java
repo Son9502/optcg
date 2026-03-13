@@ -17,8 +17,10 @@ public enum Condition {
     IF_OPPONENT_LIFE_COUNT,    // if your opponent has [±N] life cards
     IF_OPPONENT_HAND_COUNT,    // if your opponent has [±N] cards in hand
     // ---- State-based conditions ----
-    IF_RESTED,          // if this Character is rested
-    IF_LEADER_TYPE,     // if your Leader has the [X] type
-    IF_FIELD_CHARACTER_TYPE, // if you have a Character with type [X] on the field
-    IF_LEADER_COLOR,    // if your Leader is multicolored
+    IF_RESTED,               // if this Character is rested
+    IF_LEADER_NAME,          // if your Leader is [Name]
+    IF_LEADER_TYPE,          // if your Leader has the {X} type
+    IF_LEADER_ATTRIBUTE,     // if your Leader has the (X) attribute
+    IF_FIELD_CHARACTER_TYPE, // if you have a Character with {X} type on the field
+    IF_LEADER_COLOR,         // if your Leader is multicolored
 }
