@@ -79,6 +79,9 @@ public class GameState {
         Zone origin = card.getZone();
         if (origin != null) {
             origin.remove(card);
+            if (origin.getType() == ZoneType.CHARACTER && target.getType() != ZoneType.CHARACTER) {
+                card.clearWhileInPlayBuffs();
+            }
         }
         target.add(card);
         card.setZone(target);
@@ -476,6 +479,7 @@ public class GameState {
             card.clearPowerBoosts(); // Clear end-of-turn power modifications
             card.clearCostModifiers(); // Clear end-of-turn cost modifications
             card.clearGrantedKeywords(); // Clear temporarily granted keywords
+
             for (Ability ability : card.getAbilities())
                 ability.resetTurn(); // Reset once-per-turn gate
             if (card.isRested()) {

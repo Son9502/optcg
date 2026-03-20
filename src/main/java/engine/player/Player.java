@@ -22,6 +22,8 @@ public class Player {
     private int activeDon;
     private int restedDon;
     private int lifePoints;
+
+    private boolean onPlayNegated;
     
     private Leader leader;
     public Player(String player_id, String name, Leader leader) {
@@ -105,6 +107,14 @@ public class Player {
 
     public Zone getStage() {
         return stage;
+    }
+
+    public boolean isOnPlayNegated() {
+        return onPlayNegated;
+    }
+
+    public void setOnPlayNegated(boolean onPlayNegated) {
+        this.onPlayNegated = onPlayNegated;
     }
 
     // Mutator methods

@@ -2,18 +2,25 @@ package engine.cards.effects;
 
 import engine.cards.Card;
 import engine.cards.DonCard;
+import engine.cards.abilities.Ability;
+import engine.cards.abilities.AbilityData;
 import engine.cards.abilities.Condition;
+import engine.cards.abilities.Trigger;
 import engine.cards.keywords.Keyword;
+//import engine.cards.types.Attribute;
 import engine.cards.types.CardType;
 import engine.core.GameState;
 import engine.player.Player;
 import engine.zones.Zone;
 import engine.zones.ZoneType;
+import engine.cards.types.Color; 
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class EffectFactory {
 
@@ -46,26 +53,44 @@ public class EffectFactory {
                 case RETURN_TO_HAND -> resolveTargets(effectData, gameState, source, sourceCard)
                                          .forEach(c -> gameState.moveCard(c, c.getOwner().getHand()));
                 case POWER_BOOST  -> {
-                    boolean isBattle = effectData.duration() == Duration.THIS_BATTLE;
-                    resolveTargets(effectData, gameState, source, sourceCard)
-                            .forEach(c -> { if (isBattle) c.addBattlePowerBoost(effectData.value());
-                                            else c.addPowerBoost(effectData.value()); });
+                    Duration dur = effectData.duration();
+                    int val = effectData.value();
+                    resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> {
+                        if (dur == Duration.THIS_BATTLE)        c.addBattlePowerBoost(val);
+                        else if (dur == Duration.OPPONENTS_NEXT_TURN) c.addBonusPowerOpponentTurn(val);
+                        else if (dur == Duration.WHILE_IN_PLAY) c.addPowerBoostWhileInPlay(val);
+                        else                                    c.addPowerBoost(val);
+                    });
                 }
                 case POWER_REDUCE -> {
-                    boolean isBattle = effectData.duration() == Duration.THIS_BATTLE;
-                    resolveTargets(effectData, gameState, source, sourceCard)
-                            .forEach(c -> { if (isBattle) c.addBattlePowerBoost(-effectData.value());
-                                            else c.addPowerBoost(-effectData.value()); });
+                    Duration dur = effectData.duration();
+                    int val = effectData.value();
+                    resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> {
+                        if (dur == Duration.THIS_BATTLE)        c.addBattlePowerBoost(-val);
+                        else if (dur == Duration.OPPONENTS_NEXT_TURN) c.addBonusPowerOpponentTurn(-val);
+                        else if (dur == Duration.WHILE_IN_PLAY) c.addPowerBoostWhileInPlay(-val);
+                        else                                    c.addPowerBoost(-val);
+                    });
                 }
                 case ATTACH_DON   -> applyAttachDon(effectData, gameState, source, sourceCard);
                 case ADD_LIFE     -> applyAddLife(effectData, gameState, source);
-                case COST_MODIFY  -> resolveTargets(effectData, gameState, source, sourceCard)
-                                         .forEach(c -> c.addCostModifier(effectData.value()));
-                case SHUFFLE_DECK -> sourceCard.getOwner().getDeck().shuffle();
+                case COST_MODIFY  -> {
+                    Duration costDur = effectData.duration();
+                    int costVal = effectData.value();
+                    resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> {
+                        if (costDur == Duration.OPPONENTS_NEXT_TURN) c.addBonusCostOpponentTurn(costVal);
+                        else if (costDur == Duration.WHILE_IN_PLAY)  c.addCostModifierWhileInPlay(costVal);
+                        else                                         c.addCostModifier(costVal);
+                    });
+                }
+                case SHUFFLE_DECK -> source.getDeck().shuffle();
                 case GRANT_KEYWORD -> {
                     if (effectData.keyword() != null) {
-                        resolveTargets(effectData, gameState, source, sourceCard)
-                                .forEach(c -> c.grantKeyword(effectData.keyword()));
+                        boolean permanent = effectData.duration() == Duration.WHILE_IN_PLAY;
+                        resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> {
+                            if (permanent) c.addAbility(new Ability(new AbilityData(Trigger.KEYWORD, 0, null, false, null, effectData.keyword(), List.of())));
+                            else           c.grantKeyword(effectData.keyword());
+                        });
                     }
                 }
                 case MOVE_TO_TOP_DECK -> resolveTargets(effectData, gameState, source, sourceCard)
@@ -73,15 +98,34 @@ public class EffectFactory {
                 case MOVE_TO_BOTTOM_DECK -> resolveTargets(effectData, gameState, source, sourceCard)
                                              .forEach(c -> gameState.moveCardtoBottom(c, c.getOwner().getDeck()));
                 case SEARCH_DECK -> applySearchDeck(effectData, gameState, source, sourceCard);
-                case PREVENT_ATTACK -> resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> c.grantKeyword(Keyword.CANNOT_ATTACK));
-                case PREVENT_BLOCK -> resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> c.grantKeyword(Keyword.UNBLOCKABLE));
-                case PREVENT_KO -> resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> c.grantKeyword(Keyword.CANNOT_KO));
+                case PREVENT_ATTACK -> {
+                    boolean permanent = effectData.duration() == Duration.WHILE_IN_PLAY;
+                    resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> {
+                        if (permanent) c.addAbility(new Ability(new AbilityData(Trigger.KEYWORD, 0, null, false, null, Keyword.CANNOT_ATTACK, List.of())));
+                        else           c.grantKeyword(Keyword.CANNOT_ATTACK);
+                    });
+                }
+                case PREVENT_BLOCK -> {
+                    boolean permanent = effectData.duration() == Duration.WHILE_IN_PLAY;
+                    resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> {
+                        if (permanent) c.addAbility(new Ability(new AbilityData(Trigger.KEYWORD, 0, null, false, null, Keyword.UNBLOCKABLE, List.of())));
+                        else           c.grantKeyword(Keyword.UNBLOCKABLE);
+                    });
+                }
+                case PREVENT_KO -> {
+                    boolean permanent = effectData.duration() == Duration.WHILE_IN_PLAY;
+                    resolveTargets(effectData, gameState, source, sourceCard).forEach(c -> {
+                        if (permanent) c.addAbility(new Ability(new AbilityData(Trigger.KEYWORD, 0, null, false, null, Keyword.CANNOT_KO, List.of())));
+                        else           c.grantKeyword(Keyword.CANNOT_KO);
+                    });
+                }
                 case PLAY_CARD -> resolveTargets(effectData, gameState, source, sourceCard)
                                          .forEach(c -> gameState.playCardFree(source, c));
                 case MODAL -> applyModal(effectData, gameState, source, sourceCard);
                 case FLIP_LIFE -> applyFlipLife(effectData, gameState, source);
                 // Phase-2 stubs — no-op until implemented
-                case NEGATE -> {}
+                case NEGATE -> resolveTargets(effectData, gameState, source, sourceCard)
+                        .forEach(c -> c.getAbilities().forEach(a -> a.setNegated(true)));
             }
         };
     }
@@ -111,7 +155,7 @@ public class EffectFactory {
             case IF_OPPONENT_LIFE_COUNT -> meetsThreshold(getOpponent(gs, source).getLife().size(), conditionValue);
             case IF_OPPONENT_HAND_COUNT -> meetsThreshold(getOpponent(gs, source).getHand().size(), conditionValue);
             // Leader is multicolored (has more than one color)
-            case IF_LEADER_COLOR -> source.getLeader() != null
+            case IF_LEADER_MULTICOLORED -> source.getLeader() != null
                     && source.getLeader().getData() != null
                     && source.getLeader().getData().colors() != null
                     && source.getLeader().getData().colors().size() > 1;
@@ -132,6 +176,73 @@ public class EffectFactory {
             case IF_FIELD_CHARACTER_TYPE -> subtype == null || source.getField().getCards().stream()
                     .filter(c -> c.getData() != null)
                     .anyMatch(c -> containsSubtype(c.getData().subTypes(), subtype));
+            // Any field Character has base power >= conditionValue
+            case IF_FIELD_CHARACTER_POWER -> source.getField().getCards().stream()
+                    .anyMatch(c -> c.getBasePower() >= conditionValue);
+            // Any field Character matches one of the pipe-joined names;
+            // if conditionValue > 0, also requires base power >= conditionValue
+            case IF_FIELD_CHARACTER_NAME -> {
+                String[] names = (subtype != null) ? subtype.split("\\|") : new String[0];
+                yield source.getField().getCards().stream()
+                        .filter(c -> c.getData() != null)
+                        .filter(c -> Arrays.stream(names)
+                                .anyMatch(n -> c.getData().name().equalsIgnoreCase(n.trim())))
+                        .anyMatch(c -> conditionValue <= 0 || c.getBasePower() >= conditionValue);
+            }
+            case IF_NOT_FIELD_CHARACTER_NAME -> {
+                // "there is a [Name] character" scans both fields — Luffy will be on the opponent's side
+                String[] names = (subtype != null) ? subtype.split("\\|") : new String[0];
+                Player opp = getOpponent(gs, source);
+                yield Stream.concat(
+                        source.getField().getCards().stream(),
+                        opp.getField().getCards().stream())
+                    .filter(c -> c.getData() != null)
+                    .noneMatch(c -> Arrays.stream(names)
+                            .anyMatch(n -> c.getData().name().equalsIgnoreCase(n.trim())));
+            }
+            // Any rested field Character matches the given name
+            case IF_FIELD_CHARACTER_NAME_RESTED -> subtype != null
+                    && source.getField().getCards().stream()
+                    .filter(c -> c.getData() != null && c.isRested())
+                    .anyMatch(c -> c.getData().name().equalsIgnoreCase(subtype));
+            // At least conditionValue Characters on field have cost >= the int in subtype
+            case IF_FIELD_CHARACTER_COST_COUNT -> {
+                int minCost = 0;
+                try { if (subtype != null && !subtype.isBlank()) minCost = Integer.parseInt(subtype.trim()); }
+                catch (NumberFormatException ignored) {}
+                final int costFloor = minCost;
+                long count = source.getField().getCards().stream()
+                        .filter(c -> c.getData() != null && c.getEffectiveCost() >= costFloor)
+                        .count();
+                yield count >= conditionValue;
+            }
+            // Opponent field conditions
+            case IF_OPPONENT_RESTED_CHARACTER_COUNT -> {
+                Player opp = getOpponent(gs, source);
+                long rested = opp.getField().getCards().stream().filter(Card::isRested).count();
+                yield meetsThreshold((int) rested, conditionValue);
+            }
+            case IF_OPPONENT_FIELD_CHARACTER_POWER ->
+                getOpponent(gs, source).getField().getCards().stream()
+                        .anyMatch(c -> c.getBasePower() >= conditionValue);
+            case IF_OPPONENT_CHARACTER_COUNT ->
+                meetsThreshold(getOpponent(gs, source).getField().size(), conditionValue);
+            case IF_OPPONENT_DON_COUNT ->
+                meetsThreshold(getOpponent(gs, source).getCost().size(), conditionValue);
+            case IF_OPPONENT_FIELD_CHARACTER_COST ->
+                getOpponent(gs, source).getField().getCards().stream()
+                        .anyMatch(c -> c.getData() != null && meetsThreshold(c.getEffectiveCost(), conditionValue));
+            case IF_OPPONENT_ATTRIBUTE -> {
+                Player opp = getOpponent(gs, source);
+                yield opp.getLeader() != null
+                        && opp.getLeader().getData() != null
+                        && attributeMatches(opp.getLeader(), subtype);
+            }
+            // Self rested-character count
+            case IF_RESTED_CHARACTER_COUNT -> {
+                long rested = source.getField().getCards().stream().filter(Card::isRested).count();
+                yield meetsThreshold((int) rested, conditionValue);
+            }
         };
     }
 
@@ -270,6 +381,28 @@ public class EffectFactory {
             int power = card.getTotalPower();
             if (t.maxPower() > 0 && power > t.maxPower()) return false;
             if (t.minPower() > 0 && power < t.minPower()) return false;
+        }
+        // Subtye filter (e.g. "with the {Straw Hat} type")
+        if (t.subtype() != null && !t.subtype().isBlank()) {
+            if (card.getData() == null) return false;
+            if (!containsSubtype(card.getData().subTypes(), t.subtype())) return false;
+        }
+        // Name filter (e.g. "named [Luffy]")
+        if (t.nameFilter() != null && !t.nameFilter().isBlank()) {
+            if (card.getData() == null) return false;
+            if (!card.getData().name().toLowerCase().contains(t.nameFilter().toLowerCase())) return false;
+        }
+        // Attribute filter (e.g. "with the (Slash) attribute")
+        if (t.attribute() != null) {
+            if (card.getData() == null || card.getData().attribute() != t.attribute()) return false;
+        }
+        // Color filter (e.g. "black Character", "red Character")
+        if (t.colors() != null && !t.colors().isEmpty()) {
+            if (card.getData() == null || card.getData().colors() == null) return false;
+            for (Color targetColor : t.colors()) {
+                if (card.getData().colors().stream()
+                        .noneMatch(c -> c == targetColor)) return false;
+            }
         }
         return true;
     }
@@ -465,7 +598,7 @@ public class EffectFactory {
     /**
      * Helper for threshold-based conditions: checks whether the count meets the conditionValue threshold.
      * @param count the actual count to compare against the threshold
-     * @param threshold the conditionValue from EffectData; negative means "less than -threshold", positive means "greater than or equal to threshold"
+     * @param threshold the conditionValue from EffectData; negative means "less than or equal to -threshold", positive means "greater than or equal to threshold"
      * @return true if the count meets the threshold condition, false otherwise
      */
     private static boolean meetsThreshold(int count, int threshold){
