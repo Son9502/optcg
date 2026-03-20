@@ -7,7 +7,13 @@ public enum CardType {
     LEADER,
     EVENT,
     STAGE,
-    DON;
+    DON,
+    /** Compound target: effect can act on either the Leader or a Character. */
+    LEADER_OR_CHARACTER,
+    /** DON!! source qualifier: only rested (sideways) DON!! cards in cost zone. */
+    RESTED_DON,
+    /** DON!! source qualifier: only active (upright) DON!! cards in cost zone. */
+    ACTIVE_DON;
 
     @JsonCreator
     public static CardType fromValue(String value) {

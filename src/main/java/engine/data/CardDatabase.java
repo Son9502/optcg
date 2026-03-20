@@ -42,7 +42,7 @@ public class CardDatabase {
     }
 
     public CardDatabase() {
-        this("src/main/resources/raw/data/");
+        this("src/main/resources/compiled/data/");
     }
 
     public void loadAllCards(String compiledDir) {
@@ -133,8 +133,8 @@ public class CardDatabase {
 
     public static void main(String[] args) {
         System.out.println("Card Database");
-        String rawPath = "src/main/resources/raw/data/";
-        CardDatabase cardDatabase = new CardDatabase(rawPath);
+        String path = "src/main/resources/compiled/data/";
+        CardDatabase cardDatabase = new CardDatabase(path);
         System.out.println(cardDatabase.getCardData("OP03-008"));
     }
 

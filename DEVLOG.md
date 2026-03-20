@@ -538,6 +538,175 @@ DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST, COST_MODIFY, ADD_DON, SET_DO
 
 ---
 
+### CliController — message consolidation and display improvements (collab)
+
+**Problem:** `GameEngine` contained two direct `System.out.println` calls (turn announcement and game-over message), violating the "CliController is the sole output owner" rule. Additionally, battle announcements (`announceAttack`, `announceBlocker`, `announceCounter`, `announceBattleResult`) and the phase-result announcements after non-interactive phases (Draw, DON) were either stubs or missing entirely.
+
+**Developer constraint:**
+> "CliController owns ALL player-visible output. GameEngine, BattleSystem, GameState should never call System.out."
+
+**Changes (collab):**
+- `GameEngine.run()` — replaced both `System.out.println` calls with `cliController.announcePhase()` and `cliController.announceGameOver()`; added private `announcePhaseResult(Phase, int)` helper that calls `announceDrawPhaseResult` / `announceDonPhaseResult` after the non-interactive phase advances
+- New announcement methods added to `CliController`: `announcePhase`, `announceDrawPhaseResult`, `announceDonPhaseResult`, `announceAttack`, `announceBlocker`, `announceCounter`, `announceBattleResult` (proper signature: attacker, target, attackerWon, defenderLifeAfter, lifesTaken), `announceCardPlayed`, `announceGameOver`
+- `defend()` wired: captures `lifesBefore` before `battleSystem.resolve()`, then observes `lifesAfter` and field presence to determine `attackerWon` — no BattleSystem signature changes needed
+- DON count announcement uses `turnNumber == 1 ? 1 : 2`, mirroring `TurnManager.advancePhase()` logic without exposing a new `isFirstTurn()` accessor
+
+**Ability description display (collab):**
+- `cardAbilityLine(Card)` helper: returns `CardData.description()` if non-blank; otherwise formats keyword abilities as `[Rush]`, `[Double Attack]` etc. via `formatKeyword(Keyword)` — covers both real cards loaded from JSON and generic GameFactory test cards
+- Called in `printHand()`, `printField()` (Leader, Characters, Stage sections), and `announceCardPlayed()` — ability line prints in white beneath each card's stats line
+- "Use Leader's Ability" menu option added as a commented-out stub in `runMainPhases()` with a `// TODO: ACTIVATED_MAIN` note; case 7 handler also stubbed and commented
+
+**GameFactory named ability cards (collab):**
+
+**Developer decision:** The test decks needed named cards to exercise each Phase 2 tier manually in the CLI. The GameFactoryTest pins exactly 42 Characters / 5 Events / 3 Stages = 50 total, so named cards had to replace generic cards rather than expand the deck.
+
+| Card | Trigger | Effect | Tier |
+|---|---|---|---|
+| Nami (×2) | ON_PLAY | Draw 1 card | 1 (done) |
+| Sanji (×2) | WHEN_ATTACKING | +1000 power this turn | 1 (done) |
+| Coby (×2) | ON_KO | Draw 1 card | 1 (done) |
+| Marco (×2) | END_OF_YOUR_TURN (DON!! ×1) | Rest 1 opponent's Character | 1 (done) |
+| Vivi (×1) | TRIGGER | Draw 1 card | 2 (stub) |
+| Perona (×1) | ON_PLAY | Gains [Blocker] until end of turn | 2 (stub) |
+| Kuzan (×1) | ON_PLAY | MODAL — draw 2 or bounce | 3 (stub) |
+
+Generic character counts reduced proportionally (Lieutenants 9→6, Captains 9→7, Commanders 7→5, Admirals 5→2, Yonko Officers 2→1) to maintain the 42-card total. All existing `GameFactoryTest` assertions pass unchanged.
+
+---
+
+### Multi-color `List<Color>` (collab)
+
+**Problem:** `ColorDeserializer` handled the space-separated multi-color API format (`"Green Yellow"`) by silently dropping all colors after the first. `CardData.color` was a single `Color`, losing information for every dual-color card in the set.
+
+**Developer decision:**
+> "Replace `Color color` with `List<Color> colors`. No `color()` convenience accessor — both colors are primary, neither takes precedence. Callers use `colors()` directly."
+
+**Changes:**
+- `ColorDeserializer` → `StdDeserializer<List<Color>>`: splits on space, maps each valid token to a `Color` enum value, skips dirty/unknown tokens, returns an immutable list
+- `CardData` — component renamed from `color` to `colors` (`List<Color>`); compact constructor normalises `null` → `List.of()`; `toString()` updated; no `color()` bridge method
+- `CliController` — added `ansiCode(Color)` private helper (returns raw ANSI string); added `colorize(String, List<Color>)` and `boldColorize(String, List<Color>)` overloads: single-color delegates to existing method, multi-color alternates ANSI codes per character (e.g. "Yamato" in Green/Yellow → Y(green)a(yellow)m(green)a(yellow)t(green)o(yellow)); all `.getData().color()` call sites replaced with `.getData().colors()` using `replace_all`
+- `GameFactory.makeLeader` — parameter changed to `List<Color>` — caller passes `List.of(Color.Red)` / `List.of(Color.Green)`
+- `CardDatabaseTest` — two `assertEquals(Color.Red, data.color())` assertions changed to `assertTrue(data.colors().contains(Color.Red))`
+
+**Developer reasoning on display:** Per-character alternation was chosen over per-word alternation because most dual-color card names in OP TCG are single words (Sanji, Nami, Yamato). Per-word would produce no visible alternation in those cases.
+
+**Result:** 224 tests, 0 failures.
+
+---
+
+### Item 21 — Subtype, name, and attribute filtering in Target (collab)
+
+**Problem:** `Target` had no fields for filtering by subtype (`{Straw Hat Crew}`), name (`[Luffy]`), or attribute (`(Slash)`). `matchesFilters()` only checked player, zone, cardType, cost, and power.
+
+**Design decision (developer):** All three filters added as `String` fields on the `Target` record. `matchesFilters()` checks each with a `!= null && !isBlank()` guard — blank/empty strings are treated as no-filter, preserving backward compatibility with all existing test callsites that pass `""`.
+
+**Result:** 11-field `Target` record; `matchesFilters()` guards on `subtype`, `nameFilter`, `attribute`. 240 tests, 0 failures.
+
+---
+
+### Items 14 + 15 + 17 + 22 — Condition evaluation suite (collab)
+
+**Problem:** `evaluateCondition()` had real implementations for only 4 conditions. The full checklist required 20+ distinct condition types.
+
+**Approach (developer-directed):** Conditions were grouped by what they check and implemented in waves:
+- `IF_LEADER_NAME`, `IF_LEADER_TYPE`, `IF_LEADER_ATTRIBUTE`, `IF_LEADER_MULTICOLORED` — leader metadata conditions using `subtype` string from `effectData.subtype()` (not from `Target`); `IF_LEADER_ATTRIBUTE` uses the `attributeMatches()` helper normalizing attribute name strings
+- `IF_FIELD_CHARACTER_TYPE` — field scan using SUBTYPE_FILTER with a `hasCharacterBefore` heuristic in `classifyConditionClause()`
+- `IF_FIELD_CHARACTER_POWER`, `IF_FIELD_CHARACTER_NAME`, `IF_FIELD_CHARACTER_NAME_RESTED`, `IF_FIELD_CHARACTER_COST_COUNT`, `IF_RESTED_CHARACTER_COUNT`, `IF_NOT_FIELD_CHARACTER_NAME` — field-scan conditions; name stored as `effectData.subtype()` (pipe-joined for multi-name); conditionValue carries numeric thresholds
+- `IF_OPPONENT_CHARACTER_COUNT`, `IF_OPPONENT_RESTED_CHARACTER_COUNT`, `IF_OPPONENT_DON_COUNT`, `IF_OPPONENT_FIELD_CHARACTER_POWER`, `IF_OPPONENT_FIELD_CHARACTER_COST`, `IF_OPPONENT_LIFE_COUNT`, `IF_OPPONENT_HAND_COUNT` — mirrored opponent-facing scans
+
+**Key fix:** `IF_OPPONENT_FIELD_CHARACTER_COST` initially used a raw `>=` comparison that always evaluated true for negative `conditionValue` thresholds. Fixed by replacing with `meetsThreshold()` (negative = ≤N, positive = ≥N).
+
+**Key fix:** `evaluateCondition()` switch had no `default` — adding any new `Condition` enum value without a corresponding case caused `"Switch expression should cover all possible values"` compile errors across all test classes (Maven incremental compilation masked this until `mvn clean test`).
+
+**Result:** 131 `EffectFactoryTest` tests, 343 total, 0 failures.
+
+---
+
+### Item 24 — Target color filter (collab)
+
+**Problem:** `Target` had no `color` field. Card text like "a purple {Big Mom Pirates} type Character" could not be filtered by color.
+
+**Changes:** 12th field `String color` added to `Target` record; `matchesFilters()` checks it against `card.getData().colors()` (case-insensitive, `List<Color>` join). All existing callsites updated with trailing `null`. `CardCompiler.toEffectJson()` already wrote the target node — no compiler change needed (color extraction from parser text is a known gap, requires hand-compiled JSON).
+
+**Result:** 300 tests, 0 failures.
+
+---
+
+### Item 23 — `IF_LEADER_COLOR` → `IF_LEADER_MULTICOLORED` rename (collab)
+
+**Problem:** `IF_LEADER_COLOR` was a misleading name — it checked whether the leader was multicolored (`colors().size() > 1`), not whether the leader had a specific color. The name implied a color-match condition.
+
+**Changes:** Renamed enum value in `Condition.java`; updated `evaluateCondition()` switch case; updated `EffectParser.classifyConditionClause()` string return; updated all compiled JSON occurrences. Also fixed `SHUFFLE_DECK` case: was using `sourceCard.getOwner().getDeck().shuffle()` (wrong — `sourceCard` is null for some callers); corrected to `source.getDeck().shuffle()`.
+
+**Result:** 300 tests, 0 failures.
+
+---
+
+### Items 16 + 18 — FLIP_LIFE and COUNTER trigger (collab — test-first)
+
+**FLIP_LIFE (#16):** `applyFlipLife()` in `EffectFactory` flips the top N life cards via `Card.flip()`. `TargetSelector` used for interactive pick — face-down cards shown as `[???]` in CLI. Fallback = top N when no selector is set. Developer specified: revealed life cards stay in the life zone (flip is a reveal, not a move).
+
+**COUNTER trigger (#18):** Event and Character counter cards are played from hand during the battle defend window. `AbilityManager.dispatch(Trigger.COUNTER, counterCard, defender)` fires ON a counter card being played; `null` zone in `resolveTargets()` defaults to CHARACTER zone; LEADER and null/null targets both include the leader in resolution; `getPowerWithEffects()` used for defender power (base + bonusPower + bonusBattlePower, excluding DON!!); KO'd cards explicitly cleared in `resolve()` before field sweep so power comparisons see the final field state.
+
+**Result:** 298 tests, 0 failures.
+
+---
+
+### Item 19 — NEGATE effect (collab)
+
+**Design revision (developer):** Initial roadmap noted that NEGATE requires "a cancellation stack." After reviewing all checklist cards with NEGATE text, the developer determined no card uses counterspell-style mid-stack cancellation — every instance means "suppress this card's abilities for this turn." No stack needed.
+
+**Implementation:** `EffectFactory.NEGATE` case calls `resolveTargets()` → iterates `card.getAbilities()` → calls `ability.setNegated(true)` on each. `AbilityManager.dispatch()` already skips `ability.isNegated()` abilities (the flag was present but never set). `ability.resetTurn()` in `GameState.refreshField()` clears the negated flag each turn.
+
+**Deferred:** Passive-global variants (Teach OP09-081: "opponent's [On Play] effects are negated"; Roger OP13-064: "Characters without Roger Pirates type have effects negated") require player-level or field-scan gates — deferred to Future Rescoping.
+
+**Result:** No new tests needed — NEGATE case wiring verified by existing condition/target tests. 343 tests, 0 failures.
+
+---
+
+### Item 20 — Duration correctness (collab)
+
+**Problem:** All four `Duration` values existed in the enum but only `THIS_BATTLE` had a separate power bucket. `THIS_TURN` and `OPPONENTS_NEXT_TURN` and `WHILE_IN_PLAY` all silently fell into `bonusPower` (cleared each turn start), making `OPPONENTS_NEXT_TURN` and `WHILE_IN_PLAY` functionally identical to `THIS_TURN`.
+
+**Design decisions (developer):**
+- `PERMANENT` renamed → `WHILE_IN_PLAY` (name was misleading: effects last while the card is on the field, not forever)
+- Four separate buckets: `bonusPower`/`bonusCost` (THIS_TURN), `bonusBattlePower` (THIS_BATTLE), `bonusPowerOpponentTurn`/`bonusCostOpponentTurn` (OPPONENTS_NEXT_TURN), `bonusPowerWhileInPlay`/`bonusCostWhileInPlay` (WHILE_IN_PLAY)
+- `getPowerWithEffects()`, `getTotalPower()`, `getEffectiveCost()` sum all four buckets
+- `WHILE_IN_PLAY` clear location: `GameState.moveCard()` when origin is CHARACTER zone and destination is not — cleared on KO, bounce, deck placement, all field-exit paths in one place
+- `OPPONENTS_NEXT_TURN` clear location: `TurnManager.endTurn()` on the non-active player's cards before switching — "opponent's next turn" from the non-active player's perspective = the active player's turn just ending
+- `GRANT_KEYWORD` and `PREVENT_*` with `WHILE_IN_PLAY` duration add a permanent `Ability` object to `card.abilities` instead of `grantedKeywords` — survives `clearGrantedKeywords()`
+
+**Parser note:** `extractDuration()` returns null for no-qualifier effects. Null falls to `bonusPower` (THIS_TURN) in `EffectFactory`. The comment "engine interprets null as PERMANENT" was stale after rename — `WHILE_IN_PLAY` must be specified explicitly in compiled JSON when needed.
+
+**Result:** 355 tests, 0 failures.
+
+---
+
+### Item 25 — 12 selectable dummy decks (collab)
+
+**Goal:** Replace the hardcoded Luffy-vs-Zoro test pair with a menu-driven deck selection so both players can choose from 12 distinct decks before the game starts.
+
+**Architecture (developer-directed):**
+- `createTestGame()` left completely unchanged — all `GameFactoryTest` assertions pass without modification
+- New entry point: `createGame(int p1Deck, int p2Deck)` clamps to 0–11, creates players, calls `equip(Player, int)` per player
+- `DECK_NAMES[12]` — public static array for the menu; `Main.java` prints it and reads player choices
+- Each deck: 50 cards = 31 `genericBase()` cards (shared across all 12) + 11 themed ability characters + 5 events + 3 stages
+
+**Color identity mapping:**
+- Red: POWER_BOOST/KO/WHEN_ATTACKING theme
+- Blue: DRAW/RETURN_TO_HAND/SEARCH_DECK theme
+- Green: REST/SET_DON_ACTIVE/UNREST theme
+- Purple: ADD_DON/SET_DON_ACTIVE theme
+- Black: KO/TRASH/COST_MODIFY theme
+- Yellow: ADD_LIFE/TRIGGER theme
+- Dual-color: combines both parent color's ability types into MODAL and mixed-trigger cards
+
+**Developer constraint on backwards compatibility:** `GameFactoryTest` pins exact card type counts (42 characters, 5 events, 3 stages, 10 DON). `createTestGame()` must not change. New decks are in a parallel path.
+
+**Result:** 355 tests, 0 failures. Deck selection menu live in `Main.java`.
+
+---
+
 ## What Was Never AI-Generated
 
 - The overall phased architecture (CMU → Tmux → GUI → AI → Online)
@@ -546,7 +715,7 @@ DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST, COST_MODIFY, ADD_DON, SET_DO
 - The decision to separate BattleSystem from CliController
 - The CardData record field selection (what the engine actually needs vs. API noise)
 - The [DON!! xX] condition vs. cost ruling (found in the official PDF)
-- The multi-color deferral decision (out of scope for CMU)
+- The multi-color `List<Color>` design decision — no `color()` bridge accessor (both colors are equally primary), per-character ANSI alternation chosen over per-word
 - The sub_types tokenization analysis (developer identified the multi-word problem)
 - The Tmux 3-pane layout concept
 - The GameStateServer/GameStateClient socket architecture (developer specified the pattern; AI described implementation details)
@@ -560,3 +729,237 @@ DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST, COST_MODIFY, ADD_DON, SET_DO
 - The `IF_RESTED` condition priority — checking FILTER tokens for `RESTED` before the CARD_TYPE token prevents misclassification of "if this Character is rested" as `IF_CHARACTER_COUNT`
 - The `@JsonCreator` absorb-all-cases strategy for `CardType` — reserializing compiled JSON to uppercase was rejected in favour of tolerating past and future case variation at the deserialization boundary
 - The `buildTargetNode()` null-return contract — emitting `"target": null` instead of `{}` when all targeting fields are absent, keeping compiled JSON clean for the engine's null checks
+- The NEGATE design revision — recognizing that no checklist card uses counterspell-style mid-stack cancellation; every NEGATE is a turn-scoped flag on a field card's abilities (no stack needed)
+- The `PERMANENT` → `WHILE_IN_PLAY` rename — recognizing the misleading semantics; "while the card is on the field" is a meaningfully different concept from "forever"
+- The four-bucket power model — `bonusPower`, `bonusBattlePower`, `bonusPowerOpponentTurn`, `bonusPowerWhileInPlay` — and the decision to clear `WHILE_IN_PLAY` in `moveCard()` rather than `refreshField()`, so field-exit always clears it regardless of turn timing
+- The `OPPONENTS_NEXT_TURN` clear location — `TurnManager.endTurn()` on the non-active player's cards (whose "opponent's next turn" just ended), not on the active player's cards
+- The 12-deck `WHILE_IN_PLAY` / `OPPONENTS_NEXT_TURN` architecture — `createTestGame()` untouched for backward compat; all selectable decks in a parallel `createGame()` / `equip()` path
+- The `[Opponent's Turn]` is-a-trigger-not-a-duration ruling (OP TCG domain knowledge): `[Opponent's Turn]` on an ability header is a timing scope like `END_OF_YOUR_TURN`, not a Duration qualifier on the effect inside it
+
+---
+
+### Life card Trigger system — #5 (collab + manual tests)
+
+**Goal:** When an attack resolves and a life card is revealed, the defending player may activate a TRIGGER ability on that card.
+
+**Architecture decisions (developer):**
+
+*Return type change:* `BattleSystem.resolve()` return type changed from `void` to `List<Card>` — the revealed life cards. BANISH sends the life card to trash and returns an empty list (no trigger eligible). The caller (`CliController.defend()`) passes the list to `trigger()`.
+
+*Trigger card destination:* After a trigger activates, the card is moved to TRASH (not kept in hand). This diverges from the physical OP TCG rules but was the developer's explicit design choice for this engine.
+
+*Player identity:* `CliController.trigger()` receives the defending player (target's owner), not the attacker. An early draft incorrectly passed `attacker.getOwner()` — caught and corrected during review.
+
+**Key methods added:**
+- `BattleSystem.resolveTrigger(Player owner, Card triggerCard)` — dispatches via `AbilityManager.dispatch(Trigger.TRIGGER, ...)`, then calls `gameState.trash(owner, triggerCard)`
+- `GameState.banishLife(Player)` — routes the life card to trash, mirrors `removeLife()` game-over logic
+- `CliController.trigger(Player, List<Card>)` — loops triggers, shows effect text preview (`[Trigger] <text>`) before the confirm prompt, calls `announceTrigger()` on activation
+- `CliController.announceTrigger(Player, Card)` — prints activation announcement matching existing announce style
+
+**`cardTriggerLine()` fix:** Draft version called `a.getDescription()` on `Ability` — method doesn't exist. Fixed to use `card.getData().description()` with a `hasTrigger` guard.
+
+**Test suite for trigger (manual tests, collab fixes):**
+Developer wrote 4 new tests in `BattleHandlerTest`: `triggerAbilityWhenLifeLost`, `noTriggerAbilityWhenCardPlayed`, `noTriggerWhenBanished`, `noTriggerifNotActivated`. Multiple logic errors corrected iteratively: wrong player zone seeded, wrong attacker owner, assertion counted 1 instead of 0 for BANISH path. `setUp()` needed `gameState.setAbilityManager(new AbilityManager(gameState))` — NPE caught on first run.
+
+**Result:** 228 tests, 0 failures. `BattleHandlerTest` grew from 25 → 29.
+
+---
+
+### SHUFFLE_DECK (#6) and GRANT_KEYWORD (#7) — EffectData keyword field (manual + collab)
+
+**SHUFFLE_DECK (manual):**
+Developer added `Deck.shuffle()` (converts internal `Deque<Card>` to list, shuffles, rebuilds) and wired the case in `EffectFactory` as `sourceCard.getOwner().getDeck().shuffle()`. No test file changes needed — existing `ZoneTest.shuffle` already covered the method.
+
+**EffectData keyword field (manual):**
+Developer added `@JsonProperty("keyword") Keyword keyword` as the 6th field of the `EffectData` record. This broke 7 existing constructor calls in `GameFactory.java` — all updated with trailing `, null` (or `, Keyword.BLOCKER` for Perona). Test helper `eff()` in `EffectFactoryTest` updated to 6 args by user.
+
+**GRANT_KEYWORD (collab — test-first):**
+Developer wrote tests first (3 in `CardTest`, 2 in `EffectFactoryTest`), then implementation followed:
+
+- `Card.grantKeyword(Keyword k)` — adds to a `grantedKeywords` list (deduplicated)
+- `Card.clearGrantedKeywords()` — clears the list; permanent keywords in `abilities` survive
+- `Card.hasKeyword(Keyword k)` — checks `grantedKeywords.contains(k)` before the abilities stream; permanent keywords are still found if the runtime list is empty
+- `EffectFactory` GRANT_KEYWORD case — resolves targets via `resolveTargets()`, calls `grantKeyword(effectData.keyword())` on each
+- `GameState.refreshField()` — added `card.clearGrantedKeywords()` alongside the existing power/cost clears
+
+**Key test case (`testhasKeyword`):** Verifies that a card with a permanent `RUSH` keyword ability still returns `true` from `hasKeyword(Keyword.RUSH)` after `clearGrantedKeywords()` is called — permanent abilities must survive the clear.
+
+**Result:** 232 tests, 0 failures.
+
+---
+
+### SEARCH_DECK (#8), MOVE_TO_TOP_DECK / MOVE_TO_BOTTOM_DECK (#9) (collab — test-first)
+
+**Design decisions (developer):**
+- SEARCH_DECK source zone encoded in `target.zone()` — no new EffectData field needed; supports both DECK and LIFE as source
+- "Look top N, select up to M, return rest" is a single atomic operation: cards temporarily removed from the zone, selection delegated to `TargetSelector`, selected cards moved to hand, rest reinserted at top in original order
+- MOVE_TO_TOP_DECK and MOVE_TO_BOTTOM_DECK are separate effects (not a sub-case of SEARCH_DECK) because they appear independently in card text
+
+**Implementation:**
+- `applySearchDeck()` helper in `EffectFactory`: snapshots top N, removes them, delegates selection to `TargetSelector`, sends selected to hand, returns rest to top via `sourceZone.add()` (addFirst semantics) in reverse order
+- `MOVE_TO_TOP_DECK` → `resolveTargets()` → `gameState.moveCard(c, c.getOwner().getDeck())`
+- `MOVE_TO_BOTTOM_DECK` → `resolveTargets()` → `gameState.moveCardtoBottom(c, c.getOwner().getDeck())`
+
+**Developer constraint on rest placement:** The initial draft returned leftover cards to the bottom of the deck. Corrected to return to top in original order — this is the standard OP TCG ruling for look-and-add effects.
+
+**Result:** 240 tests, 0 failures.
+
+---
+
+### PREVENT_ATTACK / PREVENT_KO / PREVENT_BLOCK (#10) — temporary keywords (collab — test-first)
+
+**Design decision (developer):** Rather than separate enforcement paths, PREVENT effects are encoded as temporary keywords applied to the target card:
+- `PREVENT_ATTACK` → grants `CANNOT_ATTACK` keyword
+- `PREVENT_KO` → grants `CANNOT_KO` keyword
+- `PREVENT_BLOCK` → grants `UNBLOCKABLE` on the *opponent's* card (preventing them from blocking with it; reuses existing UNBLOCKABLE check in BattleSystem)
+
+All three are cleared by `refreshField()` via `clearGrantedKeywords()` each turn — no separate state to manage.
+
+**Enforcement points:**
+- `BattleSystem.canAttack()` — checks `CANNOT_ATTACK`
+- `BattleSystem.resolve()` — checks `CANNOT_KO` before KO'ing the losing card
+
+**Result:** 246 tests, 0 failures.
+
+---
+
+### PLAY_CARD (#11) — GameState.playCardFree() (collab — test-first)
+
+**Design decision (developer):** Two distinct play paths:
+- `playCard(Player, Card)` — pays DON cost, enforces hand requirement; used for normal player-initiated plays
+- `playCardFree(Player, Card)` — no cost, no hand check; used by the PLAY_CARD effect (e.g. "play a card from your trash")
+
+Source zone for `PLAY_CARD` effects is encoded in `target.zone()` (HAND or TRASH). No new EffectData field needed.
+
+**Zone routing in `playCardFree()`:**
+- `CHARACTER` → field (respects 5-card limit; sets summon sickness unless RUSH or RUSH_CHARACTER); dispatches `ON_PLAY`
+- `EVENT` → trash directly
+- `STAGE` → stage (respects 1-stage limit; replaces existing stage)
+
+**Tests written by developer (10):** fromHand_CharactertoField, eventCard_goesToTrash, stageCard_goesToStage, fromHand_NoCost (10 DON setup + rested count check), fromTrash_toField, respectsMaxCost, respectsMaxPower, respectsMinCost, respectsMinPower, fieldFull_doesNotPlay, stageFull_doesNotPlay.
+
+**Test fixes caught through iteration:**
+- `makeEventCard` / `makeStageCard` needed explicit `CardType` — `TestUtils.makeCard` has `cardType=null`; added to both local helpers and `TestUtils`
+- Two tests initially described RETURN_TO_HAND scenarios, not PLAY_CARD — deleted
+- `respectsMinPower` had `minCost=3000` instead of `minPower` in the `tgt()` call
+
+**Result:** 257 tests, 0 failures.
+
+---
+
+### RUSH_CHARACTER keyword enforcement (collab — test-first)
+
+**Design (developer):** RUSH_CHARACTER differs from RUSH in two ways:
+1. Bypasses summon sickness (same as RUSH)
+2. Restricts valid attack targets to rested Characters only — cannot attack the opponent's Leader
+
+**Implementation:**
+- `BattleSystem.getValidTargets(Player opponent, Card attacker)` — new overload: if attacker has `RUSH_CHARACTER`, excludes `opponent.getLeader()` from the target list; existing `getValidTargets(Player)` now delegates to this with `null`
+- `GameState.playCard()` + `playCardFree()` — summon-sick bypass extended to include `RUSH_CHARACTER`
+
+**Tests (3, written by developer):** `rushCharacter_notSummonSick`, `rushCharacter_canAttackCharacter` (uses `getValidTargets(p2, card)` with rested defender), `rushCharacter_cantAttackLeader` (asserts leader not in valid targets).
+
+**Key fix:** `canAttackCharacter` defender was not rested — `getValidTargets` only returns rested characters. Developer added `defender.rest()`.
+
+**Result:** 260 tests, 0 failures.
+
+---
+
+### EffectData.choices field — MODAL data model (developer)
+
+**Developer added** `@JsonProperty("choices") List<List<EffectData>> choices` as the 7th field of the `EffectData` record. Each inner `List<EffectData>` represents one branch of a choose-one effect.
+
+All existing 6-arg `new EffectData(...)` call sites updated with trailing `null` — 76 compile errors across `GameFactory`, `AbilityManagerTest`, `BattleHandlerTest`, and `EffectFactoryTest`. Fixed via targeted Edit passes and verified with `mvn test-compile`.
+
+**Design decision (developer):** A `ModalOption` wrapper class was considered and rejected — `List<List<EffectData>>` is sufficient for the engine; display labels for the CliController menu can be generated from effect data at presentation time without adding a new type.
+
+---
+
+### MODAL (#12) — EffectFactory.applyModal() (collab)
+
+**Design:**
+- `ModalSelector` functional interface: `int select(List<List<EffectData>> choices, String prompt)` — returns 0-based branch index
+- `GameState` stores a `ModalSelector` field (default: `(choices, prompt) -> 0`); getter/setter follow `TargetSelector` pattern
+- `applyModal()` in `EffectFactory`: retrieves choices from `effectData.choices()`, calls selector, clamps index, executes each `EffectData` in the selected branch via `build(sub, sourceCard).apply(gs, source)`
+
+**CliController integration:** Pending — the default selector (branch 0) is used in all CMU sessions until the interactive menu is wired.
+
+**GameFactory Kuzan update:** `onPlayModal()` now has real choices — branch 0: Draw 2; branch 1: Return 1 opponent Character (cost ≤3) to hand. Previously a no-op stub.
+
+**Tests (3, written by developer):** `modal_chooseFirst` (default → POWER_BOOST fires, DRAW does not), `modal_chooseSecond` (selector set to idx=1 → DRAW fires, POWER_BOOST does not), `modal_onlyOneChoiceFires` (default → REST fires, DRAW does not).
+
+**Key bugs caught:**
+- Incorrect `eff()` arg count on `secondOption` (tgt in condition slot instead of target slot)
+- Wrong ByteBuddy `Target` import auto-inserted by IDE — changed to `engine.cards.effects.Target`
+- `modal_chooseSecond` missing `gs.setModalSelector((c, p) -> 1)` — without it, branch 0 always fired
+- DRAW with empty deck drew 0 cards — added `TestUtils.makeCard` seeds to deck before firing
+
+**Result:** 263 tests, 0 failures.
+
+---
+
+### THIS_BATTLE power boost routing + bonusBattlePower (collab)
+
+**Problem:** `POWER_BOOST` effects with `duration = THIS_BATTLE` were applied to `bonusPower` (cleared at turn start) rather than a battle-scoped bucket, so counter event boosts would persist across turns.
+
+**Developer decision:** Two separate power buckets on `Card`:
+- `bonusPower` — cleared at turn start via `refreshField()`
+- `bonusBattlePower` — cleared at battle end in `BattleSystem.resolve()`
+
+`getPowerWithEffects()` added to `Card`: returns `base + bonusPower + bonusBattlePower` (no DON!! boost). Used by `getEffectivePower()` for the defending player so that counter boosts count in battle resolution without granting a DON!! bonus.
+
+**EffectFactory:** `POWER_BOOST` and `POWER_REDUCE` route by duration: `THIS_BATTLE` → `addBattlePowerBoost()`, all others → `addPowerBoost()`. Duration distribution across compiled decks: THIS_BATTLE (20), THIS_TURN (28), OPPONENTS_NEXT_TURN (11), null (16) — confirmed before implementing.
+
+**BattleSystem cleanup:** `resolve()` explicitly calls `attacker.clearBattlePowerBoosts()` and `effectiveTarget.clearBattlePowerBoosts()` before sweeping field cards — necessary because KO'd cards leave the field and would be missed by the field sweep.
+
+**Result:** 298 tests, 0 failures.
+
+---
+
+### COUNTER trigger on event cards — #18 (collab — test-first)
+
+**Developer decisions:**
+- `am.dispatch(Trigger.COUNTER, counterCard, defender)` in `applyCounter()` fires COUNTER trigger effects on counter event cards
+- `null` zone in `addZoneCards` now defaults to `ZoneType.CHARACTER` — 125/186 COUNTER POWER_BOOST effects had `null` zone; previously returned empty pool
+- Leader included in target pool for `cardType = LEADER` and `(cardType = null, zone = null)` cases (not just `LEADER_OR_CHARACTER`)
+- `getPowerWithEffects()` used for defender power in `getEffectivePower()` — base + effect boosts, no DON!!
+
+**Tests (5):** counterEvent_boostsFieldCharacter, counterEvent_boostsLeader_whenNoFieldCards, counterEvent_boostIsCountedInBattle_defenderSurvives, counterEvent_eventCardTrashedAfterCounter, battleBoostsCleared_afterCounterEventBattle.
+
+**Bug caught:** KO'd defender moves to trash before field sweep — battle boosts not cleared. Fixed by explicit `clearBattlePowerBoosts()` calls on attacker and effectiveTarget before the sweep.
+
+**Result:** 298 tests, 0 failures.
+
+---
+
+### TokenType bracket differentiation + Condition classification — #14, #15 (collab)
+
+**Problem:** All three bracket forms (`[Name]`, `{Subtype}`, `(Attribute)`) emitted `TokenType.FILTER`. Condition classification in `EffectParser` used raw-string prefix inspection (`r.startsWith("{")`, `r.startsWith("[")`) — fragile and mixed with unrelated text filters.
+
+**Developer decision:** Option A (separate token types) chosen for long-term cleanliness:
+- `NAME_FILTER` — `[Sanji]`, `[Blocker]` — named card or keyword reference
+- `SUBTYPE_FILTER` — `{Straw Hat Crew}` — subtype / type identifier
+- `ATTRIBUTE_FILTER` — `(Slash)` — attribute identifier
+- `FILTER` — retained for numeric/text filters (`"with cost 4 or less"`, `"active"`, `"top"`, `"bottom"`)
+
+**New `Condition` enum values:**
+- `IF_LEADER_NAME` — `[Name]` token in condition window; subtype value = card name string
+- `IF_LEADER_ATTRIBUTE` — `(Attribute)` token in condition window
+
+**`conditionSubtype` field added to `ParsedEffect`:** The string value of the NAME_FILTER / SUBTYPE_FILTER / ATTRIBUTE_FILTER token found in the condition window. `CardCompiler` writes it as `"subtype"` in compiled JSON; `EffectFactory.evaluateCondition()` receives it as `subtype` parameter.
+
+**`classifyConditionClause()` updated:** Dispatches cleanly on token type instead of raw prefix. Additionally distinguishes `IF_LEADER_TYPE` from `IF_FIELD_CHARACTER_TYPE` by checking whether a CARD_TYPE token containing `"character"` precedes the SUBTYPE_FILTER in the condition window.
+
+**`EffectFactory.evaluateCondition()` real implementations:**
+- `IF_LEADER_COLOR` → `leader.getData().colors().size() > 1`
+- `IF_LEADER_NAME` → `leader.getData().name().equalsIgnoreCase(subtype)`
+- `IF_LEADER_TYPE` → `containsSubtype(leader.getData().subTypes(), subtype)`
+- `IF_LEADER_ATTRIBUTE` → `leader.getData().attribute().name().equalsIgnoreCase(subtype)`
+- `IF_FIELD_CHARACTER_TYPE` → any field card's `subTypes()` contains subtype
+
+**Syntax error fixed:** Linter had corrupted the `IF_LEADER_COLOR` case in `evaluateCondition()` (empty `->` body falling into the next case); replaced with the full correct switch block during this session.
+
+**Tests updated:** 3 `EffectLexerTest` bracket tests renamed and updated to `NAME_FILTER`/`SUBTYPE_FILTER`/`ATTRIBUTE_FILTER`. 2 new `EffectParserTest` tests: `IF_LEADER_NAME` with conditionSubtype="sanji"; `IF_LEADER_TYPE` with conditionSubtype="animal kingdom pirates".
+
+**Result:** 300 tests, 0 failures.
+

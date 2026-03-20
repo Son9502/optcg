@@ -2,8 +2,10 @@ package engine.battle;
 
 import engine.cards.Card;
 import engine.cards.Leader;
+import engine.cards.abilities.Trigger;
 import engine.cards.keywords.Keyword;
 import engine.cards.types.CardType;
+import engine.core.AbilityManager;
 import engine.core.GameState;
 import engine.core.TurnManager;
 import engine.player.Player;
@@ -28,7 +30,8 @@ public class BattleSystem {
      * @return true if the card can attack, false otherwise.
      */
     public boolean canAttack(Card attacker) {
-        return !attacker.isRested() && !attacker.isSummonSick();
+        return !attacker.isRested() && !attacker.isSummonSick()
+                && !attacker.hasKeyword(Keyword.CANNOT_ATTACK);
     }
 
     /**
@@ -40,11 +43,12 @@ public class BattleSystem {
      * @return The effective power of the card.
      */
     private int getEffectivePower(Card card) {
-        // Don boost applies only to the active player's cards
+        // DON!! boost applies only to the active player's cards.
+        // Effect-based boosts (bonusPower, bonusBattlePower) apply to both sides.
         if (card.getOwner() == turnManager.getActivePlayer()) {
-            return card.getTotalPower(); // base + Dons
+            return card.getTotalPower(); // base + DON!! + effect boosts
         }
-        return card.getBasePower(); // base only
+        return card.getPowerWithEffects(); // base + effect boosts, no DON!!
     }
 
     /**
@@ -118,20 +122,35 @@ public class BattleSystem {
     /**
      * Returns all valid attack targets for the given opponent per OP TCG rules:
      * the opponent's leader is always a valid target; rested characters are also
-     * valid targets.
+     * valid targets. If the attacker has {@link Keyword#RUSH_CHARACTER}, the leader
+     * is excluded — only rested characters may be targeted.
      *
      * @param opponent The defending player.
+     * @param attacker The attacking card; may be null (falls back to no restriction).
      * @return List of cards that can legally be targeted.
      */
-    public List<Card> getValidTargets(Player opponent) {
+    public List<Card> getValidTargets(Player opponent, Card attacker) {
         List<Card> targets = new ArrayList<>();
-        targets.add(opponent.getLeader());
+        boolean rushCharOnly = attacker != null && attacker.hasKeyword(Keyword.RUSH_CHARACTER);
+        if (!rushCharOnly) {
+            targets.add(opponent.getLeader());
+        }
         for (Card card : opponent.getField().getCards()) {
             if (card.isRested()) {
                 targets.add(card);
             }
         }
         return targets;
+    }
+
+    /**
+     * Convenience overload — no attacker restriction applied.
+     *
+     * @param opponent The defending player.
+     * @return List of cards that can legally be targeted.
+     */
+    public List<Card> getValidTargets(Player opponent) {
+        return getValidTargets(opponent, null);
     }
 
     /**
@@ -154,10 +173,27 @@ public class BattleSystem {
         if (type == null || type == CardType.CHARACTER) {
             counterValue = counterCard.getData().counter();
         } else if (type == CardType.EVENT) {
+            AbilityManager am = gameState.getAbilityManager();
+            am.dispatch(Trigger.COUNTER, counterCard, defender);
             counterValue = gameState.playCounter(defender, counterCard, target);
         }
         gameState.trash(defender, counterCard);
         return counterValue;
+    }
+
+    /**
+     * Simulates activating a trigger ability by moving the trigger card to the
+     * player's hand and then resolving the trigger.
+     * Used by BattleSystem trigger tests to test the effect of a trigger ability
+     * when it is
+     * 
+     * @param owner       The player who owns the trigger card.
+     * @param triggerCard The card with the trigger ability to activate.
+     */
+    public void resolveTrigger(Player owner, Card triggerCard) {
+        AbilityManager abilityManager = gameState.getAbilityManager();
+        abilityManager.dispatch(Trigger.TRIGGER, triggerCard, owner);
+        gameState.trash(owner, triggerCard);
     }
 
     /**
@@ -172,34 +208,74 @@ public class BattleSystem {
      * @param target       The defending card.
      * @param counterBoost Additional power added to the defender by counters.
      */
-    public void resolve(Card attacker, Card target, int counterBoost) {
+    public List<Card> resolve(Card attacker, Card target, int counterBoost) {
+        AbilityManager am = gameState.getAbilityManager();
+        List<Card> lives = new ArrayList<>();
+
+        // CANNOT_ATTACK: abort before resting or firing any triggers
+        if (attacker.hasKeyword(Keyword.CANNOT_ATTACK)) {
+            return lives;
+        }
+
+        // Fire WHEN_ATTACKING before the attacker rests (effects happen on attack declaration)
+        if (am != null) {
+            am.dispatch(Trigger.WHEN_ATTACKING, attacker, attacker.getOwner());
+        }
         attacker.rest();
 
-        int attackerPower = getEffectivePower(attacker);
-        int defenderPower = getEffectivePower(target) + counterBoost;
+        // UNBLOCKABLE: if a Character intercepted, redirect the attack to the leader
+        Card effectiveTarget = target;
+        if (attacker.hasKeyword(Keyword.UNBLOCKABLE) && !(target instanceof Leader)) {
+            effectiveTarget = target.getOwner().getLeader();
+        }
+        if (effectiveTarget == null) return lives;
 
+        int attackerPower = getEffectivePower(attacker);
+        int defenderPower = getEffectivePower(effectiveTarget) + counterBoost;
         if (attackerPower >= defenderPower) {
-            Player targetOwner = target.getOwner();
-            if (target instanceof Leader) {
+            Player targetOwner = effectiveTarget.getOwner();
+            if (effectiveTarget instanceof Leader) {
                 boolean banish = attacker.hasKeyword(Keyword.BANISH);
                 if (banish) {
-                    gameState.removeLifeBanished(targetOwner);
+                    gameState.banishLife(targetOwner);
                 } else {
-                    gameState.removeLife(targetOwner);
+                    Card removedCard = gameState.removeLife(targetOwner);
+                    lives.add(removedCard);
                 }
                 if (attacker.hasKeyword(Keyword.DOUBLE_ATTACK)) {
                     if (banish) {
-                        gameState.removeLifeBanished(targetOwner);
+                        gameState.banishLife(targetOwner);
                     } else {
-                        gameState.removeLife(targetOwner);
+                        Card removedCard = gameState.removeLife(targetOwner);
+                        lives.add(removedCard);
                     }
                 }
             } else {
-                gameState.trash(targetOwner, target);
-                // Detach any Dons from the target as it leaves the field
-                target.detachDonCards();
+                // CANNOT_KO: character survives a battle it would otherwise lose
+                if (!effectiveTarget.hasKeyword(Keyword.CANNOT_KO)) {
+                    gameState.trash(targetOwner, effectiveTarget);
+                    effectiveTarget.detachDonCards();
+                }
             }
         }
         // If attacker power < defender power, attack fails — no consequence
+
+        // Clear THIS_BATTLE boosts on the direct battle participants first (covers cards
+        // that left the field due to KO and won't be reached by clearAllBattleBoosts).
+        attacker.clearBattlePowerBoosts();
+        if (effectiveTarget != null) effectiveTarget.clearBattlePowerBoosts();
+        // Sweep remaining field cards (handles counter boosts on non-targeted cards).
+        clearAllBattleBoosts();
+        return lives;
+    }
+
+    /** Clears battle-scoped power boosts from both players' leaders and field characters. */
+    private void clearAllBattleBoosts() {
+        for (Player player : List.of(gameState.getPlayer1(), gameState.getPlayer2())) {
+            if (player.getLeader() != null) player.getLeader().clearBattlePowerBoosts();
+            for (Card c : player.getField().getCards()) {
+                c.clearBattlePowerBoosts();
+            }
+        }
     }
 }

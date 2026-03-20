@@ -1,12 +1,17 @@
 package engine.core;
 
 import engine.cards.Card;
+import engine.cards.abilities.Ability;
 import engine.cards.abilities.Cost;
+import engine.cards.abilities.Trigger;
+import engine.cards.effects.ModalSelector;
+import engine.cards.effects.TargetSelector;
 import engine.cards.keywords.Keyword;
 import engine.player.Player;
 import engine.cards.DonCard;
 import engine.cards.Leader;
 import engine.zones.Zone;
+import engine.zones.ZoneType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +22,39 @@ public class GameState {
 
     private boolean gameOver;
     private Player winner;
+
+    private AbilityManager abilityManager;
+
+    public AbilityManager getAbilityManager() {
+        return abilityManager;
+    }
+
+    public void setAbilityManager(AbilityManager am) {
+        this.abilityManager = am;
+    }
+
+    /** Default: auto-select first N candidates (deterministic, no player input). */
+    private TargetSelector targetSelector = (candidates, count, prompt) -> candidates.subList(0,
+            Math.min(count, candidates.size()));
+
+    public TargetSelector getTargetSelector() {
+        return targetSelector;
+    }
+
+    public void setTargetSelector(TargetSelector ts) {
+        this.targetSelector = ts;
+    }
+
+    /** Default: always pick branch 0 (deterministic, no player input). */
+    private ModalSelector modalSelector = (choices, prompt) -> 0;
+
+    public ModalSelector getModalSelector() {
+        return modalSelector;
+    }
+
+    public void setModalSelector(ModalSelector ms) {
+        this.modalSelector = ms;
+    }
 
     public GameState(Player player1, Player player2) {
         this.player1 = player1;
@@ -41,8 +79,29 @@ public class GameState {
         Zone origin = card.getZone();
         if (origin != null) {
             origin.remove(card);
+            if (origin.getType() == ZoneType.CHARACTER && target.getType() != ZoneType.CHARACTER) {
+                card.clearWhileInPlayBuffs();
+            }
         }
         target.add(card);
+        card.setZone(target);
+    }
+
+    /**
+     * Moving the card from one Zone to another, but placing it on the bottom of the
+     * target zone instead of the top.
+     * 
+     * @param card   The card to be moved. This is the card that will be removed
+     *               from the origin zone and added to the target zone.
+     * @param target The zone to which the card will be moved. This is the new
+     *               location of the card after it is moved.
+     */
+    public void moveCardtoBottom(Card card, Zone target) {
+        Zone origin = card.getZone();
+        if (origin != null) {
+            origin.remove(card);
+        }
+        target.addBottom(card);
         card.setZone(target);
     }
 
@@ -131,7 +190,13 @@ public class GameState {
      *               and added to the trash zone.
      */
     public void trash(Player player, Card card) {
+        boolean wasOnField = card.getZone() != null
+                && card.getZone().getType() == ZoneType.CHARACTER;
         moveCard(card, player.getTrash());
+        if (wasOnField && abilityManager != null) {
+            abilityManager.dispatch(Trigger.ON_KO, card, player);
+            card.detachDonCards(); // Detach any Dons from the card as it leaves the field
+        }
     }
 
     /**
@@ -149,8 +214,9 @@ public class GameState {
                     + " because it is not in their hand.");
             return;
         }
-        // Pay the Don cost before moving the card
-        int cardCost = card.getData().cost();
+        // Pay the Don cost before moving the card (use effective cost to respect
+        // COST_MODIFY)
+        int cardCost = card.getEffectiveCost();
         if (cardCost > 0) {
             Cost cost = new Cost();
             cost.type = Cost.CostType.DON;
@@ -168,7 +234,7 @@ public class GameState {
                     return;
                 }
                 targetZone = player.getField();
-                if (!card.hasKeyword(Keyword.RUSH)) {
+                if (!card.hasKeyword(Keyword.RUSH) && !card.hasKeyword(Keyword.RUSH_CHARACTER)) {
                     card.setSummonSick(true);
                 }
                 break;
@@ -187,6 +253,50 @@ public class GameState {
                 return;
         }
         moveCard(card, targetZone);
+        if (abilityManager != null) {
+            abilityManager.dispatch(Trigger.ON_PLAY, card, player);
+        }
+        card.flipFaceUp(); // Cards are played face-up by default
+    }
+
+    /**
+     * Plays a card for free (no cost payment). Used by effect-driven plays such as
+     * PLAY_CARD effects. Follows the same zone-routing and ON_PLAY dispatch as
+     * {@link #playCard}, but skips cost payment and the hand-membership check
+     * (the caller's {@code resolveTargets} already located the card).
+     *
+     * @param player The player playing the card.
+     * @param card   The card to play.
+     */
+    public void playCardFree(Player player, Card card) {
+        if (card.getData() == null || card.getData().cardType() == null)
+            return;
+        Zone targetZone;
+        switch (card.getData().cardType()) {
+            case CHARACTER:
+                if (player.getField().getCards().size() >= 5)
+                    return;
+                targetZone = player.getField();
+                if (!card.hasKeyword(Keyword.RUSH) && !card.hasKeyword(Keyword.RUSH_CHARACTER)) {
+                    card.setSummonSick(true);
+                }
+                break;
+            case EVENT:
+                targetZone = player.getTrash();
+                break;
+            case STAGE:
+                if (!player.getStage().isEmpty())
+                    return;
+                targetZone = player.getStage();
+                break;
+            default:
+                return;
+        }
+        moveCard(card, targetZone);
+        if (abilityManager != null) {
+            abilityManager.dispatch(Trigger.ON_PLAY, card, player);
+        }
+        card.flipFaceUp(); // Cards are played face-up by default
     }
 
     /**
@@ -311,59 +421,30 @@ public class GameState {
      * If the player has no more life points,
      * it will print a message indicating that the player has been defeated.
      * 
+     * @return The card that was moved from the life zone to the hand, or null if
+     *         the player has no more life points.
      */
-    public void removeLife(Player player) {
+    public Card removeLife(Player player) {
         if (player.getLife().isEmpty()) {
             System.out.println(player.getName() + " has no more life points and has been defeated.");
             System.out.println((player == player1 ? player2.getName() : player1.getName()) + " wins the game!");
             gameOver = true;
             winner = (player == player1) ? player2 : player1;
-            return;
+            return null;
         }
         Card cardToRemove = player.getLife().draw();
         moveCard(cardToRemove, player.getHand());
         Leader leader = player.getLeader();
         if (leader != null)
             leader.takeLife();
-    }
-
-    /**
-     * Remove a specified amount of life points from a player. This method will
-     * decrease the player's life points by the specified amount and move the
-     * corresponding number of cards from the life zone to the hand. If the player
-     * has no more life points after the removal, it will print a message indicating
-     * that the player has been defeated.
-     * 
-     * @param player The player whose life points will be removed. This is the
-     *               player who will lose life points and have cards moved from
-     *               their life zone to their hand.
-     * @param amount The number of life points to be removed. This is the amount by
-     *               which the player's life points will be decreased, and it will
-     *               determine how many cards are moved from the life zone to the
-     *               hand.
-     */
-    public void removeLife(Player player, int amount) {
-        for (int i = 0; i < amount; i++) {
-            if (player.getLife().isEmpty()) {
-                System.out.println(player.getName() + " has no more life points and has been defeated.");
-                System.out.println((player == player1 ? player2.getName() : player1.getName()) + " wins the game!");
-                gameOver = true;
-                winner = (player == player1) ? player2 : player1;
-                return;
-            }
-            Card cardToRemove = player.getLife().draw();
-            moveCard(cardToRemove, player.getHand());
-        }
-        Leader leader = player.getLeader();
-        if (leader != null)
-            leader.takeLife(amount);
+        return cardToRemove;
     }
 
     /**
      * Lose a life point with BANISH — the life card goes to trash instead of hand.
      * Game-over logic is identical to removeLife().
      */
-    public void removeLifeBanished(Player player) {
+    public void banishLife(Player player) {
         if (player.getLife().isEmpty()) {
             gameOver = true;
             winner = (player == player1) ? player2 : player1;
@@ -395,6 +476,12 @@ public class GameState {
     public void refreshField(Player player) {
         for (Card card : player.getField().getCards()) {
             card.setSummonSick(false); // Clear summon sickness at the start of each new turn
+            card.clearPowerBoosts(); // Clear end-of-turn power modifications
+            card.clearCostModifiers(); // Clear end-of-turn cost modifications
+            card.clearGrantedKeywords(); // Clear temporarily granted keywords
+
+            for (Ability ability : card.getAbilities())
+                ability.resetTurn(); // Reset once-per-turn gate
             if (card.isRested()) {
                 card.activate();
             } else {
@@ -422,6 +509,10 @@ public class GameState {
         Leader leader = player.getLeader();
         if (leader == null)
             return;
+        leader.clearPowerBoosts(); // Clear end-of-turn power modifications
+        leader.clearCostModifiers(); // Clear end-of-turn cost modifications
+        for (Ability ability : leader.getAbilities())
+            ability.resetTurn(); // Reset once-per-turn gate
         if (leader.isRested()) {
             leader.activate();
         }
@@ -441,6 +532,47 @@ public class GameState {
         // cards and their effects, which will be developed once we have the card
         // effects system in place.
         return 0; // Placeholder return value
+    }
+
+    /**
+     * Flip a card in the player's life zone at the specified index. This method
+     * will
+     * check if the player has any life points and if the specified index is valid.
+     * If the conditions are met, it will flip the card at the specified index in
+     * the
+     * life zone. If the player has no more life points, it will print a message
+     * indicating there are no more cards to flip.
+     * 
+     * @param player The player whose life card will be flipped.
+     * @param index  The index of the life card to flip.
+     */
+    public void flipLife(Player player, int index) {
+        if (player.getLife().isEmpty()) {
+            System.out.println(player.getName() + " has no more life points and has been defeated.");
+        }
+        Card cardToFlip = player.getLife().getCards().get(index);
+        cardToFlip.flip();
+    }
+
+    /**
+     * Get the list of visible cards in the player's life zone. This method will
+     * return a list of cards in the player's life zone that are currently face-up.
+     * If the player has no life points, it will return an empty list.
+     * 
+     * @param owner The player whose life cards will be checked for visibility. This
+     *              is the player whose life zone will be accessed to retrieve the
+     *              list of visible cards.
+     * @return A list of cards in the player's life zone that are currently face-up.
+     *         If the player has no life points, it will return an empty list.
+     */
+    public List<Card> getVisibleLifeCards(Player owner) {
+        List<Card> visibleCards = new ArrayList<>();
+        for (Card card : owner.getLife().getCards()) {
+            if (card.isFaceUp()) {
+                visibleCards.add(card);
+            }
+        }
+        return visibleCards;
     }
 
     public boolean isGameOver() {

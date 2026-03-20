@@ -16,6 +16,7 @@ public final class TestUtils {
 
     private TestUtils() {
     }
+
     public static CardData makeCardData(int power) {
         return new CardData("TEST-001", "TEST-SET", "TestCard", "", "", "TestSet",
                 null, null, null, null, 0, power, 0, 2000, 0.0, null);
@@ -23,7 +24,8 @@ public final class TestUtils {
 
     public static Card makeCard(Player owner, int power) {
         return new Card("c-" + power, makeCardData(power), owner);
-    }   
+    }
+
     public static void attack(BattleSystem battleSystem, Card attacker, Card defender, int counterBoost) {
         // First check if the attacker can attack (not rested or summon sick)
 
@@ -39,11 +41,11 @@ public final class TestUtils {
             defender = defenderPlayer.getField().getCards().stream()
                     .filter(card -> card.hasKeyword(Keyword.BLOCKER) && !card.isRested())
                     .findFirst()
-                    .orElse(defender); // If no valid blocker found, defender remains the same 
+                    .orElse(defender); // If no valid blocker found, defender remains the same
         }
         // Determine the outcome of the battle based on effective power after boosts
         battleSystem.resolve(attacker, defender, counterBoost);
-        
+
     }
 
     /**
@@ -59,4 +61,26 @@ public final class TestUtils {
         card.addAbility(new Ability(abilityData));
         return card;
     }
+
+    /**
+     * Creates a Card pre-loaded with a single TRIGGER ability that has the given
+     * EffectData.
+     * Used by BattleSystem trigger tests.
+     * 
+     * @param owner       The player who owns the card.
+     * @param power       The power of the card.
+     * @param abilityData The ability data to attach to the card.
+     * @return A new Card instance with the specified ability.
+     */
+    public static Card makeCardWithAbility(Player owner, int power, AbilityData abilityData) {
+        CardData data = new CardData("TEST-AB", "TEST-SET", "TestCard", "", "", "TestSet",
+                null, CardType.CHARACTER, null, null, 0, power, 0, null, 0.0,
+                abilityData != null ? List.of(abilityData) : List.of());
+        Card card = new Card("c-ab-" + power, data, owner);
+        if (abilityData != null) {
+            card.addAbility(new Ability(abilityData));
+        }
+        return card;
+    }
+
 }

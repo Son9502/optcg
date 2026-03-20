@@ -4,9 +4,20 @@ import engine.TestUtils;
 import engine.cards.Card;
 import engine.cards.CardData;
 import engine.cards.keywords.Keyword;
+import engine.cards.types.CardType;
+import engine.cards.types.Color;
 import engine.cards.Leader;
+import engine.cards.abilities.AbilityData;
+import engine.cards.abilities.Cost;
+import engine.cards.abilities.Trigger;
+import engine.cards.effects.EffectData;
+import engine.cards.effects.EffectFactory;
+import engine.cards.effects.EffectType;
+import engine.cards.effects.Target;
+import engine.cards.effects.Target.TargetPlayer;
 import engine.core.GameState;
 import engine.player.Player;
+import engine.zones.ZoneType;
 import engine.core.TurnManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +44,7 @@ public class BattleHandlerTest {
         p2.setLeader(new Leader("l2", leaderData, p2));
 
         gameState = new GameState(p1, p2);
+        gameState.setAbilityManager(new engine.core.AbilityManager(gameState));
         turnManager = new TurnManager(gameState);
         battleSystem = new BattleSystem(gameState, turnManager);
     }
@@ -230,6 +242,7 @@ public class BattleHandlerTest {
         assertTrue(gameState.isGameOver());
         assertEquals(p1, gameState.getWinner());
     }
+
     // --- KeyWords Tests ---
     @Test
     /**
@@ -332,22 +345,267 @@ public class BattleHandlerTest {
         assertEquals(trashSizeBefore + 1, p2.getTrash().size()); // life → trash
     }
 
-    // TRIGGER deferred — per-card effect activation requires the effect execution
-    // system to be wired first (Phase 3). The test below is a placeholder only.
-    // @Test
-    // void testTriggerKeyword() { ... }
+    // -- TriggerTests
 
-    /*@Test
-    void testRushCharacterKeyword() {
+    @Test
+    void triggerAbilityWhenLifeLost() {
+        // Arrange: p2 has a Vivi (TRIGGER → DRAW 1) as their only life card
+        // Act: p1 attacks p2 leader; attack succeeds
+        // Assert: p2.getHand().size() == initialHandSize + 1
+        // (the draw from Trigger)
+        // Trigger card should be moved to trash after being drawn to hand and
+        // triggering, so assert that as well
+        // Assert: p2.getLife().size() == 0
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null, null, 0);
+        AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
+        Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
+        p2.getLife().add(triggerCard);
+        Card attacker = TestUtils.makeCard(p1, 6000);
+        Card deckCard = TestUtils.makeCard(p2, 2000);
+        p2.getDeck().add(deckCard);
+        List<Card> triggers = battleSystem.resolve(attacker, p2.getLeader(), 0);
+        battleSystem.resolveTrigger(p2, triggers.get(0)); // Simulate the trigger activating by moving the card to the
+                                                          // hand and then resolving the trigger
+        assertEquals(1, p2.getHand().size()); // 1 life card + 1 draw from trigger
+        assertEquals(0, p2.getDeck().size());
+        assertEquals(0, p2.getLife().size());
+        assertEquals(1, p2.getTrash().size()); // the trigger card should be trashed after being drawn to hand and
+                                               // triggering
+
+    }
+
+    @Test
+    void noTriggerAbilityWhenCardPlayed() {
+        // Arrange: p2 has a plain Character as their only life card
+        // Act: p1 attacks p2 leader; attack succeeds
+        // Assert: p2.getHand().size() == initialHandSize + 1 (only the life card)
+        Card nonTriggerCard = TestUtils.makeCard(p2, 3000);
+        p2.getLife().add(nonTriggerCard);
+        Card attacker = TestUtils.makeCard(p1, 6000);
+        battleSystem.resolve(attacker, p2.getLeader(), 0);
+        assertEquals(1, p2.getHand().size()); // only the life card,
+        assertEquals(0, p2.getLife().size());
+    }
+
+    @Test
+    void noTriggerWhenBanished() {
+        Card banishCard = TestUtils.makeCardWithKeyword(p1, 8000, Keyword.BANISH);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null, null, 0);
+        AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
+        Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
+        p2.getLife().add(triggerCard);
+        Card deckCard = TestUtils.makeCard(p2, 2000);
+        p2.getDeck().add(deckCard);
+        battleSystem.resolve(banishCard, p2.getLeader(), 0);
+        assertEquals(0, p2.getHand().size()); // only the life card,
+        assertEquals(0, p2.getLife().size());
+        assertEquals(1, p2.getDeck().size()); // the draw from trigger did not occur
+        assertEquals(1, p2.getTrash().size()); // the banished card should be in the trash
+    }
+
+    @Test
+    void noTriggerifNotActivated() {
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null, null, 0);
+        AbilityData triggerData = new AbilityData(Trigger.TRIGGER, 0, null, false, null, null, List.of(draw));
+        Card triggerCard = TestUtils.makeCardWithAbility(p2, 3000, triggerData);
+        p2.getLife().add(triggerCard);
+        Card attacker = TestUtils.makeCard(p1, 6000);
+        Card deckCard = TestUtils.makeCard(p2, 2000);
+        p2.getDeck().add(deckCard);
+        battleSystem.resolve(attacker, p2.getLeader(), 0);
+        assertEquals(1, p2.getHand().size()); // 1 life card + 1 draw from trigger
+        assertEquals(1, p2.getDeck().size());
+        assertEquals(0, p2.getLife().size());
+        assertEquals(0, p2.getTrash().size());
+
+    }
+
+    // -- Prevent Keywords
+    // ────────────────────────────────────────────────────────────────
+    @Test
+    void preventKo_opponentCharacter() {
+        Card defender = TestUtils.makeCard(p2, 3000);
+        p2.getField().add(defender);
+        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null,null,null,null);
+        EffectData e = new EffectData(EffectType.PREVENT_KO, 0, t, null, null, null, null, null, 0);
+        EffectFactory.build(e, defender).apply(gameState, p1);
+        Card attacker = TestUtils.makeCard(p1, 4000);
+        battleSystem.resolve(attacker, defender, 0);
+        assertFalse(defender.getZone().getType() == ZoneType.TRASH,
+                "Defender should not be sent to trash when KO is prevented");
+    }
+
+    @Test
+    void preventAttack_opponentCharacter() {
+        Card attacker = TestUtils.makeCard(p2, 4000);
+        p2.getField().add(attacker);
+        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null,null,null,null);
+        EffectData e = new EffectData(EffectType.PREVENT_ATTACK, 0, t, null, null, null, null, null, 0);
+        EffectFactory.build(e, attacker).apply(gameState, p1);
+        Card defender = TestUtils.makeCard(p1, 3000);
+        p1.getField().add(defender);
+        battleSystem.resolve(attacker, defender, 0);
+        assertFalse(defender.getZone().getType() == ZoneType.TRASH,
+                "Defender should not be sent to trash when attack is prevented");
+    }
+
+    @Test
+    void preventBlock_opponentCharacter() {
+        Card blocker = TestUtils.makeCard(p1, 8000);
+        Card attacker = TestUtils.makeCard(p2, 6000); // must exceed leader power (5000) after block redirect
+        Card lifCard = TestUtils.makeCard(p1, 0);
+        p1.getLife().add(lifCard);
+        p1.getField().add(blocker);
+        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null,null,null,null);
+        EffectData e = new EffectData(EffectType.PREVENT_BLOCK, 0, t, null, null, null, null, null, 0);
+        EffectFactory.build(e, attacker).apply(gameState, p1);
+        battleSystem.resolve(attacker, blocker, 0);
+        assertFalse(blocker.getZone().getType() == ZoneType.TRASH,
+                "Blocker should not be sent to trash when block is prevented");
+        assertTrue(p1.getHand().size() == 1, "1 life should be lost when block is prevented");
+        assertTrue(p1.getLife().size() == 0, "");
+        assertTrue(p1.getTrash().size() == 0, "Blocker should not be sent to trash when block is prevented");
+    }
+
+    // -- Rush:Character Tests
+    @Test
+    void rushCharacter_notSummonSick() {
         // A card with RUSH_CHARACTER should be able to give other characters the
         // ability to attack the turn they are played
-        Card rushCharacterCard = TestUtils.makeCardWithKeyword(p1, 0, Keyword.RUSH_CHARACTER);
-        Card normalCharacterCard = TestUtils.makeCard(p1, 3000);
+        Card rushCharacterCard = TestUtils.makeCardWithKeyword(p1, 0,
+                Keyword.RUSH_CHARACTER);
         p1.getHand().add(rushCharacterCard);
-        p1.getHand().add(normalCharacterCard);
         gameState.playCard(p1, rushCharacterCard);
-        gameState.playCard(p1, normalCharacterCard);
-        assertFalse(normalCharacterCard.isSummonSick());
+        assertFalse(rushCharacterCard.isSummonSick());
     }
-    */
+
+    @Test
+    void rushCharacter_canAttackCharacter() {
+        // A card with RUSH_CHARACTER should be able to attack other characters the
+        // turn they are played, but not the leader
+        Card rushCharacterCard = TestUtils.makeCardWithKeyword(p1, 4000,
+                Keyword.RUSH_CHARACTER);
+        p1.getHand().add(rushCharacterCard);
+        gameState.playCard(p1, rushCharacterCard);
+        Card defender = TestUtils.makeCard(p2, 3000);
+        p2.getField().add(defender);
+        defender.rest(); // defender must be rested to be a valid target
+        List<Card> targets = battleSystem.getValidTargets(p2, rushCharacterCard);
+        assertTrue(targets.contains(defender), "Defender should be a valid target for RUSH_CHARACTER");
+    }
+
+    @Test
+    void rushCharacter_cantAttackLeader() {
+        // A card with RUSH_CHARACTER should not be able to attack the leader the turn
+        // they are played
+        Card rushCharacterCard = TestUtils.makeCardWithKeyword(p1, 4000,
+                Keyword.RUSH_CHARACTER);
+        p1.getHand().add(rushCharacterCard);
+        gameState.playCard(p1, rushCharacterCard);
+        List<Card> targets = battleSystem.getValidTargets(p2, rushCharacterCard);
+        assertFalse(targets.contains(p2.getLeader()), "Leader should not be a valid target for RUSH_CHARACTER");
+    }
+
+    // ── COUNTER event dispatch ───────────────────────────────────────────────
+
+    /** Builds an Event card carrying a COUNTER ability that grants +X power this battle. */
+    private Card makeCounterEventCard(Player owner, int powerBoost) {
+        engine.cards.effects.EffectData boostEffect = new engine.cards.effects.EffectData(
+                engine.cards.effects.EffectType.POWER_BOOST, powerBoost,
+                new engine.cards.effects.Target(
+                        engine.cards.effects.Target.TargetPlayer.SELF,
+                        null, null, 1, 0, 0, 0, 0, null,null,null,null),
+                null, null, engine.cards.effects.Duration.THIS_BATTLE, null, null, 0);
+        engine.cards.abilities.AbilityData abilityData = new engine.cards.abilities.AbilityData(
+                Trigger.COUNTER, 0, null, false, null, null, List.of(boostEffect));
+        CardData data = new CardData("TEST-EV", "TEST-SET", "EventCounter", "", "", "TestSet",
+                null, CardType.EVENT, null, null, 0, 0, 0, null, 0.0, List.of(abilityData));
+        Card card = new Card("ev-counter-" + powerBoost, data, owner);
+        card.addAbility(new engine.cards.abilities.Ability(abilityData));
+        return card;
+    }
+
+    @Test
+    void counterEvent_boostsFieldCharacter() {
+        // Defending character on p2's field; event counter should boost it
+        Card defender = TestUtils.makeCard(p2, 3000);
+        p2.getField().add(defender);
+
+        Card counterEvent = makeCounterEventCard(p2, 2000);
+        p2.getHand().add(counterEvent);
+
+        battleSystem.applyCounter(p2, counterEvent, defender);
+
+        assertEquals(5000, defender.getPowerWithEffects(),
+                "Counter event should boost defender's battle power by 2000");
+    }
+
+    @Test
+    void counterEvent_boostsLeader_whenNoFieldCards() {
+        // No field cards — only the leader should be in the candidate pool
+        Card counterEvent = makeCounterEventCard(p2, 3000);
+        p2.getHand().add(counterEvent);
+
+        battleSystem.applyCounter(p2, counterEvent, p2.getLeader());
+
+        assertEquals(8000, p2.getLeader().getPowerWithEffects(),
+                "Counter event should boost leader when no field chars present");
+    }
+
+    @Test
+    void counterEvent_boostIsCountedInBattle_defenderSurvives() {
+        // Attacker 5000 vs defender 3000 + counter boost 3000 = 6000 > 5000 → defender survives
+        Card attacker = TestUtils.makeCard(p1, 5000);
+        Card defender = TestUtils.makeCard(p2, 3000);
+        p1.getField().add(attacker);
+        p2.getField().add(defender);
+        defender.rest();
+
+        Card counterEvent = makeCounterEventCard(p2, 3000);
+        p2.getHand().add(counterEvent);
+        battleSystem.applyCounter(p2, counterEvent, defender);
+
+        battleSystem.resolve(attacker, defender, 0);
+
+        // 5000 < 6000 → attacker loses → defender survives on field
+        assertTrue(p2.getField().getCards().contains(defender),
+                "Defender should survive: base 3000 + counter boost 3000 > attacker 5000");
+    }
+
+    @Test
+    void counterEvent_eventCardTrashedAfterCounter() {
+        Card defender = TestUtils.makeCard(p2, 3000);
+        p2.getField().add(defender);
+
+        Card counterEvent = makeCounterEventCard(p2, 1000);
+        p2.getHand().add(counterEvent);
+
+        battleSystem.applyCounter(p2, counterEvent, defender);
+
+        assertFalse(p2.getHand().getCards().contains(counterEvent),
+                "Counter event card should leave hand after use");
+        assertTrue(p2.getTrash().getCards().contains(counterEvent),
+                "Counter event card should be trashed after use");
+    }
+
+    @Test
+    void battleBoostsCleared_afterCounterEventBattle() {
+        // Attacker 6000 vs defender 3000 + boost 1000 = 4000 → attacker wins, defender KO'd
+        Card attacker = TestUtils.makeCard(p1, 6000);
+        Card defender = TestUtils.makeCard(p2, 3000);
+        p1.getField().add(attacker);
+        p2.getField().add(defender);
+        defender.rest();
+
+        Card counterEvent = makeCounterEventCard(p2, 1000);
+        p2.getHand().add(counterEvent);
+        battleSystem.applyCounter(p2, counterEvent, defender);
+        assertEquals(4000, defender.getPowerWithEffects(), "Boost active before resolve");
+
+        battleSystem.resolve(attacker, defender, 0);
+
+        // resolve() calls clearAllBattleBoosts() — battle boost must be gone
+        assertEquals(3000, defender.getPowerWithEffects(),
+                "Battle boost cleared after resolve()");
+    }
 }

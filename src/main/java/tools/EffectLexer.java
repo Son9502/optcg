@@ -80,32 +80,29 @@ public class EffectLexer {
             // Flag to indicate if we found a match for the current position
             boolean matched = false;
 
-            // [Keyword] Filter
+            // [Name/Keyword] Filter — named card or keyword reference
             if ("[".equals(words[position])) {
-                // Find the closing bracket and extract the keyword
                 int close = findClosingBracket(words, position + 1, "]");
                 String keyword = joinWords(words, position + 1, close);
-                tokens.add(new Token(TokenType.FILTER, "[" + keyword + "]", keyword));
+                tokens.add(new Token(TokenType.NAME_FILTER, "[" + keyword + "]", keyword));
                 position = close + 1;
                 continue;
             }
 
-            // {Subtype} Filter
+            // {Subtype} Filter — subtype / type identifier
             if ("{".equals(words[position])) {
-                // Find the closing bracket and extract the keyword
                 int close = findClosingBracket(words, position + 1, "}");
                 String keyword = joinWords(words, position + 1, close);
-                tokens.add(new Token(TokenType.FILTER, "{" + keyword + "}", keyword));
+                tokens.add(new Token(TokenType.SUBTYPE_FILTER, "{" + keyword + "}", keyword));
                 position = close + 1;
                 continue;
             }
 
-            // (Attribute) Filter
+            // (Attribute) Filter — attribute identifier
             if ("(".equals(words[position])) {
-                // Find the closing bracket and extract the keyword
                 int close = findClosingBracket(words, position + 1, ")");
                 String keyword = joinWords(words, position + 1, close);
-                tokens.add(new Token(TokenType.FILTER, "(" + keyword + ")", keyword));
+                tokens.add(new Token(TokenType.ATTRIBUTE_FILTER, "(" + keyword + ")", keyword));
                 position = close + 1;
                 continue;
             }

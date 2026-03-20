@@ -1,6 +1,7 @@
 package engine.cards;
 
 import engine.TestUtils;
+import engine.cards.keywords.Keyword;
 import engine.player.Player;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,5 +57,33 @@ public class CardTest {
         card.detachDonCard();
         assertEquals(500, card.getTotalPower());
         assertTrue(card.getAttachedDons().isEmpty());
+    }
+    @Test
+    void testGrantedKeyword() {
+        Card card = new Card("card1", TestUtils.makeCardData(1000), player);
+        assertFalse(card.hasKeyword(Keyword.RUSH));
+        card.grantKeyword(Keyword.RUSH);
+        assertTrue(card.hasKeyword(Keyword.RUSH));
+    }
+
+    @Test
+    void testClearGrantedKeywords() {
+        Card card = new Card("card1", TestUtils.makeCardData(1000), player);
+        card.grantKeyword(Keyword.RUSH);
+        card.grantKeyword(Keyword.BLOCKER);
+        assertTrue(card.hasKeyword(Keyword.RUSH));
+        assertTrue(card.hasKeyword(Keyword.BLOCKER));
+        card.clearGrantedKeywords();
+        assertFalse(card.hasKeyword(Keyword.RUSH));
+        assertFalse(card.hasKeyword(Keyword.BLOCKER));
+    }
+
+    @Test
+    void testhasKeyword() {
+        Card card = TestUtils.makeCardWithKeyword(player, 1000, Keyword.RUSH);
+        assertTrue(card.hasKeyword(Keyword.RUSH));
+        card.clearGrantedKeywords();
+        assertTrue(card.hasKeyword(Keyword.RUSH));
+        
     }
 }

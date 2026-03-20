@@ -19,7 +19,7 @@ Each clause has the same shape: `[VERB] [QUANTITY?] [PLAYER?] [CARD_TYPE] [FILTE
 
 ## Token Vocabulary (Lexer Layer)
 
-Ten token types. Every word or phrase in a card effect body belongs to exactly one.
+Thirteen token types. Every word or phrase in a card effect body belongs to exactly one.
 
 ### VERB
 The first meaningful word of a clause. Determines `EffectType`.
@@ -85,8 +85,8 @@ with `cardType = LEADER_OR_CHARACTER` and `max` drawn from the QUANTITY token.
 ---
 
 ### FILTER
-Zero or more filters narrow which cards within CARD_TYPE are valid targets.
-Filters are AND-ed together (all must be true).
+Numeric and text filters that narrow which cards within CARD_TYPE are valid targets.
+Emitted by `FILTER_PATTERNS` (regex) or plain-text phrase entries in `EffectTables`.
 
 | Filter | Syntax | Notes |
 |---|---|---|
@@ -97,18 +97,40 @@ Filters are AND-ed together (all must be true).
 | Base cost/power | `with a base cost of N or less` | `base` = before any boost/reduce modifiers |
 | State | `rested` / `active` | Card's current orientation |
 | Placement | `face-up` / `face-down` | Orientation when entering a zone |
-| Keyword (bracket) | `[KEYWORD]` / `with [KEYWORD]` | Card must have that keyword; emitted as FILTER with String value |
-| Keyword (word) | `blocker` / `double` / `banish` / `rush` | Lowercase form in "gains the Blocker keyword" constructions |
-| Type (brace) | `{Type name} type` | Sub-type match using curly-brace syntax |
-| Type (quote) | `"Type name" type` | Sub-type match using double-quote syntax; lexer joins multi-word quoted spans |
-| Attribute (paren) | `(Slash) attribute` / `(Strike) attribute` | Card's printed attribute |
-| Color | `red/green/blue/purple/yellow/black` / `multicolored` | Precedes CARD_TYPE or TYPE filter |
+| Keyword (word) | `blocker` / `double` / `banish` / `rush` | Lowercase word-form in "gains the Blocker keyword" constructions |
+| Placement/position | `top` / `bottom` | Deck positioning in MOVE_TO_TOP/BOTTOM_DECK clauses |
+| Color | `red/green/blue/purple/yellow/black` / `multicolored` | Precedes CARD_TYPE or SUBTYPE_FILTER |
 | Card state | `selected` / `revealed` / `chosen` | Result of a previous look/search clause |
-| Identity | `other than [CARD_REF]` | Excludes a specific named card |
-| Name | `named [CARD_REF]` | Only that specific named card |
 
-Color and type can combine: `"a purple {Big Mom Pirates} type Character"` →
-`FILTER(color=Purple, subType="Big Mom Pirates", cardType=Character)`
+---
+
+### SUBTYPE_FILTER
+A curly-brace-delimited subtype or type identifier: `{Straw Hat Crew}`, `{Animal Kingdom Pirates}`.
+`EffectParser` uses this token type to classify `IF_LEADER_TYPE` and `IF_FIELD_CHARACTER_TYPE` conditions,
+and to filter targets by subtype in `matchesFilters()` (item #21 — done).
+
+---
+
+### NAME_FILTER
+A square-bracket-delimited named card or keyword reference: `[Sanji]`, `[Blocker]`, `[Rush]`.
+`EffectParser` uses this token type to classify `IF_LEADER_NAME` conditions and to route
+`GRANT_KEYWORD` / `PREVENT_BLOCK` verbs.
+
+---
+
+### ATTRIBUTE_FILTER
+A parenthesis-delimited attribute identifier: `(Slash)`, `(Ranged)`, `(Strike)`.
+`EffectParser` uses this token type to classify `IF_LEADER_ATTRIBUTE` conditions and to filter
+targets by attribute in `matchesFilters()` (item #17 — done).
+
+---
+
+> **Type + name can combine in a condition:** `"If your Leader has the {Straw Hat} type or is [Luffy]"` —
+> model as `IF_LEADER_TYPE` (SUBTYPE_FILTER) with an identity fallback. The identity check is
+> rare enough to defer to manual JSON override.
+>
+> **Color filter on target** (item #24 — done): `"a purple {Big Mom Pirates} type Character"` — color
+> is an additional FILTER. `Target.color` (String field, case-insensitive) stores it; `matchesFilters()` checks against `card.getData().colors()`. Parser does not yet extract this field — requires hand-compiled JSON for cards using color-filtered targets.
 
 ---
 
@@ -137,8 +159,8 @@ rested                   — placement state for DON!! or Character (enters rest
 ---
 
 ### DURATION
-How long the effect lasts. If omitted, the effect is permanent (until the card leaves the field).
-Maps to the `Duration` enum: `THIS_TURN`, `THIS_BATTLE`, `OPPONENTS_NEXT_TURN`, `PERMANENT`.
+How long the effect lasts. If omitted, the effect persists while the card is on the field.
+Maps to the `Duration` enum: `THIS_TURN`, `THIS_BATTLE`, `OPPONENTS_NEXT_TURN`, `WHILE_IN_PLAY`.
 
 ```
 during this turn                                  → THIS_TURN
@@ -149,35 +171,54 @@ until the start of your next turn                 → OPPONENTS_NEXT_TURN  (most
 until the end of your next turn                   → OPPONENTS_NEXT_TURN
 until the end of your opponent's next turn        → OPPONENTS_NEXT_TURN
 until the end of your opponent's next End Phase   → OPPONENTS_NEXT_TURN
-(omitted)                                         → PERMANENT
+(omitted)                                         → WHILE_IN_PLAY  (null in compiled JSON; treated as WHILE_IN_PLAY by engine)
 ```
+
+> **Duration bucket semantics (engine layer):**
+> `THIS_BATTLE` → `bonusBattlePower` (cleared at end of each battle).
+> `THIS_TURN` / null → `bonusPower` / `bonusCost` (cleared by `refreshField()` each turn start).
+> `OPPONENTS_NEXT_TURN` → `bonusPowerOpponentTurn` / `bonusCostOpponentTurn` (cleared by `TurnManager.endTurn()` on the non-active player's cards at end of each turn).
+> `WHILE_IN_PLAY` → `bonusPowerWhileInPlay` / `bonusCostWhileInPlay` (never cleared by `refreshField()`; cleared by `GameState.moveCard()` when card leaves the CHARACTER zone).
 
 ---
 
 ### CONDITION
 A `"If [clause],"` prefix applied to the entire effect clause that follows.
 
-| Condition | Syntax |
-|---|---|
-| `IF_LIFE_COUNT` | `If you have N or less/more Life cards` |
-| `IF_OPPONENT_LIFE_COUNT` | `If your opponent has N or less Life cards` |
-| `IF_DON_COUNT` | `If you have N or more/fewer DON!! cards on your field` |
-| `IF_DON_COMPARISON` | `If the number of DON!! cards on your field is equal to or less than your opponent's` |
-| `IF_LIFE_COMPARISON` | `If the number of your Life cards is equal to or less than your opponent's` |
-| `IF_CHARACTER_COUNT` | `If you have N or more Characters` |
-| `IF_LEADER_TYPE` | `If your Leader has the {Type} type` |
-| `IF_LEADER_ATTRIBUTE` | `If your Leader has the (Attribute) attribute` |
-| `IF_LEADER_COLOR` | `If your Leader is [Red/Green/multicolor]` or `If your Leader has the [Color] color` |
-| `IF_LEADER_IDENTITY` | `If your Leader is [CARD_REF]` or `If your Leader has the {Type} type or is [CARD_REF]` |
-| `IF_THIS_POWER` | `If this Character has [POWER] power or more` |
-| `IF_THIS_RESTED` | `If this Character is rested` |
-| `IF_RESTED` | `If [target] is rested` — FILTER(RESTED) detected in condition body before CARD_TYPE |
-| `IF_THIS_KO` | `If this Character would be K.O.'d` — replacement effect |
-| `IF_CHARACTER_EXISTS` | `If you have a {Type} type Character` |
-| `IF_CHARACTER_COLOR` | `If you have a [Color] Character` |
-| `IF_HAND_COUNT` | `If you have N or more cards in your hand` |
-| `IF_REVEALED_COST` | `If the revealed card has a cost of N or more` — follows a SEARCH_DECK clause |
-| `IF_YOU_DO` | `If you do,` — follow-up conditional on the previous clause succeeding |
+Implemented conditions are marked ✓. Unimplemented are deferred to later phases.
+
+| Condition | Syntax | Status |
+|---|---|---|
+| `IF_LIFE_COUNT` | `If you have N or less/more Life cards` | ✓ |
+| `IF_OPPONENT_LIFE_COUNT` | `If your opponent has N or less Life cards` | ✓ |
+| `IF_DON_COUNT` | `If you have N or more/fewer DON!! cards on your field` | ✓ |
+| `IF_HAND_COUNT` | `If you have N or more cards in your hand` | ✓ |
+| `IF_CHARACTER_COUNT` | `If you have N or more Characters` | ✓ |
+| `IF_TRASH_COUNT` | `If you have N or more cards in your trash` | ✓ |
+| `IF_DECK_COUNT` | `If you have N or more cards in your deck` | ✓ |
+| `IF_FIELD_CHARACTER_COST` | `If any Character on your field has cost N or more` | ✓ |
+| `IF_RESTED` | `If this Character is rested` — FILTER token `rested` detected in condition | ✓ |
+| `IF_YOU_DO` | `If you do,` — follow-up conditional on the previous clause succeeding | ✓ |
+| `IF_LEADER_COLOR` | `If your Leader is multicolored` | ✓ `colors().size() > 1` |
+| `IF_LEADER_NAME` | `If your Leader is [CARD_REF]` — NAME_FILTER token in condition body | ✓ name equalsIgnoreCase |
+| `IF_LEADER_TYPE` | `If your Leader has the {Type} type` — SUBTYPE_FILTER token | ✓ containsSubtype |
+| `IF_LEADER_ATTRIBUTE` | `If your Leader has the (Attribute) attribute` — ATTRIBUTE_FILTER token | ✓ attribute enum name match |
+| `IF_FIELD_CHARACTER_TYPE` | `If you have a {Type} type Character` — SUBTYPE_FILTER + CARD_TYPE=character before it | ✓ field card scan |
+| `IF_OPPONENT_CHARACTER_COUNT` | `If your opponent has N or more Characters` | ✓ |
+| `IF_OPPONENT_RESTED_CHARACTER_COUNT` | `If your opponent has N or more rested Characters` | ✓ |
+| `IF_OPPONENT_DON_COUNT` | `If your opponent has N or more DON!! cards on their field` | ✓ |
+| `IF_OPPONENT_FIELD_CHARACTER_POWER` | `If your opponent has a Character with N or more power` | ✓ |
+| `IF_FIELD_CHARACTER_POWER` | `If you have a Character with N or more power` | ✓ |
+| `IF_FIELD_CHARACTER_NAME` | `If you have a [Name] Character` — NAME_FILTER subtype, conditionValue = minBasePower | ✓ |
+| `IF_FIELD_CHARACTER_NAME_RESTED` | `If you have a rested [Name] Character` — NAME_FILTER subtype | ✓ |
+| `IF_FIELD_CHARACTER_COST_COUNT` | `If you have N or more Characters with a cost of N or more` — conditionValue = minCount, subtype = minCost string | ✓ |
+| `IF_RESTED_CHARACTER_COUNT` | `If you have N or more rested Characters` | ✓ |
+| `IF_NOT_FIELD_CHARACTER_NAME` | `If you do not have a [Name] Character on your field` | ✓ |
+| `IF_DON_COMPARISON` | `If the number of DON!! cards on your field is equal to or less than your opponent's` | pending |
+| `IF_THIS_POWER` | `If this Character has [POWER] power or more` | pending |
+| `IF_REVEALED_COST` | `If the revealed card has a cost of N or more` — follows a SEARCH_DECK clause | pending |
+
+> **Parser extraction gap (Item 22):** All conditions above marked ✓ are implemented in `EffectFactory.evaluateCondition()` but `EffectParser.classifyConditionClause()` does not yet extract them from raw card text. Cards using these conditions require hand-compiled JSON for now.
 
 ---
 
@@ -335,7 +376,7 @@ How parsed tokens map to `EffectData` record fields:
 | `target.maxPower` | FILTER(power) token |
 | `target.subType` | FILTER(type) token |
 | `condition` | CONDITION token on the preamble or inline `If` clause |
-| `duration` | DURATION token (`0` = permanent, `1` = this turn, `-1` = this battle) |
+| `duration` | DURATION token (`THIS_TURN`, `THIS_BATTLE`, `OPPONENTS_NEXT_TURN`, `WHILE_IN_PLAY`; null = WHILE_IN_PLAY) |
 
 ---
 

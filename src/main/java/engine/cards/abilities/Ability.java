@@ -19,10 +19,11 @@ public class Ability {
 
     private final AbilityData data;
     private boolean usedThisTurn;
-
+    private boolean isNegated;
     public Ability(AbilityData data) {
         this.data = data;
         this.usedThisTurn = false;
+        this.isNegated = false;
     }
 
     // ── Static descriptor delegates ──────────────────────────────────────────
@@ -78,6 +79,15 @@ public class Ability {
         return data;
     }
 
+    /**
+     * Returns true if this ability's effects are currently negated. When true, the card's
+     * effects are considered inactive and will not resolve.
+     * @param negated true to negate this card's effects, false to restore them.
+     */
+    public void setNegated(boolean negated) {
+        this.isNegated = negated;
+    }
+
     // ── Runtime state ────────────────────────────────────────────────────────
 
     /**
@@ -105,10 +115,14 @@ public class Ability {
      */
     public void resetTurn() {
         this.usedThisTurn = false;
+        this.isNegated = false;
     }
 
     public boolean isUsedThisTurn() {
         return usedThisTurn;
+    }
+    public boolean isNegated() {
+        return isNegated;
     }
 
     @Override
@@ -116,6 +130,7 @@ public class Ability {
         return "Ability[trigger=" + data.triggerType()
                 + ", once=" + data.isOncePerTurn()
                 + ", used=" + usedThisTurn
+                + ", negated=" + isNegated
                 + ", effects=" + data.effects().size() + "]";
     }
 }

@@ -3,6 +3,7 @@ import engine.zones.Zone;
 import engine.zones.ZoneType;
 import engine.zones.Deck;
 import engine.zones.DonDeck;
+import engine.zones.DonZone;
 import engine.cards.Leader;
 public class Player {
     private String player_id;
@@ -15,12 +16,14 @@ public class Player {
     private Zone hand;
     private Zone field;
     private Zone trash;
-    private Zone cost_zone;
+    private DonZone cost_zone;
     private Zone stage;
 
     private int activeDon;
     private int restedDon;
     private int lifePoints;
+
+    private boolean onPlayNegated;
     
     private Leader leader;
     public Player(String player_id, String name, Leader leader) {
@@ -32,7 +35,7 @@ public class Player {
         this.field = new Zone(ZoneType.CHARACTER, this);
         this.trash = new Zone(ZoneType.TRASH, this);
         this.life_zone = new Deck(ZoneType.LIFE, this);
-        this.cost_zone = new Zone(ZoneType.COST, this);
+        this.cost_zone = new DonZone(this);
         this.stage = new Zone(ZoneType.STAGE, this);
     
         this.leader = leader;
@@ -74,7 +77,7 @@ public class Player {
         return life_zone;
     }
 
-    public Zone getCost() {
+    public DonZone getCost() {
         return cost_zone;
     }
 
@@ -104,6 +107,14 @@ public class Player {
 
     public Zone getStage() {
         return stage;
+    }
+
+    public boolean isOnPlayNegated() {
+        return onPlayNegated;
+    }
+
+    public void setOnPlayNegated(boolean onPlayNegated) {
+        this.onPlayNegated = onPlayNegated;
     }
 
     // Mutator methods

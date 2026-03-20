@@ -136,26 +136,26 @@ public class EffectLexerTest {
     // ── FILTER — bracket detection ────────────────────────────────────────────
 
     @Test
-    void parseEffect_bracketKeyword_emitsFilterWithKeywordValue() {
+    void parseEffect_bracketKeyword_emitsNameFilterWithKeywordValue() {
         List<Token> tokens = EffectLexer.parseEffect("Your opponent cannot activate [Blocker].");
-        Token filter = first(tokens, TokenType.FILTER);
+        Token filter = first(tokens, TokenType.NAME_FILTER);
         assertNotNull(filter);
         assertEquals("blocker", filter.value());
         assertEquals("[blocker]", filter.raw());
     }
 
     @Test
-    void parseEffect_braceSubtype_emitsFilterWithSubtypeValue() {
+    void parseEffect_braceSubtype_emitsSubtypeFilterWithSubtypeValue() {
         List<Token> tokens = EffectLexer.parseEffect("Play 1 {Straw Hat Crew} Character.");
-        Token filter = first(tokens, TokenType.FILTER);
+        Token filter = first(tokens, TokenType.SUBTYPE_FILTER);
         assertNotNull(filter);
         assertEquals("straw hat crew", filter.value());
     }
 
     @Test
-    void parseEffect_parenAttribute_emitsFilterWithAttributeValue() {
+    void parseEffect_parenAttribute_emitsAttributeFilterWithAttributeValue() {
         List<Token> tokens = EffectLexer.parseEffect("K.O. 1 (Slash) Character.");
-        Token filter = first(tokens, TokenType.FILTER);
+        Token filter = first(tokens, TokenType.ATTRIBUTE_FILTER);
         assertNotNull(filter);
         assertEquals("slash", filter.value());
     }

@@ -58,9 +58,11 @@ public final class EffectParser {
         }
 
         // 2. Extract a leading condition clause (e.g. "If you do," / "If your Leader…").
-        String[] conditionHolder = {null}; // mutable box so helper can write into it
-        filtered = extractLeadingCondition(filtered, conditionHolder);
+        String[] conditionHolder = {null};  // mutable box for condition enum name
+        String[] subtypeHolder   = {null};  // mutable box for condition subtype/name/attribute
+        filtered = extractLeadingCondition(filtered, conditionHolder, subtypeHolder);
         String leadingCondition = conditionHolder[0];
+        String leadingSubtype   = subtypeHolder[0];
 
         // 3. Split into clauses on CONNECTOR tokens (and / then / also).
         List<List<Token>> clauses = splitClauses(filtered);
@@ -69,13 +71,14 @@ public final class EffectParser {
         List<ParsedEffect> effects = new ArrayList<>();
         for (int i = 0; i < clauses.size(); i++) {
             List<Token> clause = clauses.get(i);
-            // First clause gets the leading condition.
-            // Clauses after "then" imply IF_YOU_DO (execute only if prior did).
+            // First clause gets the leading condition (and its subtype qualifier).
+            // Clauses after "then" imply IF_YOU_DO (no subtype qualifier needed).
             String clauseCondition = (i == 0) ? leadingCondition
                                    : (i > 0 && connectsBefore(filtered, clauses, i, "then"))
                                      ? "IF_YOU_DO"
                                    : null;
-            ParsedEffect effect = parseClause(clause, clauseCondition);
+            String clauseSubtype = (i == 0) ? leadingSubtype : null;
+            ParsedEffect effect = parseClause(clause, clauseCondition, clauseSubtype);
             if (effect != null) effects.add(effect);
         }
         return effects;
@@ -101,7 +104,8 @@ public final class EffectParser {
      * @return token sublist beginning at the first effect VERB, or the original
      *         list unchanged if no leading condition was present
      */
-    private static List<Token> extractLeadingCondition(List<Token> tokens, String[] out) {
+    private static List<Token> extractLeadingCondition(List<Token> tokens,
+                                                        String[] condOut, String[] subtypeOut) {
         if (tokens.isEmpty()) return tokens;
         Token first = tokens.get(0);
         if (first.type() != TokenType.CONDITION) return tokens;
@@ -112,18 +116,18 @@ public final class EffectParser {
         // only that one token; the effect tokens follow immediately (comma already
         // stripped as punctuation by the lexer, so no CONNECTOR separates them).
         if (raw.equals("if you do")) {
-            out[0] = "IF_YOU_DO";
+            condOut[0] = "IF_YOU_DO";
             return tokens.subList(1, tokens.size());
         }
         if (raw.equals("once per turn")) {
-            out[0] = "ONCE_PER_TURN";
+            condOut[0] = "ONCE_PER_TURN";
             return tokens.subList(1, tokens.size());
         }
 
         // "if" / "when" — classify by peeking at the condition tokens, then advance
         // to the first effect VERB (comma is stripped; no CONNECTOR marks the boundary).
         if (raw.equals("if") || raw.equals("when")) {
-            out[0] = classifyConditionClause(tokens);
+            condOut[0] = classifyConditionClause(tokens, subtypeOut);
             int effectStart = findFirstEffectVerb(tokens, 1);
             return (effectStart >= 0) ? tokens.subList(effectStart, tokens.size()) : List.of();
         }
@@ -154,16 +158,20 @@ public final class EffectParser {
 
     /**
      * Classifies an "if …" / "when …" condition by scanning tokens up to the
-     * first effect VERB. Uses two passes so that high-specificity FILTER markers
-     * (rested, multicolored, type) are checked before lower-specificity CARD_TYPE
-     * markers — otherwise "if this Character is rested" would return
-     * IF_CHARACTER_COUNT instead of IF_RESTED.
+     * first effect VERB. Uses two passes so that high-specificity markers are
+     * checked before lower-specificity CARD_TYPE markers.
      *
-     * @param tokens full SKIP-filtered stream starting with the CONDITION token
-     * @return Condition enum name string (e.g. {@code "IF_LIFE_COUNT"}), or
+     * <p>When the condition carries a string qualifier (subtype, name, or attribute)
+     * the inner value of the corresponding filter token is written into
+     * {@code subtypeOut[0]}.
+     *
+     * @param tokens     full SKIP-filtered stream starting with the CONDITION token
+     * @param subtypeOut single-element array used as a mutable output box for the
+     *                   condition's string qualifier; set to {@code null} if absent
+     * @return Condition enum name string (e.g. {@code "IF_LEADER_TYPE"}), or
      *         {@code null} if the condition pattern is not recognised
      */
-    private static String classifyConditionClause(List<Token> tokens) {
+    private static String classifyConditionClause(List<Token> tokens, String[] subtypeOut) {
         // Find the boundary: index of first VERB that maps to a real EffectType.
         int limit = tokens.size();
         for (int i = 1; i < tokens.size(); i++) {
@@ -182,9 +190,26 @@ public final class EffectParser {
             if (t.type() == TokenType.FILTER && r.equals("rested"))
                 return "IF_RESTED";
             if (t.type() == TokenType.FILTER && r.equals("multicolored"))
-                return "IF_LEADER_COLOR";
-            if (t.type() == TokenType.FILTER && (r.startsWith("{") || r.equals("type")))
-                return "IF_LEADER_TYPE";
+                return "IF_LEADER_MULTICOLORED";
+            if (t.type() == TokenType.FILTER && r.equals("type"))
+                return "IF_LEADER_TYPE"; // "type" word seen without an adjacent SUBTYPE_FILTER
+            if (t.type() == TokenType.SUBTYPE_FILTER) {
+                subtypeOut[0] = (String) t.value();
+                // Distinguish leader-type vs field-character-type by checking for CARD_TYPE("character")
+                // in the window before this token.
+                boolean hasCharacterBefore = tokens.subList(1, i).stream()
+                        .anyMatch(p -> p.type() == TokenType.CARD_TYPE && p.raw().contains("character"));
+                return hasCharacterBefore ? "IF_FIELD_CHARACTER_TYPE" : "IF_LEADER_TYPE";
+            }
+            if (t.type() == TokenType.NAME_FILTER) {
+                subtypeOut[0] = (String) t.value();
+                // [Name] in a condition context → IF_LEADER_NAME
+                return "IF_LEADER_NAME";
+            }
+            if (t.type() == TokenType.ATTRIBUTE_FILTER) {
+                subtypeOut[0] = (String) t.value();
+                return "IF_LEADER_ATTRIBUTE";
+            }
             if (t.type() == TokenType.ZONE
                     && (r.equals("life") || r.equals("life area") || r.equals("life cards")))
                 return "IF_LIFE_COUNT";
@@ -213,6 +238,12 @@ public final class EffectParser {
      * clause. The "/" connector (trigger-notation separator) is intentionally
      * kept inside clauses rather than used as a split boundary.
      *
+     * <p>"or" is treated specially: it is only used as a clause boundary when a
+     * recognised effect VERB exists somewhere after it.  Without a following verb,
+     * "or" is a card-type compound connector ("your Leader <em>or</em> 1 of your
+     * Characters") and must stay inside the current clause so that
+     * {@link #extractDonSourceType} can read the DON state token unambiguously.
+     *
      * @param tokens SKIP-filtered token list after leading condition extraction
      * @return list of per-clause token sub-lists; never empty (at minimum one
      *         list containing all tokens is returned)
@@ -220,11 +251,18 @@ public final class EffectParser {
     private static List<List<Token>> splitClauses(List<Token> tokens) {
         List<List<Token>> clauses = new ArrayList<>();
         List<Token> current = new ArrayList<>();
-        for (Token t : tokens) {
+        for (int i = 0; i < tokens.size(); i++) {
+            Token t = tokens.get(i);
             if (t.type() == TokenType.CONNECTOR && !t.raw().equals("/")) {
-                if (!current.isEmpty()) {
-                    clauses.add(current);
-                    current = new ArrayList<>();
+                // "or" between card-type choices is NOT a clause boundary.
+                // Only split on "or" when there is a recognised effect VERB ahead.
+                if (t.raw().equals("or") && !hasVerbAhead(tokens, i + 1)) {
+                    current.add(t); // keep inside current clause
+                } else {
+                    if (!current.isEmpty()) {
+                        clauses.add(current);
+                        current = new ArrayList<>();
+                    }
                 }
             } else {
                 current.add(t);
@@ -232,6 +270,29 @@ public final class EffectParser {
         }
         if (!current.isEmpty()) clauses.add(current);
         return clauses;
+    }
+
+    /**
+     * Returns {@code true} when at least one VERB token whose raw value maps to
+     * a non-null EffectType via {@link #resolveVerb} exists at or after index
+     * {@code from} in {@code tokens}.  Used by {@link #splitClauses} to decide
+     * whether an "or" connector genuinely separates two independent effect
+     * clauses (has a verb ahead) or is merely a compound card-type connector
+     * ("your Leader or 1 of your Characters").
+     *
+     * @param tokens SKIP-filtered token list
+     * @param from   inclusive start index for the search
+     * @return {@code true} if a recognised effect verb is found at or after {@code from}
+     */
+    private static boolean hasVerbAhead(List<Token> tokens, int from) {
+        for (int i = from; i < tokens.size(); i++) {
+            Token t = tokens.get(i);
+            if (t.type() == TokenType.VERB
+                    && resolveVerb(t.raw(), tokens.subList(i, tokens.size())) != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -279,7 +340,7 @@ public final class EffectParser {
      * @return populated {@link ParsedEffect}, or {@code null} if the clause
      *         contains no recognisable effect VERB (residual fragment skipped)
      */
-    private static ParsedEffect parseClause(List<Token> clause, String condition) {
+    private static ParsedEffect parseClause(List<Token> clause, String condition, String conditionSubtype) {
         // 4a. Find the VERB.
         Token verbToken = firstOfType(clause, TokenType.VERB);
         if (verbToken == null) return null;
@@ -301,7 +362,7 @@ public final class EffectParser {
         // MODAL — return stub immediately.
         if (effectType.equals("MODAL")) {
             return new ParsedEffect("MODAL", 0, null, null, null,
-                    0, 0, 0, 0, 0, condition, null, optional);
+                    0, 0, 0, 0, 0,null, null, null, condition, conditionSubtype, null, optional);
         }
 
         // 4d. Quantities.
@@ -314,11 +375,21 @@ public final class EffectParser {
         // Effects that are always self-targeted default to SELF when no PLAYER token present.
         if (player == null && isSelfTargetingEffect(effectType)) player = "SELF";
 
-        // 4f. Card type.
-        String cardType = extractCardType(clause);
-
-        // 4g. Zone.
-        String zone = extractZone(clause);
+        // 4f–4g. Card type and zone.
+        // ATTACH_DON: the clause reads "Give N rested DON!! card to your Leader or Characters".
+        // target.cardType encodes the *DON state* (RESTED_DON / ACTIVE_DON) — which DON
+        // cards from the cost zone are eligible.  The recipient (Leader/Characters) is
+        // resolved at runtime by EffectFactory using target.player + the field + leader.
+        String cardType;
+        String zone;
+        if (effectType.equals("ATTACH_DON")) {
+            cardType = extractDonSourceType(clause); // e.g. "RESTED_DON", "ACTIVE_DON"
+            zone = null; // DON always drawn from cost zone (implicit); no zone needed
+            if (player == null) player = "SELF";
+        } else {
+            cardType = extractCardType(clause);
+            zone = extractZone(clause);
+        }
 
         // 4h. Filter bounds.
         int[] filters = extractFilters(clause);
@@ -327,13 +398,23 @@ public final class EffectParser {
         int maxPower = filters[2];
         int minPower = filters[3];
 
+        // 4i. Subtype / name / attribute filter for condition clauses.
+        String subtype = null;
+        String nameFilter = null;
+        String attribute = null;
+        for (Token token : clause) {
+            if (token.type() == TokenType.SUBTYPE_FILTER && subtype == null) subtype = (String) token.value();
+            if (token.type() == TokenType.NAME_FILTER && nameFilter == null) nameFilter = (String) token.value();
+            if (token.type() == TokenType.ATTRIBUTE_FILTER && attribute == null) attribute = (String) token.value();
+        }
+
         // 4i. Duration.
         String duration = extractDuration(clause);
 
         // 4j. Assemble.
         return new ParsedEffect(effectType, value, player, zone, cardType,
                 max, maxCost, minCost, maxPower, minPower,
-                condition, duration, optional);
+                subtype, nameFilter, attribute, condition, conditionSubtype, duration, optional);
     }
 
     // ── Verb → EffectType resolution ─────────────────────────────────────────
@@ -413,10 +494,13 @@ public final class EffectParser {
             if (t.type() == TokenType.STAT) {
                 return t.raw().equals("power") ? "POWER_BOOST" : "COST_MODIFY";
             }
+            if (t.type() == TokenType.NAME_FILTER) {
+                return "GRANT_KEYWORD"; // [Blocker], [Rush], etc.
+            }
             if (t.type() == TokenType.FILTER) {
                 String r = t.raw();
-                // [Keyword] filter → GRANT_KEYWORD; keyword word-form (blocker etc.) → GRANT_KEYWORD
-                if (r.startsWith("[") || r.equals("blocker") || r.equals("double")
+                // keyword word-form (blocker, double, banish, rush) → GRANT_KEYWORD
+                if (r.equals("blocker") || r.equals("double")
                         || r.equals("banish") || r.equals("rush")) {
                     return "GRANT_KEYWORD";
                 }
@@ -498,7 +582,7 @@ public final class EffectParser {
                     default                  -> null;
                 };
             }
-            if (t.type() == TokenType.FILTER && t.raw().startsWith("[")) return "PREVENT_BLOCK";
+            if (t.type() == TokenType.NAME_FILTER) return "PREVENT_BLOCK"; // "cannot [Blocker]"
         }
         return null;
     }
@@ -586,6 +670,7 @@ public final class EffectParser {
         return switch (effectType) {
             case "REST", "KO", "RETURN_TO_HAND", "PLAY_CARD",
                  "SEARCH_DECK", "UNREST", "NEGATE",
+                 "ATTACH_DON",   // max = number of DON!! cards to give (recipient count)
                  "PREVENT_ATTACK", "PREVENT_BLOCK", "PREVENT_KO" -> true;
             default -> false;
         };
@@ -700,6 +785,37 @@ public final class EffectParser {
         if (r.contains("opponent") || r.contains("next"))               return "OPPONENTS_NEXT_TURN";
         // "during this turn" / "until end of this turn" / etc.
         return "THIS_TURN";
+    }
+
+    /**
+     * Extracts the DON!! source-state string for an ATTACH_DON effect clause.
+     *
+     * <p>The text pattern is {@code "Give N rested DON!! card to …"} or
+     * {@code "Give N active DON!! card to …"}.  With the state-qualified
+     * CARD_TYPE phrases added to {@link EffectTables} ("rested don!! card" →
+     * CARD_TYPE, "active don!! card" → CARD_TYPE), the lexer emits a single
+     * CARD_TYPE token before the DESTINATION("to") that this helper reads.
+     *
+     * <ul>
+     *   <li>{@code "rested don!! card/cards"} → {@code "RESTED_DON"}</li>
+     *   <li>{@code "active don!! card/cards"}  → {@code "ACTIVE_DON"}</li>
+     *   <li>No match (old data or unexpected form) → {@code "RESTED_DON"} (safe default)</li>
+     * </ul>
+     *
+     * @param clause SKIP-filtered clause token list for an ATTACH_DON effect
+     * @return DON state string ({@code "RESTED_DON"} or {@code "ACTIVE_DON"})
+     */
+    private static String extractDonSourceType(List<Token> clause) {
+        for (Token t : clause) {
+            // Stop scanning at DESTINATION("to") — DON qualifier is always before it.
+            if (t.type() == TokenType.DESTINATION && t.raw().equals("to")) break;
+            if (t.type() == TokenType.CARD_TYPE) {
+                String r = t.raw();
+                if (r.equals("rested don!! card") || r.equals("rested don!! cards")) return "RESTED_DON";
+                if (r.equals("active don!! card") || r.equals("active don!! cards"))  return "ACTIVE_DON";
+            }
+        }
+        return "RESTED_DON"; // default: standard rule for ~99% of ATTACH_DON effects
     }
 
     // ── Utility ───────────────────────────────────────────────────────────────

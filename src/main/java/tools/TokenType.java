@@ -11,7 +11,10 @@ public enum TokenType {
     QUANTITY, // e.g. "2", "X"
     PLAYER, // e.g. "you", "opponent"
     CARD_TYPE, // e.g. "character", "event", "action"
-    FILTER, // e.g. "with power 3000 or less", "with a BLOCKER keyword"
+    FILTER,          // numeric/text filter: "with cost 4 or less", "active", "top", "bottom"
+    SUBTYPE_FILTER,  // {Straw Hat Crew} — subtype / type identifier
+    NAME_FILTER,     // [Sanji] / [Blocker] — named card or keyword reference
+    ATTRIBUTE_FILTER,// (Slash) — attribute identifier
     ZONE, // e.g. "hand", "field", "trash"
     DURATION, // e.g. "until end of turn", "for the rest of the game"
     CONDITION, // e.g. "if you have more cards in hand than your opponent", "if this card is in your trash"

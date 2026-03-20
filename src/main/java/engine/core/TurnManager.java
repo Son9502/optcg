@@ -1,4 +1,5 @@
 package engine.core;
+import engine.cards.abilities.Trigger;
 import engine.player.Player;
 public class TurnManager {
     private final GameState state;
@@ -48,17 +49,33 @@ public class TurnManager {
                 currentPhase = Phase.END;
                 break;
             case END:
+                AbilityManager am = state.getAbilityManager();
+                if (am != null) {
+                    Player opponent = (activePlayer == state.getPlayer1())
+                            ? state.getPlayer2() : state.getPlayer1();
+                    am.dispatchAll(Trigger.END_OF_YOUR_TURN,      activePlayer, activePlayer);
+                    am.dispatchAll(Trigger.END_OF_OPPONENTS_TURN, opponent,     activePlayer);
+                }
                 endTurn();
                 break;
         }
     }
     private void endTurn() {
-        // Implement any end-of-turn cleanup or effects here
-        firstTurn = false; // After the first turn, set this to false
-        
-        activePlayer = (activePlayer == state.getPlayer1()) ? state.getPlayer2() : state.getPlayer1();
+        firstTurn = false;
+        // Clear OPPONENTS_NEXT_TURN buckets on the non-active player's cards.
+        // "Opponent's next turn" for the non-active player = the turn just ending.
+        Player other = (activePlayer == state.getPlayer1()) ? state.getPlayer2() : state.getPlayer1();
+        other.getField().getCards().forEach(c -> {
+            c.clearBonusPowerOpponentTurn();
+            c.clearBonusCostOpponentTurn();
+        });
+        if (other.getLeader() != null) {
+            other.getLeader().clearBonusPowerOpponentTurn();
+            other.getLeader().clearBonusCostOpponentTurn();
+        }
+        activePlayer = other;
         turnCount++;
-        currentPhase = Phase.REFRESH; // Start the next player's turn with the REFRESH phase
+        currentPhase = Phase.REFRESH;
     }
 
 }

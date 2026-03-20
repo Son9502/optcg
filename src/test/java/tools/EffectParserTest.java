@@ -274,7 +274,28 @@ public class EffectParserTest {
     @Test
     void parse_ifLeaderMulticolored_conditionIsLeaderColor() {
         List<ParsedEffect> effects = many("If your Leader is multicolored, draw 1 card.", 1);
-        assertEquals("IF_LEADER_COLOR", effects.get(0).condition());
+        assertEquals("IF_LEADER_MULTICOLORED", effects.get(0).condition());
+    }
+
+    // ── Condition: IF_LEADER_NAME ─────────────────────────────────────────────
+
+    @Test
+    void parse_ifLeaderIsSanji_conditionIsLeaderNameWithSubtype() {
+        ParsedEffect e = one("If your Leader is [Sanji], draw 1 card.");
+        assertEquals("IF_LEADER_NAME", e.condition());
+        assertEquals("sanji",          e.conditionSubtype());
+        assertEquals("DRAW",           e.effectType());
+        assertEquals(1,                e.value());
+    }
+
+    // ── Condition: IF_LEADER_TYPE ─────────────────────────────────────────────
+
+    @Test
+    void parse_ifLeaderHasSubtype_conditionIsLeaderTypeWithSubtype() {
+        ParsedEffect e = one("If your Leader has the {Animal Kingdom Pirates} type, draw 1 card.");
+        assertEquals("IF_LEADER_TYPE",          e.condition());
+        assertEquals("animal kingdom pirates",  e.conditionSubtype());
+        assertEquals("DRAW",                    e.effectType());
     }
 
     // ── Condition: IF_HAND_COUNT ──────────────────────────────────────────────
@@ -291,6 +312,36 @@ public class EffectParserTest {
     void parse_ifThisCharacterIsRested_conditionIsRested() {
         List<ParsedEffect> effects = many("If this Character is rested, draw 1 card.", 1);
         assertEquals("IF_RESTED", effects.get(0).condition());
+    }
+
+    // ── ATTACH_DON ────────────────────────────────────────────────────────────
+
+    @Test
+    void parse_giveUpTo1RestedDonToLeaderOrCharacters_attachDonRestedDon() {
+        // ST01-007 Nami pattern — "or" must NOT split into two clauses
+        ParsedEffect e = one("Give up to 1 rested DON!! card to your Leader or 1 of your Characters.");
+        assertEquals("ATTACH_DON",   e.effectType());
+        assertEquals(1,              e.max());
+        assertEquals("SELF",         e.targetPlayer());
+        assertEquals("RESTED_DON",   e.targetCardType());
+        assertNull(e.targetZone(),   "ATTACH_DON zone should be null (cost zone is implicit)");
+    }
+
+    @Test
+    void parse_give1ActiveDonToLeader_attachDonActiveDon() {
+        ParsedEffect e = one("Give 1 active DON!! card to your Leader.");
+        assertEquals("ATTACH_DON",  e.effectType());
+        assertEquals(1,             e.max());
+        assertEquals("SELF",        e.targetPlayer());
+        assertEquals("ACTIVE_DON",  e.targetCardType());
+    }
+
+    @Test
+    void parse_giveRestedDonToLeaderOrCharacters_producesOneEffect() {
+        // Verify "or" compound connector does NOT split into multiple effects
+        List<ParsedEffect> effects = many(
+                "Give up to 1 rested DON!! card to your Leader or 1 of your Characters.", 1);
+        assertEquals("ATTACH_DON", effects.get(0).effectType());
     }
 
     // ── SHUFFLE_DECK ──────────────────────────────────────────────────────────

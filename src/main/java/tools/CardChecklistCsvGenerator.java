@@ -3,14 +3,17 @@ package tools;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
- * Generates {@code csv/card_checklist.csv} as part of the CardCompiler pipeline.
+ * Generates {@code csv/card_checklist.csv} and {@code csv/token_checklist.csv}
+ * as part of the CardCompiler pipeline.
  *
+ * <h3>card_checklist.csv</h3>
  * <p>One row per unique card, deduplicated by {@code card_set_id} across all
  * categories (sets, decks, promos). Cards that share the same {@code card_set_id}
  * and {@code card_text} are treated as one entry; first-seen wins.
@@ -27,6 +30,19 @@ import java.util.*;
  *       classify; empty if the card was fully tokenised</li>
  *   <li>{@code needs_override}    — {@code "true"} if any unknown tokens remain;
  *       {@code "false"} otherwise</li>
+ *   <li>{@code tokens}            — pipe-separated TokenType names found in this
+ *       card's effect text, sorted by {@link TokenType} declaration order</li>
+ * </ul>
+ *
+ * <h3>token_checklist.csv</h3>
+ * <p>One row per {@link TokenType} value, sorted by declaration order.
+ *
+ * <p>Columns:
+ * <ul>
+ *   <li>{@code token_type}   — enum name (e.g. {@code VERB})</li>
+ *   <li>{@code description}  — plain-English description of what the token represents</li>
+ *   <li>{@code example}      — a real effect-body snippet from card data in which
+ *       the first occurrence of the matched phrase is wrapped in {@code **...**}</li>
  * </ul>
  *
  * <p>Called automatically at the end of {@link CardCompiler#main(String[])} after
@@ -37,9 +53,31 @@ import java.util.*;
  */
 public class CardChecklistCsvGenerator {
 
-    private static final String COMPILED_DIR = "src/main/resources/compiled/data/";
-    private static final String OUTPUT_PATH  = "csv/card_checklist.csv";
+    private static final String COMPILED_DIR      = "src/main/resources/compiled/data/";
+    private static final String OUTPUT_PATH       = "csv/card_checklist.csv";
+    private static final String TOKEN_OUTPUT_DIR  = "csv/tokens/";
     private static final String[] CATEGORIES = {"sets", "decks", "promos"};
+
+    /** Plain-English descriptions for each TokenType, keyed by declaration order. */
+    private static final Map<TokenType, String> TOKEN_DESCRIPTIONS;
+    static {
+        Map<TokenType, String> m = new EnumMap<>(TokenType.class);
+        m.put(TokenType.VERB,        "Action word that drives the effect (e.g. draw, rest, K.O.)");
+        m.put(TokenType.QUANTITY,    "Numeric or symbolic count (e.g. 1, 2, X, up to N)");
+        m.put(TokenType.PLAYER,      "Reference to a player or possessive (e.g. you, your opponent's)");
+        m.put(TokenType.CARD_TYPE,   "Card category (e.g. Character, Event, DON!!)");
+        m.put(TokenType.FILTER,      "Constraint on target selection (e.g. with a cost of 4 or less)");
+        m.put(TokenType.ZONE,        "Named game zone (e.g. hand, deck, life area)");
+        m.put(TokenType.DURATION,    "Temporal scope of an effect (e.g. during this turn)");
+        m.put(TokenType.CONDITION,   "Prerequisite gating the effect (e.g. if you do, once per turn)");
+        m.put(TokenType.CONNECTOR,   "Clause separator linking multiple effects (e.g. and, then)");
+        m.put(TokenType.DESTINATION, "Directional preposition indicating card movement (e.g. from, to)");
+        m.put(TokenType.STAT,        "Standalone game stat noun (e.g. power, cost)");
+        m.put(TokenType.SKIP,        "Grammatical glue with no game-logic value (e.g. the, a, of)");
+        m.put(TokenType.MODIFIER,    "Semantic qualifier for effect optionality (e.g. may, must)");
+        m.put(TokenType.UNKNOWN,     "Unrecognized phrase — not in the EffectTables phrase map");
+        TOKEN_DESCRIPTIONS = Collections.unmodifiableMap(m);
+    }
 
     // ── Standalone entry point ────────────────────────────────────────────────
 
@@ -77,16 +115,16 @@ public class CardChecklistCsvGenerator {
     // ── Core generation ───────────────────────────────────────────────────────
 
     /**
-     * Writes {@code csv/card_checklist.csv} from a collection of compiled card
-     * ObjectNodes. The caller is responsible for deduplication by
-     * {@code card_set_id}; first-seen entry wins when the same id appears across
-     * multiple categories.
+     * Writes {@code csv/card_checklist.csv} and {@code csv/token_checklist.csv}
+     * from a collection of compiled card ObjectNodes. The caller is responsible
+     * for deduplication by {@code card_set_id}; first-seen entry wins when the
+     * same id appears across multiple categories.
      *
-     * <p>Rows are sorted alphabetically by {@code card_set_id} so sets, decks,
-     * and promos are grouped naturally by their set-code prefix.
+     * <p>Rows in card_checklist are sorted alphabetically by {@code card_set_id}.
+     * Rows in token_checklist follow {@link TokenType} declaration order.
      *
      * @param cards compiled card ObjectNodes, one per unique {@code card_set_id}
-     * @throws IOException if the output file or its parent directory cannot be created
+     * @throws IOException if either output file or its parent directory cannot be created
      */
     static void generate(Collection<ObjectNode> cards) throws IOException {
         new File("csv/").mkdirs();
@@ -94,10 +132,13 @@ public class CardChecklistCsvGenerator {
         List<ObjectNode> sorted = new ArrayList<>(cards);
         sorted.sort(Comparator.comparing(n -> n.path("card_set_id").asText()));
 
+        // Collect one example effect snippet per TokenType (first-seen wins)
+        Map<TokenType, String> tokenExamples = new EnumMap<>(TokenType.class);
+
         int overrideCount = 0;
 
         try (PrintWriter pw = new PrintWriter(new FileWriter(OUTPUT_PATH))) {
-            pw.println("card_name,card_set_id,card_text,generic_card_text,unknown_tokens,needs_override");
+            pw.println("card_name,card_set_id,card_text,generic_card_text,unknown_tokens,needs_override,tokens");
 
             for (ObjectNode card : sorted) {
                 String name    = card.path("card_name").asText();
@@ -112,21 +153,91 @@ public class CardChecklistCsvGenerator {
                 boolean needsOverride = !unknowns.isEmpty();
                 if (needsOverride) overrideCount++;
 
-                pw.printf("%s,%s,%s,%s,%s,%s%n",
+                String tokensStr = collectTokenTypes(cardText, tokenExamples);
+
+                pw.printf("%s,%s,%s,%s,%s,%s,%s%n",
                         csvQuote(name),
                         csvQuote(id),
                         csvQuote(cardText),
                         csvQuote(genericText),
                         csvQuote(unknownStr),
-                        csvQuote(needsOverride ? "true" : "false"));
+                        csvQuote(needsOverride ? "true" : "false"),
+                        csvQuote(tokensStr));
             }
         }
 
         System.out.printf("Checklist: %d cards (%d need override) → %s%n",
                 sorted.size(), overrideCount, OUTPUT_PATH);
+
+        // ── csv/tokens/{TokenType}.csv ────────────────────────────────────────
+        // Build phrases-by-type map in matching-priority order (longest first)
+        Map<TokenType, List<String>> phrasesByType = new EnumMap<>(TokenType.class);
+        for (TokenType tt : TokenType.values()) phrasesByType.put(tt, new ArrayList<>());
+        for (String phrase : EffectTables.SORTED_PHRASES) {
+            TokenType tt = EffectTables.PHRASES.get(phrase);
+            if (tt != null) phrasesByType.get(tt).add(phrase);
+        }
+        // Append regex patterns for FILTER (numeric cost/power filters)
+        for (Pattern pat : EffectTables.FILTER_PATTERNS) {
+            phrasesByType.get(TokenType.FILTER).add("[pattern] " + pat.pattern());
+        }
+
+        new File(TOKEN_OUTPUT_DIR).mkdirs();
+        for (TokenType tt : TokenType.values()) {
+            String path = TOKEN_OUTPUT_DIR + tt.name() + ".csv";
+            try (PrintWriter pw = new PrintWriter(new FileWriter(path))) {
+                pw.println("phrase");
+                for (String phrase : phrasesByType.getOrDefault(tt, List.of())) {
+                    pw.println(csvQuote(phrase));
+                }
+            }
+        }
+
+        System.out.printf("Token checklist: %d CSVs → %s%n",
+                TokenType.values().length, TOKEN_OUTPUT_DIR);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Lexes all ability effect bodies from {@code cardText}, returns a
+     * pipe-separated string of distinct {@link TokenType} names found (sorted by
+     * enum declaration order), and populates {@code exampleCollector} with the
+     * first real-card example seen for each new token type.
+     *
+     * <p>The example stored in {@code exampleCollector} is the normalized
+     * (lowercase) effect snippet with the first occurrence of the matched raw
+     * phrase wrapped in {@code **...**}.
+     *
+     * @param cardText        raw card text before trigger-header stripping
+     * @param exampleCollector mutable map to populate; existing entries are not overwritten
+     * @return pipe-separated token type names, or {@code ""} if the card has no abilities
+     */
+    private static String collectTokenTypes(String cardText,
+                                            Map<TokenType, String> exampleCollector) {
+        if (cardText == null || cardText.isBlank()) return "";
+
+        Set<TokenType> found = new LinkedHashSet<>();
+        for (ParsedAbility pa : Parser.parse(cardText)) {
+            String effectText = pa.effect();
+            if (effectText == null || effectText.isBlank()) continue;
+            String normalized = effectText.toLowerCase().replace("k.o.", "ko");
+            for (Token t : EffectLexer.parseEffect(effectText)) {
+                found.add(t.type());
+                if (!exampleCollector.containsKey(t.type()) && !t.raw().isBlank()) {
+                    String bolded = normalized.replaceFirst(
+                            Pattern.quote(t.raw()),
+                            "**" + t.raw() + "**");
+                    exampleCollector.put(t.type(), bolded);
+                }
+            }
+        }
+
+        return found.stream()
+                .sorted(Comparator.comparingInt(Enum::ordinal))
+                .map(Enum::name)
+                .collect(Collectors.joining(" | "));
+    }
 
     /**
      * Strips disclaimer / errata boilerplate sometimes appended to reprinted cards.

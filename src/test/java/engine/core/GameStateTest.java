@@ -2,12 +2,22 @@ package engine.core;
 
 import engine.cards.CardData;
 import engine.cards.DonCard;
+import engine.cards.abilities.Ability;
+import engine.cards.abilities.AbilityData;
+import engine.cards.abilities.Trigger;
+import engine.cards.effects.EffectData;
+import engine.cards.effects.EffectType;
+import engine.cards.effects.Target;
 import engine.cards.types.CardType;
 import engine.player.Player;
+import engine.zones.ZoneType;
+
+import engine.TestUtils;
 import engine.cards.Card;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import java.util.List;
 
 public class GameStateTest {
 
@@ -20,6 +30,17 @@ public class GameStateTest {
         p1 = new Player();
         p2 = new Player();
         gameState = new GameState(p1, p2);
+    }
+
+    private Card makeEventCard(Player owner, int cost, AbilityData ability) {
+        CardData d = new CardData("Test-Event", "TEST-SET", "Test Event", "Test description",
+                "", "Test Set", null, CardType.EVENT, null, null,
+                cost, 0, null, null, 0.0, ability != null ? List.of(ability) : null);
+        Card c = new Card("Test-Event", d, owner);
+        if (ability != null) {
+            c.addAbility(new Ability(ability));
+        }
+        return c;
     }
 
     /**
@@ -183,8 +204,8 @@ public class GameStateTest {
         p1.getHand().add(sixth);
         gameState.playCard(p1, sixth);
 
-        assertEquals(5, p1.getField().size());        // field unchanged
-        assertTrue(p1.getHand().contains(sixth));     // card stays in hand
+        assertEquals(5, p1.getField().size()); // field unchanged
+        assertTrue(p1.getHand().contains(sixth)); // card stays in hand
     }
 
     @Test
@@ -203,9 +224,9 @@ public class GameStateTest {
         // Attempt to play a second stage — should be rejected
         gameState.playCard(p1, stage2);
 
-        assertEquals(1, p1.getStage().size());        // still only 1 stage
-        assertTrue(p1.getStage().contains(stage1));   // original unchanged
-        assertTrue(p1.getHand().contains(stage2));    // second stays in hand
+        assertEquals(1, p1.getStage().size()); // still only 1 stage
+        assertTrue(p1.getStage().contains(stage1)); // original unchanged
+        assertTrue(p1.getHand().contains(stage2)); // second stays in hand
     }
 
     @Test
@@ -271,7 +292,8 @@ public class GameStateTest {
         }
         assertEquals(5, p1.getLife().size());
         for (int i = 0; i < 5; i++) {
-            Card lifeCard = p1.getLife().getCards().get(0); // add() uses addFirst; remove() uses removeFirst → index 0 is drawn
+            Card lifeCard = p1.getLife().getCards().get(0); // add() uses addFirst; remove() uses removeFirst → index 0
+                                                            // is drawn
             gameState.removeLife(p1);
             assertEquals(5 - (i + 1), p1.getLife().size());
             assertTrue(p1.getHand().contains(lifeCard));
@@ -375,9 +397,9 @@ public class GameStateTest {
 
         gameState.playCard(p1, card);
 
-        assertTrue(p1.getHand().contains(card),   "Card should stay in hand when Don is insufficient");
-        assertFalse(p1.getField().contains(card),  "Card should not reach field when Don is insufficient");
-        assertFalse(don.isRested(),                "Don should not be rested when play is rejected");
+        assertTrue(p1.getHand().contains(card), "Card should stay in hand when Don is insufficient");
+        assertFalse(p1.getField().contains(card), "Card should not reach field when Don is insufficient");
+        assertFalse(don.isRested(), "Don should not be rested when play is rejected");
     }
 
     @Test
@@ -395,10 +417,10 @@ public class GameStateTest {
 
         gameState.playCard(p1, card);
 
-        assertTrue(p1.getField().contains(card),  "Card should be on field after cost is paid");
-        assertFalse(p1.getHand().contains(card),  "Card should leave hand after being played");
-        assertTrue(don1.isRested(),               "First Don should be rested after payment");
-        assertTrue(don2.isRested(),               "Second Don should be rested after payment");
+        assertTrue(p1.getField().contains(card), "Card should be on field after cost is paid");
+        assertFalse(p1.getHand().contains(card), "Card should leave hand after being played");
+        assertTrue(don1.isRested(), "First Don should be rested after payment");
+        assertTrue(don2.isRested(), "Second Don should be rested after payment");
     }
 
     @Test
@@ -441,4 +463,66 @@ public class GameStateTest {
     void testCostReduction() {
 
     }
+
+    // ------Events and triggers------
+    @Test
+    void event_goesToTrash() {
+        Card eventCard = makeEventCard(p1, 0, null);
+        p1.getHand().add(eventCard);
+        gameState.playCard(p1, eventCard);
+        assertTrue(p1.getTrash().contains(eventCard), "Event card should be in trash");
+    }
+
+    @Test
+    void event_costIsPaid() {
+        for (int i = 0; i < 3; i++) {
+            DonCard don = new DonCard("don" + i, null, p1);
+            p1.getCost().add(don);
+        }
+        Card eventCard = makeEventCard(p1, 2, null);
+        p1.getHand().add(eventCard);
+        gameState.playCard(p1, eventCard);
+        assertTrue(p1.getCost().getRested() == 2, "Two Dons should be rested to pay event cost");
+    }
+
+    @Test
+    void event_drawFires() {
+        gameState.setAbilityManager(new AbilityManager(gameState));
+        EffectData drawEffect = new EffectData(EffectType.DRAW, 2, null, null, null, null, null, null, 0);
+        AbilityData abilityData = new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(drawEffect));
+        Card eventCard = makeEventCard(p1, 0, abilityData);
+        p1.getHand().add(eventCard);
+        for (int i = 0; i < 5; i++) {
+            Card c = new Card("c" + i, null, p1);
+            p1.getDeck().add(c);
+        }
+        gameState.playCard(p1, eventCard);
+        assertEquals(2, p1.getHand().size(), "Player should have drawn 2 cards from event effect");
+    }
+
+    @Test
+    void event_koFires() {
+        gameState.setAbilityManager(new AbilityManager(gameState));
+        gameState.setTargetSelector(
+                (candidates, count, prompt) -> candidates.subList(0, Math.min(count, candidates.size())));
+
+        // Opponent character — must have CardType.CHARACTER and cost ≤ 5
+        CardData charData = new CardData("OPP-C", "T", "OppChar", "", "", "T",
+                null, CardType.CHARACTER, null, null, 2, 3000, null, null, 0.0, null);
+        Card oppChar = new Card("opp-c1", charData, p2);
+        p2.getField().add(oppChar);
+
+        // Event with KO (cost 0 so no DON needed)
+        Target tgt = new Target(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
+                CardType.CHARACTER, 1, 5, 0, 0, 0, null,null,null,null);
+        EffectData ko = new EffectData(EffectType.KO, 0, tgt, null, null, null, null, null, 0);
+        AbilityData ab = new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(ko));
+
+        Card event = makeEventCard(p1, 0, ab);
+        p1.getHand().add(event);
+        gameState.playCard(p1, event);
+        assertFalse(p2.getField().contains(oppChar), "Opponent's character should be KO'd by event effect");
+        assertTrue(p2.getTrash().contains(oppChar), "KO'd character should be in opponent's trash");
+    }
+
 }
