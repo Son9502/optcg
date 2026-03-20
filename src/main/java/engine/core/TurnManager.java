@@ -61,12 +61,21 @@ public class TurnManager {
         }
     }
     private void endTurn() {
-        // Implement any end-of-turn cleanup or effects here
-        firstTurn = false; // After the first turn, set this to false
-        
-        activePlayer = (activePlayer == state.getPlayer1()) ? state.getPlayer2() : state.getPlayer1();
+        firstTurn = false;
+        // Clear OPPONENTS_NEXT_TURN buckets on the non-active player's cards.
+        // "Opponent's next turn" for the non-active player = the turn just ending.
+        Player other = (activePlayer == state.getPlayer1()) ? state.getPlayer2() : state.getPlayer1();
+        other.getField().getCards().forEach(c -> {
+            c.clearBonusPowerOpponentTurn();
+            c.clearBonusCostOpponentTurn();
+        });
+        if (other.getLeader() != null) {
+            other.getLeader().clearBonusPowerOpponentTurn();
+            other.getLeader().clearBonusCostOpponentTurn();
+        }
+        activePlayer = other;
         turnCount++;
-        currentPhase = Phase.REFRESH; // Start the next player's turn with the REFRESH phase
+        currentPhase = Phase.REFRESH;
     }
 
 }

@@ -22,6 +22,6 @@ public enum Duration {
     /** Effect lasts until the end of the opponent's next turn. */
     OPPONENTS_NEXT_TURN,
 
-    /** Effect is immediate and permanent (or until another effect reverses it). */
-    PERMANENT,
+    /** Effect lasts while the card is on the field. */
+    WHILE_IN_PLAY, // for effects that only apply while the card is on the field (e.g. "this Character gets +1000 power")
 }

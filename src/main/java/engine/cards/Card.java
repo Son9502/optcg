@@ -22,8 +22,12 @@ public class Card {
     protected List<DonCard> attachedDons;
     protected List<Ability> abilities;
     protected int bonusPower;
-    protected int bonusBattlePower;
     protected int bonusCost;
+    protected int bonusBattlePower;
+    protected int bonusPowerOpponentTurn; // cleared at end of each turn on the OTHER player's cards
+    protected int bonusCostOpponentTurn;
+    protected int bonusPowerWhileInPlay; // never cleared
+    protected int bonusCostWhileInPlay; // never cleared
     private boolean faceUp;
     protected List<Keyword> grantedKeywords;
 
@@ -43,6 +47,10 @@ public class Card {
         this.abilities = new ArrayList<Ability>();
         this.bonusPower = 0;
         this.bonusCost = 0;
+        this.bonusPowerOpponentTurn = 0;
+        this.bonusCostOpponentTurn = 0;
+        this.bonusPowerWhileInPlay = 0;
+        this.bonusCostWhileInPlay = 0;
         this.grantedKeywords = new ArrayList<>();
         this.faceUp = false; // Cards are face-down by default until played or flipped face-up
     }
@@ -79,6 +87,7 @@ public class Card {
     public void flipFaceUp() {
         this.faceUp = true;
     }
+
     public void flipFaceDown() {
         this.faceUp = false;
     }
@@ -119,20 +128,30 @@ public class Card {
         abilities.addAll(newAbilities);
     }
 
-    /** Returns true if this card has a KEYWORD ability matching {@code k}, or was granted it temporarily. */
+    /**
+     * Returns true if this card has a KEYWORD ability matching {@code k}, or was
+     * granted it temporarily.
+     */
     public boolean hasKeyword(Keyword k) {
         return grantedKeywords.contains(k)
-                || abilities.stream().anyMatch(a -> a.getTriggerType() == Trigger.KEYWORD && k == a.getKeyword());
+                || abilities.stream()
+                        .anyMatch(a -> a.getTriggerType() == Trigger.KEYWORD && k == a.getKeyword() && !a.isNegated());
     }
 
-    /** Temporarily grants a keyword to this card (cleared each turn via clearGrantedKeywords). */
+    /**
+     * Temporarily grants a keyword to this card (cleared each turn via
+     * clearGrantedKeywords).
+     */
     public void grantKeyword(Keyword k) {
         if (!grantedKeywords.contains(k)) {
             grantedKeywords.add(k);
         }
     }
 
-    /** Removes all temporarily granted keywords. Permanent keywords (in abilities) are unaffected. */
+    /**
+     * Removes all temporarily granted keywords. Permanent keywords (in abilities)
+     * are unaffected.
+     */
     public void clearGrantedKeywords() {
         grantedKeywords.clear();
     }
@@ -205,7 +224,6 @@ public class Card {
         attachedDons.clear();
     }
 
-
     /**
      * Get the base power of this card, which is defined in its CardData. This does
      * not include any power boosts from attached Don cards. For the total power
@@ -217,13 +235,17 @@ public class Card {
         return data.power();
     }
 
-    /** Returns the play cost after temporary modifications (floor: 0). */
+    /** Returns the play cost after all modifications (floor: 0). */
     public int getEffectiveCost() {
-        if (data == null || data.cost() == null) return 0;
-        return Math.max(0, data.cost() + bonusCost);
+        if (data == null || data.cost() == null)
+            return 0;
+        return Math.max(0, data.cost() + bonusCost + bonusCostOpponentTurn + bonusCostWhileInPlay);
     }
 
-    /** Adds a temporary power modification (positive or negative). Lasts until turn start. */
+    /**
+     * Adds a temporary power modification (positive or negative). Lasts until turn
+     * start.
+     */
     public void addPowerBoost(int n) {
         this.bonusPower += n;
     }
@@ -233,50 +255,95 @@ public class Card {
         this.bonusPower = 0;
     }
 
-    /** Adds a battle-scoped power boost (THIS_BATTLE duration). Cleared at end of each battle. */
+    /**
+     * Adds a battle-scoped power boost (THIS_BATTLE duration). Cleared at end of
+     * each battle.
+     */
     public void addBattlePowerBoost(int n) {
         this.bonusBattlePower += n;
     }
 
-    /** Clears battle-scoped power boosts. Called at the end of each battle in BattleSystem.resolve(). */
+    /**
+     * Clears battle-scoped power boosts. Called at the end of each battle in
+     * BattleSystem.resolve().
+     */
     public void clearBattlePowerBoosts() {
         this.bonusBattlePower = 0;
     }
 
-    /** Adds a temporary cost modification (negative = cheaper, positive = more expensive). */
+    /**
+     * Adds a temporary cost modification (negative = cheaper, positive = more
+     * expensive).
+     */
     public void addCostModifier(int n) {
         this.bonusCost += n;
     }
 
-    /** Clears all temporary cost modifications. Called at the start of each turn. */
+    /**
+     * Clears all temporary cost modifications. Called at the start of each turn.
+     */
     public void clearCostModifiers() {
         this.bonusCost = 0;
     }
-
     /**
-     * Returns power including all effect-based boosts but excluding DON!! card attachments.
-     * Used for the defending player's cards in battle — DON!! boosts only apply to the
-     * active player, but counter/turn-effect boosts apply to both sides.
-     *
-     * @return base power + {@code bonusPower} + {@code bonusBattlePower}
+     * Adds a temporary power boost that only applies during the opponent's turn. Cleared at the start of the player's turn.
+     * @param n the amount of the power boost to add
      */
-    public int getPowerWithEffects() {
-        return data.power() + bonusPower + bonusBattlePower;
+    public void addBonusPowerOpponentTurn(int n) {
+        this.bonusPowerOpponentTurn += n;
+    }
+    /**
+     * Adds a temporary cost modification that only applies during the opponent's turn. Cleared
+     * @param n the amount of the cost modification to add (negative = cheaper, positive = more expensive)
+     */
+    public void addBonusCostOpponentTurn(int n) {
+        this.bonusCostOpponentTurn += n;
+    }
+    /**
+     * Clears temporary power boosts that only apply during the opponent's turn. Called at the start of the player's turn.
+     */
+    public void clearBonusPowerOpponentTurn() {
+        this.bonusPowerOpponentTurn = 0;
+    }
+    /**
+     * Clears temporary cost modifications that only apply during the opponent's turn. Called at the start of the player's turn.
+     */
+    public void clearBonusCostOpponentTurn() {
+        this.bonusCostOpponentTurn = 0;
+    }
+
+    /** Adds a WHILE_IN_PLAY power boost (never cleared by refreshField). Cleared when card leaves the field. */
+    public void addPowerBoostWhileInPlay(int n) { this.bonusPowerWhileInPlay += n; }
+
+    /** Adds a WHILE_IN_PLAY cost modifier (never cleared by refreshField). Cleared when card leaves the field. */
+    public void addCostModifierWhileInPlay(int n) { this.bonusCostWhileInPlay += n; }
+
+    /** Clears all WHILE_IN_PLAY buffs. Called when the card leaves the CHARACTER zone. */
+    public void clearWhileInPlayBuffs() {
+        this.bonusPowerWhileInPlay = 0;
+        this.bonusCostWhileInPlay = 0;
     }
 
     /**
-     * Calculate the total power of this card, including all temporary boosts and any
-     * attached Don cards. This includes:
-     * <ul>
-     *   <li>{@code bonusPower}       — turn-scoped boosts (cleared each turn start)</li>
-     *   <li>{@code bonusBattlePower} — battle-scoped boosts (cleared each battle end)</li>
-     *   <li>Don card boosts          — from attached DON!! cards</li>
-     * </ul>
+     * Returns power including all effect-based boosts but excluding DON!! card
+     * attachments.
+     * Used for the defending player's cards in battle — DON!! boosts only apply to
+     * the active player, but counter/turn-effect boosts apply to both sides.
+     *
+     * @return base power + all bonus buckets (excludes DON!! attachments)
+     */
+    public int getPowerWithEffects() {
+        return data.power() + bonusPower + bonusBattlePower + bonusPowerOpponentTurn + bonusPowerWhileInPlay;
+    }
+
+    /**
+     * Calculate the total power of this card, including all temporary boosts and
+     * any attached Don cards.
      *
      * @return The total power of this card.
      */
     public int getTotalPower() {
-        int totalPower = data.power() + bonusPower + bonusBattlePower;
+        int totalPower = data.power() + bonusPower + bonusBattlePower + bonusPowerOpponentTurn + bonusPowerWhileInPlay;
         for (DonCard don : attachedDons) {
             totalPower += don.getBoost();
         }
