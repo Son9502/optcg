@@ -1,15 +1,19 @@
 package engine.cards.effects;
 
 import engine.TestUtils;
-import engine.battle.BattleSystem;
 import engine.cards.Card;
 import engine.cards.CardData;
 import engine.cards.DonCard;
+import engine.cards.Leader;
+import engine.cards.abilities.Ability;
+import engine.cards.abilities.AbilityData;
 import engine.cards.abilities.Condition;
+import engine.cards.abilities.Trigger;
+import engine.cards.types.Attribute;
 import engine.cards.types.CardType;
+import engine.cards.types.Color;
 import engine.core.GameState;
 import engine.player.Player;
-//import engine.cards.effects.Target;
 import engine.zones.ZoneType;
 import engine.cards.keywords.Keyword;
 
@@ -26,14 +30,12 @@ class EffectFactoryTest {
     private Player source;
     private Player opponent;
     private GameState gs;
-    private BattleSystem bs;
 
     @BeforeEach
     void setUp() {
         source = new Player("p1");
         opponent = new Player("p2");
         gs = new GameState(source, opponent);
-        bs = new BattleSystem(gs, null); // battle system not needed for these tests
     }
 
     // ── local helpers ───────────────────────────────────────────────────────────
@@ -45,10 +47,42 @@ class EffectFactoryTest {
         return new Card("c-char-" + power, data, owner);
     }
 
+    private Card makeNameCard(Player owner, int power, int cost, String name) {
+        CardData data = new CardData("TEST-C", "TEST-SET", name, "", "", "TestSet",
+                null, CardType.CHARACTER, null, null, cost, power, 0, 2000, 0.0, null);
+        return new Card("c-char-" + power, data, owner);
+    }
+
+    private Card makeSubtypeCard(Player owner, int power, int cost, String subType) {
+        CardData data = new CardData("TEST-C", "TEST-SET", "TestCard", "", subType, "TestSet",
+                null, CardType.CHARACTER, null, null, cost, power, 0, 2000, 0.0, null);
+        return new Card("c-char-" + power, data, owner);
+    }
+
+    private Card makeAttributeCard(Player owner, int power, int cost, Attribute attribute) {
+        CardData data = new CardData("TEST-C", "TEST-SET", "TestCard", "", "", "TestSet",
+                null, CardType.CHARACTER, attribute, null, cost, power, 0, 2000, 0.0, null);
+        return new Card("c-char-" + power, data, owner);
+    }
+
     private Card makeStageCard(Player owner, int cost) {
         CardData data = new CardData("TEST-C", "TEST-SET", "TestCard", "", "", "TestSet",
                 null, CardType.STAGE, null, null, cost, 0, 0, 0, 0.0, null);
         return new Card("c-stage-" + cost, data, owner);
+    }
+
+    private Card makeColorCard(Player owner, int power, int cost, Color color, CardType type) {
+        List<Color> colors = new ArrayList<>();
+        colors.add(color);
+        CardData data = new CardData("TEST-C", "TEST-SET", "TestCard", "", "", "TestSet",
+                null, type, null, colors, cost, power, 0, 2000, 0.0, null);
+        return new Card("c-char-" + power, data, owner);
+    }
+
+    private Card makeColorCard(Player owner, int power, int cost, List<Color> colors, CardType type) {
+        CardData data = new CardData("TEST-C", "TEST-SET", "TestCard", "", "", "TestSet",
+                null, type, null, colors, cost, power, 0, 2000, 0.0, null);
+        return new Card("c-char-" + power, data, owner);
     }
 
     private Card makeEventCard(Player owner, int cost) {
@@ -57,9 +91,17 @@ class EffectFactoryTest {
         return new Card("c-event-" + cost, data, owner);
     }
 
+    private Leader makeLeader(Player owner, String name, String subType, Attribute attribute, List<Color> colors) {
+        CardData data = new CardData("TEST-L", "TEST-SET", name, "", subType, "TestSet",
+                null, CardType.LEADER, attribute, colors, 0, 6000, 5, 2000, 0.0, null);
+        return new Leader("l-" + name, data, owner);
+    }
+
     private Target tgt(Target.TargetPlayer player, ZoneType zone, CardType cardType,
-            int max, int maxCost, int minCost, int maxPower, int minPower) {
-        return new Target(player, zone, cardType, max, maxCost, minCost, maxPower, minPower, null);
+            int max, int maxCost, int minCost, int maxPower, int minPower, String subtype, String nameFilter,
+            Attribute attribute, List<Color> colors) {
+        return new Target(player, zone, cardType, max, maxCost, minCost, maxPower, minPower, subtype, nameFilter,
+                attribute, colors);
     }
 
     private EffectData eff(EffectType type, int value, Target target, String subtype,
@@ -83,13 +125,56 @@ class EffectFactoryTest {
         return new DonCard(owner);
     }
 
+    private void buildDeck(Player player, int count) {
+        for (int i = 0; i < count; i++) {
+            Card c = TestUtils.makeCard(player, 1000 + i);
+            gs.moveCard(c, player.getDeck());
+        }
+    }
+
+    // ── SHUFFLE
+    // ───────────────────────────────────────────────────────────────────
+    @Test
+    void shuffle_doesNotChangeCardCount() {
+        Card c1 = makeCharCard(source, 3000, 0);
+        Card c2 = makeCharCard(source, 4000, 0);
+        gs.moveCard(c1, source.getDeck());
+        gs.moveCard(c2, source.getDeck());
+
+        EffectFactory.build(eff(EffectType.SHUFFLE_DECK, 0, null, null, null, null, null), null)
+                .apply(gs, source);
+
+        assertEquals(2, source.getDeck().getCards().size(), "Shuffling should not change number of cards in deck");
+    }
+
+    @Test
+    void shuffle_randomizesCardOrder() {
+        // Note: This test is not guaranteed to pass (there's a very small chance the
+        // order is the same after shuffling),
+        // but it should be sufficient to catch if the shuffle method is not randomizing
+        // at all.
+        Card c1 = makeCharCard(source, 3000, 0);
+        Card c2 = makeCharCard(source, 4000, 0);
+        Card c3 = makeCharCard(source, 5000, 0);
+        gs.moveCard(c1, source.getDeck());
+        gs.moveCard(c2, source.getDeck());
+        gs.moveCard(c3, source.getDeck());
+
+        List<String> originalOrder = List.of(c1.getCardId(), c2.getCardId(), c3.getCardId());
+
+        EffectFactory.build(eff(EffectType.SHUFFLE_DECK, 0, null, null, null, null, null), null)
+                .apply(gs, source);
+
+        List<String> newOrder = source.getDeck().getCards().stream()
+                .map(Card::getCardId).toList();
+
+        assertNotEquals(originalOrder, newOrder, "Shuffling should change the order of cards in the deck");
+    }
     // ── DRAW ────────────────────────────────────────────────────────────────────
 
     @Test
     void draw_twoCards() {
-        gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
-        gs.moveCard(TestUtils.makeCard(source, 2000), source.getDeck());
-        gs.moveCard(TestUtils.makeCard(source, 3000), source.getDeck());
+        buildDeck(source, 3);
 
         EffectFactory.build(eff(EffectType.DRAW, 2, null, null, null, null, null), null)
                 .apply(gs, source);
@@ -117,7 +202,7 @@ class EffectFactoryTest {
         assertFalse(c.isRested());
 
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 0, 0, 0, 0);
+                CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.REST, 0, t, null, null, null, null), null)
                 .apply(gs, source);
 
@@ -132,7 +217,7 @@ class EffectFactoryTest {
         gs.moveCard(c2, opponent.getField());
 
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 0, 0, 0, 0);
+                CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.REST, 0, t, null, null, null, null), null)
                 .apply(gs, source);
 
@@ -150,7 +235,7 @@ class EffectFactoryTest {
         c.rest();
 
         Target t = tgt(Target.TargetPlayer.SELF, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 0, 0, 0, 0);
+                CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.UNREST, 0, t, null, null, null, null), null)
                 .apply(gs, source);
 
@@ -165,7 +250,7 @@ class EffectFactoryTest {
         gs.moveCard(c, opponent.getField());
 
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 0, 0, 0, 0);
+                CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.KO, 0, t, null, null, null, null), null)
                 .apply(gs, source);
 
@@ -180,7 +265,7 @@ class EffectFactoryTest {
         gs.moveCard(c, opponent.getField());
 
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 2, 0, 0, 0);
+                CardType.CHARACTER, 1, 2, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.KO, 0, t, null, null, null, null), null)
                 .apply(gs, source);
 
@@ -194,7 +279,7 @@ class EffectFactoryTest {
         Card c = TestUtils.makeCard(source, 1000);
         gs.moveCard(c, source.getHand());
 
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, null, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, null, 1, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.TRASH, 0, t, null, null, null, null), null)
                 .apply(gs, source);
 
@@ -210,7 +295,7 @@ class EffectFactoryTest {
         gs.moveCard(c, opponent.getField());
 
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 0, 0, 0, 0);
+                CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.RETURN_TO_HAND, 0, t, null, null, null, null), null)
                 .apply(gs, source);
 
@@ -225,7 +310,7 @@ class EffectFactoryTest {
         Card sourceCard = makeCharCard(source, 4000, 0);
         gs.moveCard(sourceCard, source.getField());
 
-        Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.POWER_BOOST, 2000, t, null, null, null, null), sourceCard)
                 .apply(gs, source);
 
@@ -252,7 +337,7 @@ class EffectFactoryTest {
         gs.moveCard(c, opponent.getField());
 
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 0, 0, 0, 0);
+                CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.POWER_REDUCE, 2000, t, null, null, null, null), null)
                 .apply(gs, source);
 
@@ -266,7 +351,7 @@ class EffectFactoryTest {
         Card c = makeCharCard(source, 3000, 3); // base cost = 3
         gs.moveCard(c, source.getField());
 
-        Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.COST_MODIFY, -2, t, null, null, null, null), c)
                 .apply(gs, source);
 
@@ -278,7 +363,7 @@ class EffectFactoryTest {
         Card c = makeCharCard(source, 3000, 3); // base cost = 3
         gs.moveCard(c, source.getField());
 
-        Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.COST_MODIFY, -5, t, null, null, null, null), c)
                 .apply(gs, source);
 
@@ -348,7 +433,7 @@ class EffectFactoryTest {
         DonCard don = newDon(source);
         gs.moveCard(don, source.getCost());
 
-        Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.ATTACH_DON, 1, t, null, null, null, null), character)
                 .apply(gs, source);
 
@@ -366,7 +451,7 @@ class EffectFactoryTest {
         gs.moveCard(don, source.getCost());
         don.rest(); // DON is now rested
 
-        Target t = tgt(Target.TargetPlayer.SELF, null, CardType.RESTED_DON, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, CardType.RESTED_DON, 1, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.ATTACH_DON, 0, t, null, null, null, null), null)
                 .apply(gs, source);
 
@@ -383,7 +468,7 @@ class EffectFactoryTest {
         gs.moveCard(don, source.getCost());
         // don is NOT rested (default state)
 
-        Target t = tgt(Target.TargetPlayer.SELF, null, CardType.RESTED_DON, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, CardType.RESTED_DON, 1, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.ATTACH_DON, 0, t, null, null, null, null), null)
                 .apply(gs, source);
 
@@ -400,7 +485,7 @@ class EffectFactoryTest {
         gs.moveCard(don, source.getCost());
         // don is NOT rested (active) — matches ACTIVE_DON filter
 
-        Target t = tgt(Target.TargetPlayer.SELF, null, CardType.ACTIVE_DON, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, CardType.ACTIVE_DON, 1, 0, 0, 0, 0, null, null, null, null);
         EffectFactory.build(eff(EffectType.ATTACH_DON, 0, t, null, null, null, null), null)
                 .apply(gs, source);
 
@@ -505,7 +590,7 @@ class EffectFactoryTest {
 
         // KO up to 1 of opponent's Characters
         Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER,
-                1, 0, 0, 0, 0);
+                1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.KO, 0, t, null, null, null, null);
         EffectFactory.build(e, null).apply(gs, source);
 
@@ -514,7 +599,7 @@ class EffectFactoryTest {
         assertTrue(opponent.getField().getCards().contains(c2), "c2 should survive");
         assertTrue(opponent.getTrash().getCards().contains(c1), "c1 should be in trash");
     }
-    // -- Grant Keyword
+    // ── GRANT_KEYWORD ───────────────────────────────────────────────────────────
     // ─────────────────────────────────────────────────────────────
 
     @Test
@@ -522,7 +607,8 @@ class EffectFactoryTest {
         Card sourceCard = TestUtils.makeCard(source, 3000);
         gs.moveCard(sourceCard, source.getField());
         assertFalse(sourceCard.hasKeyword(Keyword.BLOCKER));
-        Target t = tgt(Target.TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 0, 0, 0, 0, 0, null, null,
+                null, null);
         EffectData e = eff(EffectType.GRANT_KEYWORD, 0, t, null, Duration.THIS_TURN, Keyword.BLOCKER, null);
         EffectFactory.build(e, sourceCard).apply(gs, source);
         assertTrue(sourceCard.hasKeyword(Keyword.BLOCKER));
@@ -530,13 +616,13 @@ class EffectFactoryTest {
         assertFalse(sourceCard.hasKeyword(Keyword.BLOCKER),
                 "Granted keyword should be cleared after clearGrantedKeywords()");
     }
-    // --- Search Deck ─────────────────────────────────────────────────────────────
+    // ── SEARCH_DECK / MOVE_TO_DECK ──────────────────────────────────────────────
 
     @Test
     void movetoBottomDeck() {
         Card c = TestUtils.makeCard(source, 1000);
         gs.moveCard(c, source.getHand());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, null, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, null, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.MOVE_TO_BOTTOM_DECK, 0, t, null, null, null, null);
         EffectFactory.build(e, null).apply(gs, source);
         assertTrue(source.getHand().getCards().isEmpty());
@@ -547,7 +633,7 @@ class EffectFactoryTest {
     void moveToTopDeck() {
         Card c = TestUtils.makeCard(source, 1000);
         gs.moveCard(c, source.getHand());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, null, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, null, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.MOVE_TO_TOP_DECK, 0, t, null, null, null, null);
         EffectFactory.build(e, null).apply(gs, source);
         assertTrue(source.getHand().getCards().isEmpty());
@@ -562,7 +648,7 @@ class EffectFactoryTest {
         }
         Card searchCard = TestUtils.makeCard(source, 2000);
         gs.moveCard(searchCard, source.getDeck());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, null, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, null, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.SEARCH_DECK, 0, t, null, null, null, null);
         EffectFactory.build(e, null).apply(gs, source);
         assertTrue(source.getHand().getCards().contains(searchCard), "Card should be added to hand");
@@ -571,7 +657,7 @@ class EffectFactoryTest {
 
     @Test
     void searchDeck_noCardsInDeck() {
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, null, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, null, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.SEARCH_DECK, 0, t, null, null, null, null);
         EffectFactory.build(e, null).apply(gs, source);
         assertTrue(source.getHand().getCards().isEmpty(), "No cards should be added to hand");
@@ -581,7 +667,8 @@ class EffectFactoryTest {
     void searchDeck_noMatchingCards() {
         Card c = TestUtils.makeCard(source, 1000);
         gs.moveCard(c, source.getDeck());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, CardType.CHARACTER, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                null);
         EffectData e = eff(EffectType.SEARCH_DECK, 0, t, null, null, null, null);
         EffectFactory.build(e, null).apply(gs, source);
         assertTrue(source.getHand().getCards().isEmpty(), "No cards should be added to hand");
@@ -592,7 +679,7 @@ class EffectFactoryTest {
     void searchDeck_addsSelectedCardToHand() {
         Card c = TestUtils.makeCard(source, 1000);
         gs.moveCard(c, source.getDeck());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, null, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, null, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.SEARCH_DECK, 0, t, null, null, null, null);
         EffectFactory.build(e, null).apply(gs, source);
         assertTrue(source.getHand().getCards().contains(c), "Card should be added to hand");
@@ -611,7 +698,7 @@ class EffectFactoryTest {
         gs.moveCard(topCard, source.getDeck());
         // deck: [topCard, c4, c3, c2, c1, c0]; expectedOrder = [c4, c3, c2, c1, c0]
 
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, null, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, null, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.SEARCH_DECK, 0, t, null, null, null, null);
         EffectFactory.build(e, null).apply(gs, source);
 
@@ -634,13 +721,13 @@ class EffectFactoryTest {
         // deck: [topCard, c4, c3, c2, c1, c0, resident]
 
         // Step 1: SEARCH_DECK — picks topCard, rest return to top
-        Target searchT = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, null, 1, 0, 0, 0, 0);
+        Target searchT = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, null, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData search = eff(EffectType.SEARCH_DECK, 0, searchT, null, null, null, null);
         EffectFactory.build(search, null).apply(gs, source);
         // deck: [c4, c3, c2, c1, c0, resident]
 
         // Step 2: MOVE_TO_BOTTOM_DECK — move the 5 rest cards to bottom
-        Target moveT = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, null, 5, 0, 0, 0, 0);
+        Target moveT = tgt(Target.TargetPlayer.SELF, ZoneType.DECK, null, 5, 0, 0, 0, 0, null, null, null, null);
         EffectData move = eff(EffectType.MOVE_TO_BOTTOM_DECK, 0, moveT, null, null, null, null);
         EffectFactory.build(move, null).apply(gs, source);
         // deck: [resident, c4, c3, c2, c1, c0]
@@ -651,13 +738,13 @@ class EffectFactoryTest {
         assertEquals(6, source.getDeck().size());
     }
 
-    // -- Prevent Keywords
+    // ── PREVENT_ATTACK / PREVENT_KO / PREVENT_BLOCK ─────────────────────────────
     // ────────────────────────────────────────────────────────────────
     @Test
     void preventKo_opponentCharacter() {
         Card c = makeCharCard(source, 3000, 0);
         Target t = tgt(Target.TargetPlayer.THIS_CARD, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 0, 0, 0, 0);
+                CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.PREVENT_KO, 0, t, null, null, null, null);
         gs.moveCard(c, source.getField());
         EffectFactory.build(e, c).apply(gs, source);
@@ -668,7 +755,7 @@ class EffectFactoryTest {
     void preventAttack_opponentCharacter() {
         Card c = makeCharCard(source, 3000, 0);
         Target t = tgt(Target.TargetPlayer.THIS_CARD, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 0, 0, 0, 0);
+                CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.PREVENT_ATTACK, 0, t, null, null, null, null);
         gs.moveCard(c, source.getField());
         EffectFactory.build(e, c).apply(gs, source);
@@ -679,19 +766,20 @@ class EffectFactoryTest {
     void preventBlock_opponentCharacter() {
         Card c = makeCharCard(source, 3000, 0);
         Target t = tgt(Target.TargetPlayer.THIS_CARD, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 0, 0, 0, 0);
+                CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.PREVENT_BLOCK, 0, t, null, null, null, null);
         gs.moveCard(c, source.getField());
         EffectFactory.build(e, c).apply(gs, source);
         assertTrue(c.hasKeyword(Keyword.UNBLOCKABLE), "Character should be marked as prevented from blocking");
     }
 
-    // -- Play ────────────────────────────────────────────────────────────────
+    // ── PLAY_CARD ───────────────────────────────────────────────────────────────
     @Test
     void playCard_fromHand_CharactertoField() {
         Card c = makeCharCard(source, 3000, 0);
         gs.moveCard(c, source.getHand());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                null);
         EffectData e = eff(EffectType.PLAY_CARD, 0, t, null, null, null, null);
         EffectFactory.build(e, c).apply(gs, source);
         assertTrue(source.getField().getCards().contains(c), "Character should be moved to field");
@@ -702,7 +790,7 @@ class EffectFactoryTest {
     void playCard_eventCard_goesToTrash() {
         Card c = makeEventCard(source, 3000);
         gs.moveCard(c, source.getHand());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.EVENT, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.EVENT, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.PLAY_CARD, 0, t, null, null, null, null);
         EffectFactory.build(e, c).apply(gs, source);
         assertTrue(source.getTrash().getCards().contains(c), "Event card should be moved to trash after playing");
@@ -713,7 +801,7 @@ class EffectFactoryTest {
     void playCard_stageCard_goesToStage() {
         Card c = makeStageCard(source, 0);
         gs.moveCard(c, source.getHand());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.STAGE, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.STAGE, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.PLAY_CARD, 0, t, null, null, null, null);
         EffectFactory.build(e, c).apply(gs, source);
         assertTrue(source.getStage().getCards().contains(c), "Stage card should be moved to stage after playing");
@@ -728,7 +816,8 @@ class EffectFactoryTest {
         }
         Card c = makeCharCard(source, 3000, 10); // cost=10
         gs.moveCard(c, source.getHand());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                null);
         EffectData e = eff(EffectType.PLAY_CARD, 0, t, null, null, null, null);
         EffectFactory.build(e, c).apply(gs, source);
         int rested = 0;
@@ -746,7 +835,8 @@ class EffectFactoryTest {
         gs.moveCard(trashCard, source.getTrash());
         Card otherCard = makeCharCard(source, 4000, 0);
         gs.moveCard(otherCard, source.getField());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.TRASH, CardType.CHARACTER, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.TRASH, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                null);
         EffectData e = eff(EffectType.PLAY_CARD, 0, t, null, null, null, null);
         EffectFactory.build(e, otherCard).apply(gs, source);
         assertTrue(source.getField().getCards().contains(trashCard), "Character should be moved to field");
@@ -761,7 +851,8 @@ class EffectFactoryTest {
         gs.moveCard(overCard, source.getHand());
         gs.moveCard(maxCard, source.getHand());
         gs.moveCard(otherCard, source.getField());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 7, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 7, 0, 0, 0, null, null, null,
+                null);
         EffectData e = eff(EffectType.PLAY_CARD, 0, t, null, null, null, null);
         EffectFactory.build(e, otherCard).apply(gs, source);
         assertTrue(source.getField().getCards().contains(maxCard), "Card at max cost should be played");
@@ -776,7 +867,8 @@ class EffectFactoryTest {
         gs.moveCard(overCard, source.getHand());
         gs.moveCard(maxCard, source.getHand());
         gs.moveCard(otherCard, source.getField());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 6000, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 6000, 0, null, null, null,
+                null);
         EffectData e = eff(EffectType.PLAY_CARD, 0, t, null, null, null, null);
         EffectFactory.build(e, otherCard).apply(gs, source);
         assertTrue(source.getField().getCards().contains(maxCard), "Card at max power should be played");
@@ -792,7 +884,8 @@ class EffectFactoryTest {
         gs.moveCard(underCard, source.getHand());
         gs.moveCard(minCard, source.getHand());
         gs.moveCard(otherCard, source.getField());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 3, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 3, 0, 0, null, null, null,
+                null);
         EffectData e = eff(EffectType.PLAY_CARD, 0, t, null, null, null, null);
         EffectFactory.build(e, otherCard).apply(gs, source);
         assertTrue(source.getField().getCards().contains(minCard), "Card at min cost should be played");
@@ -808,7 +901,8 @@ class EffectFactoryTest {
         gs.moveCard(underCard, source.getHand());
         gs.moveCard(minCard, source.getHand());
         gs.moveCard(otherCard, source.getField());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 3000);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 3000, null, null, null,
+                null);
         EffectData e = eff(EffectType.PLAY_CARD, 0, t, null, null, null, null);
         EffectFactory.build(e, otherCard).apply(gs, source);
         assertTrue(source.getField().getCards().contains(minCard), "Card at min power should be played");
@@ -824,7 +918,8 @@ class EffectFactoryTest {
         }
         Card handCard = makeCharCard(source, 3000, 0);
         gs.moveCard(handCard, source.getHand());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                null);
         EffectData e = eff(EffectType.PLAY_CARD, 0, t, null, null, null, null);
         EffectFactory.build(e, handCard).apply(gs, source);
         assertFalse(source.getField().getCards().contains(handCard), "Card should NOT be played when field is full");
@@ -836,7 +931,7 @@ class EffectFactoryTest {
         gs.moveCard(stageCard, source.getHand());
         Card otherStage = makeStageCard(source, 0);
         gs.moveCard(otherStage, source.getStage());
-        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.STAGE, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.STAGE, 1, 0, 0, 0, 0, null, null, null, null);
         EffectData e = eff(EffectType.PLAY_CARD, 0, t, null, null, null, null);
         EffectFactory.build(e, stageCard).apply(gs, source);
         assertFalse(source.getStage().getCards().contains(stageCard),
@@ -850,8 +945,10 @@ class EffectFactoryTest {
         // 2nd choice: draw 2 cards
         Card sourceCard = makeCharCard(source, 3000, 0);
         EffectData firstOption = eff(EffectType.POWER_BOOST, 2000,
-                tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0), null, Duration.THIS_TURN, null, null);
-        EffectData secondOption = eff(EffectType.DRAW, 2, tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0),
+                tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0, null, null, null, null), null,
+                Duration.THIS_TURN, null, null);
+        EffectData secondOption = eff(EffectType.DRAW, 2,
+                tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null),
                 null, null, null, null);
         List<List<EffectData>> options = List.of(
                 List.of(firstOption),
@@ -868,8 +965,10 @@ class EffectFactoryTest {
         // 1st choice: gain 2000 power
         // 2nd choice: draw 2 cards
         EffectData firstOption = eff(EffectType.POWER_BOOST, 2000,
-                tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0), null, Duration.THIS_TURN, null, null);
-        EffectData secondOption = eff(EffectType.DRAW, 2, tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0),
+                tgt(Target.TargetPlayer.THIS_CARD, null, null, 0, 0, 0, 0, 0, null, null, null, null), null,
+                Duration.THIS_TURN, null, null);
+        EffectData secondOption = eff(EffectType.DRAW, 2,
+                tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null),
                 null, null, null, null);
         List<List<EffectData>> options = List.of(
                 List.of(firstOption),
@@ -891,11 +990,11 @@ class EffectFactoryTest {
         // 2nd choice: draw 2 cards
         Card opponentChar = makeCharCard(opponent, 3000, 0);
         gs.moveCard(opponentChar, opponent.getField());
-        EffectData firstOption = eff(EffectType.REST, 0,
-                tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0), null, null,
-                null, null);
-        EffectData secondOption = eff(EffectType.DRAW, 2, tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0),
-                null, null, null, null);
+        Target opTarget = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null,
+                null, null, null);
+        Target selfTarget = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData firstOption = eff(EffectType.REST, 0, opTarget, null, null, null, null);
+        EffectData secondOption = eff(EffectType.DRAW, 2, selfTarget, null, null, null, null);
         List<List<EffectData>> options = List.of(
                 List.of(firstOption),
                 List.of(secondOption));
@@ -907,7 +1006,7 @@ class EffectFactoryTest {
         assertEquals(0, source.getHand().getCards().size(), "No cards should be drawn");
     }
 
-    // -- Condition Tests
+    // ── Conditions — threshold ───────────────────────────────────────────────────
     // ────────────────────────────────────────────────────────────────
     @Test
     void condition_ifLifeCost_fires_when_life_low() {
@@ -918,7 +1017,7 @@ class EffectFactoryTest {
             gs.moveCard(TestUtils.makeCard(source, 1000), source.getLife());
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_LIFE_COUNT, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(1, source.getHand().getCards().size(), "Should draw a card when life is 2 or less");
@@ -933,7 +1032,7 @@ class EffectFactoryTest {
             gs.moveCard(TestUtils.makeCard(source, 1000), source.getLife());
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_LIFE_COUNT, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(0, source.getHand().getCards().size(), "Should not draw a card when life is 5 or more");
@@ -948,7 +1047,7 @@ class EffectFactoryTest {
             gs.moveCard(TestUtils.makeCard(opponent, 1000), opponent.getLife());
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_LIFE_COUNT, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(1, source.getHand().getCards().size(), "Should draw a card when life is 2 or less");
@@ -964,7 +1063,7 @@ class EffectFactoryTest {
             gs.moveCard(TestUtils.makeCard(opponent, 1000), opponent.getLife());
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_LIFE_COUNT, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(0, source.getHand().getCards().size(), "Should not draw a card when life is 4 or more");
@@ -979,7 +1078,7 @@ class EffectFactoryTest {
             opponent.getCost().add(newDon(opponent));
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_DON_COUNT, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(1, source.getHand().getCards().size(), "Should draw a card when active Don is 2 or less");
@@ -994,7 +1093,7 @@ class EffectFactoryTest {
             source.getCost().add(newDon(source)); // source has 5 active DON (> threshold of 3)
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_DON_COUNT, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw a card when active Don is more than 3");
@@ -1009,7 +1108,7 @@ class EffectFactoryTest {
             source.getField().add(makeCharCard(source, 3000, 0));
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_CHARACTER_COUNT, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(1, source.getHand().getCards().size(), "Should draw a card when character count is 2 or less");
@@ -1025,7 +1124,7 @@ class EffectFactoryTest {
             source.getField().add(makeCharCard(source, 3000, 0));
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_CHARACTER_COUNT, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw a card when character count is 3 or more");
@@ -1037,7 +1136,7 @@ class EffectFactoryTest {
             gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_DECK_COUNT, null, null, null, -7);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(1, source.getHand().getCards().size(), "Should draw a card when deck count is 7 or less");
@@ -1049,7 +1148,7 @@ class EffectFactoryTest {
             gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_DECK_COUNT, null, null, null, -7);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw a card when deck count is more than 7");
@@ -1062,7 +1161,7 @@ class EffectFactoryTest {
         }
         // source hand is empty (0 <= 3 → fires)
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_HAND_COUNT, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(1, source.getHand().getCards().size(), "Should draw a card when hand count is 3 or less");
@@ -1078,7 +1177,7 @@ class EffectFactoryTest {
             source.getHand().add(makeCharCard(source, 3000, 0));
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_HAND_COUNT, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(5, source.getHand().getCards().size(), "Shouldn't draw a card when hand count is more than 3");
@@ -1091,7 +1190,7 @@ class EffectFactoryTest {
         }
         // opponent hand is empty (0 <= 3 → fires)
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_HAND_COUNT, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(1, source.getHand().getCards().size(), "Should draw a card when opponent hand count is 3 or less");
@@ -1107,7 +1206,7 @@ class EffectFactoryTest {
             opponent.getHand().add(makeCharCard(opponent, 3000, 0)); // opponent has 5 cards (> 3 → skips)
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_HAND_COUNT, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(0, source.getHand().getCards().size(),
@@ -1122,7 +1221,7 @@ class EffectFactoryTest {
         Card charCard = makeCharCard(source, 0, 5); // cost=5 on source's field (5 > 3 → skips)
         gs.moveCard(charCard, source.getField());
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_FIELD_CHARACTER_COST, null, null, null, -3);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw a card when cost is more than 3");
@@ -1136,20 +1235,20 @@ class EffectFactoryTest {
         Card charCard = makeCharCard(source, 0, 2); // cost=2 on source's field (2 <= 2 → fires)
         gs.moveCard(charCard, source.getField());
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_FIELD_CHARACTER_COST, null, null, null, -2);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertEquals(1, source.getHand().getCards().size(), "Should draw a card when cost is 2 or less");
     }
 
-    // -- flipLife Tests -------
+    // ── FLIP_LIFE ───────────────────────────────────────────────────────────────
     @Test
     void flipLife_topCard_becomesFaceUp() {
         // Add 1 face-down card to life, apply FLIP_LIFE card.isFaceUp() == true
         Card faceCard = TestUtils.makeCard(source, 1000);
         gs.moveCard(faceCard, source.getLife());
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.FLIP_LIFE, 1, t, null, null, null, null, 0);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertTrue(faceCard.isFaceUp(), "Top card of life should become face-up");
@@ -1163,7 +1262,7 @@ class EffectFactoryTest {
             gs.moveCard(faceCard, source.getLife());
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.FLIP_LIFE, 2, t, null, null, null, null, 0);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         // still face-down
@@ -1179,7 +1278,7 @@ class EffectFactoryTest {
         faceCard.flip(); // make it face-up
         gs.moveCard(faceCard, source.getLife());
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.FLIP_LIFE, 1, t, null, null, null, null, 0);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertFalse(faceCard.isFaceUp(), "Card should be face-down after flip");
@@ -1189,7 +1288,7 @@ class EffectFactoryTest {
     void flipLife_emptyLife_isNoOp() {
         // Empty life zone, apply FLIP_LIFE no throw, life still empty
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.FLIP_LIFE, 1, t, null, null, null, null, 0);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertTrue(source.getLife().getCards().isEmpty(), "Life zone should remain empty");
@@ -1203,7 +1302,7 @@ class EffectFactoryTest {
             gs.moveCard(faceCard, source.getLife());
         }
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.FLIP_LIFE, 0, t, null, null, null, null, 0);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertTrue(source.getLife().getCards().get(0).isFaceUp(), "1st card should be face-up");
@@ -1219,11 +1318,283 @@ class EffectFactoryTest {
         gs.moveCard(sourceCard, source.getLife());
         gs.moveCard(opponentCard, opponent.getLife());
         Card ifCard = makeEventCard(source, 0);
-        Target t = tgt(Target.TargetPlayer.OPPONENT, null, null, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.OPPONENT, null, null, 0, 0, 0, 0, 0, null, null, null, null);
         EffectData effect = eff(EffectType.FLIP_LIFE, 1, t, null, null, null, null, 0);
         EffectFactory.build(effect, ifCard).apply(gs, source);
         assertFalse(sourceCard.isFaceUp(), "Source's life card should remain face-down");
         assertTrue(opponentCard.isFaceUp(), "Opponent's life card should be flipped face-up");
+    }
+
+    // ── Conditions — field & opponent ────────────────────────────────────────
+
+    @Test
+    void condition_ifRestedCharacterCount_skips() {
+        for (int i = 0; i < 5; i++) {
+            Card c = makeCharCard(source, 3000, 0);
+            if (i < 3) {
+                c.rest(); // rest first 3 cards
+            }
+            gs.moveCard(c, source.getField());
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 2, t, Condition.IF_RESTED_CHARACTER_COUNT, null, null, null, 4);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().size(), "Shouldn't draw a card when rested character count is less than 4");
+    }
+
+    @Test
+    void condition_ifRestedCharacterCount_fires() {
+        for (int i = 0; i < 5; i++) {
+            Card c = makeCharCard(source, 3000, 0);
+            if (i < 3) {
+                c.rest(); // rest first 3 cards
+            }
+            gs.moveCard(c, source.getField());
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 2, t, Condition.IF_RESTED_CHARACTER_COUNT, null, null, null, 3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(2, source.getHand().size(), "Should draw a card when rested character count is 3 or more");
+    }
+
+    @Test
+    void condition_ifOpponentRestedCharacterCount_skips() {
+        for (int i = 0; i < 5; i++) {
+            Card c = makeCharCard(opponent, 3000, 0);
+            if (i < 3) {
+                c.rest(); // rest first 3 cards
+            }
+            gs.moveCard(c, opponent.getField());
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 2, t, Condition.IF_OPPONENT_RESTED_CHARACTER_COUNT, null, null, null,
+                4);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().size(),
+                "Shouldn't draw a card when opponent rested character count is less than 4");
+    }
+
+    @Test
+    void condition_ifOpponentRestedCharacterCount_fires() {
+        for (int i = 0; i < 5; i++) {
+            Card c = makeCharCard(opponent, 3000, 0);
+            if (i < 3) {
+                c.rest(); // rest first 3 cards
+            }
+            gs.moveCard(c, opponent.getField());
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 2, t, Condition.IF_OPPONENT_RESTED_CHARACTER_COUNT, null, null, null,
+                3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(2, source.getHand().size(),
+                "Should draw a card when opponent rested character count is 3 or more");
+    }
+
+    @Test
+    void condition_ifOpponentDonCount_skips() {
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(opponent, 1000), opponent.getDeck());
+        }
+        for (int i = 0; i < 5; i++) {
+            opponent.getCost().add(newDon(opponent)); // opponent has 5 active DON (> threshold of 3)
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_DON_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(),
+                "Shouldn't draw a card when opponent active Don is more than 3");
+    }
+
+    @Test
+    void condition_ifOpponentDonCount_fires() {
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(opponent, 1000), opponent.getDeck());
+        }
+        for (int i = 0; i < 2; i++) {
+            opponent.getCost().add(newDon(opponent)); // opponent has 2 active DON (<= threshold of 3)
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_DON_COUNT, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw a card when opponent active Don is 3 or less");
+    }
+
+    @Test
+    void condition_ifOpponentCharacterCount_skips() {
+        for (int i = 0; i < 2; i++) {
+            Card c = makeCharCard(opponent, 3000, 0);
+            gs.moveCard(c, opponent.getField());
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 2, t, Condition.IF_OPPONENT_CHARACTER_COUNT, null, null, null, 3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().size(), "Shouldn't draw a card when opponent character count is 2 or less");
+    }
+
+    @Test
+    void condition_ifOpponentCharacterCount_fires() {
+        for (int i = 0; i < 5; i++) {
+            Card c = makeCharCard(opponent, 3000, 0);
+            gs.moveCard(c, opponent.getField());
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 2, t, Condition.IF_OPPONENT_CHARACTER_COUNT, null, null, null, 3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(2, source.getHand().size(), "Should draw a card when opponent character count is 3 or more");
+    }
+
+    @Test
+    void condition_ifFieldCharacterCost_skips() {
+        for (int i = 0; i < 5; i++) {
+            Card c = makeCharCard(source, 3000, 5); // cost=5 on source's field (5 > 3 → skips)
+            gs.moveCard(c, source.getField());
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_FIELD_CHARACTER_COST, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw a card when cost is more than 3");
+    }
+
+    @Test
+    void condition_ifFieldCharacterCost_fires() {
+        for (int i = 0; i < 5; i++) {
+            Card c = makeCharCard(source, 3000, 2); // cost=2 on source's field (2 <= 3 → fires)
+            gs.moveCard(c, source.getField());
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_FIELD_CHARACTER_COST, null, null, null, -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw a card when cost is 3 or less");
+
+    }
+
+    @Test
+    void condition_ifOpponentFieldCharacterCost_skips() {
+        for (int i = 0; i < 5; i++) {
+            Card c = makeCharCard(opponent, 3000, 5); // cost=5 on opponent's field (5 > 3 → skips)
+            gs.moveCard(c, opponent.getField());
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_FIELD_CHARACTER_COST, null, null, null,
+                -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw a card when opponent cost is more than 3");
+    }
+
+    @Test
+    void condition_ifOpponentFieldCharacterCost_fires() {
+        for (int i = 0; i < 5; i++) {
+            Card c = makeCharCard(opponent, 3000, 2); // cost=2 on opponent's field (2 <= 3 → fires)
+            gs.moveCard(c, opponent.getField());
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_FIELD_CHARACTER_COST, null, null, null,
+                -3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw a card when opponent cost is 3 or less");
+    }
+
+    @Test
+    void condition_ifFieldCharacterName_skips() {
+        // Field has "luffy"; condition subtype checks for "zoro" → no match → skip
+        Card c = makeNameCard(source, 3000, 0, "luffy");
+        gs.moveCard(c, source.getField());
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, "zoro", Condition.IF_FIELD_CHARACTER_NAME, null, null, null, 0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw when no field character named 'zoro'");
+    }
+
+    @Test
+    void condition_ifFieldCharacterName_fires() {
+        // Field has "luffy"; condition subtype checks for "luffy" → match → fires
+        Card c = makeNameCard(source, 3000, 0, "luffy");
+        gs.moveCard(c, source.getField());
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, "luffy", Condition.IF_FIELD_CHARACTER_NAME, null, null, null, 0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw when field has character named 'luffy'");
+    }
+
+    @Test
+    void condition_ifFieldCharacterNameRested_skips() {
+        // Field has rested "luffy"; condition subtype checks for "zoro" → no match → skip
+        Card c = makeNameCard(source, 3000, 0, "luffy");
+        c.rest();
+        gs.moveCard(c, source.getField());
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, "zoro", Condition.IF_FIELD_CHARACTER_NAME_RESTED, null, null, null, 0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw when no rested field character named 'zoro'");
+    }
+
+    @Test
+    void condition_ifFieldCharacterNameRested_fires() {
+        // Field has rested "luffy"; condition subtype checks for "luffy" → match → fires
+        Card c = makeNameCard(source, 3000, 0, "luffy");
+        c.rest();
+        gs.moveCard(c, source.getField());
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, "luffy", Condition.IF_FIELD_CHARACTER_NAME_RESTED, null, null, null, 0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw when rested field character named 'luffy' exists");
+    }
+
+    @Test
+    void condition_ifOpponentAttribute_skips() {
+        // IF_OPPONENT_ATTRIBUTE checks the opponent's leader attribute
+        opponent.setLeader(makeLeader(opponent, "opp-leader", "", Attribute.Slash, List.of(Color.Blue)));
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, "Strike", null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, "Strike", Condition.IF_OPPONENT_ATTRIBUTE, null, null, null, 0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw when opponent leader attribute doesn't match");
+    }
+
+    @Test
+    void condition_ifOpponentAttribute_fires() {
+        // IF_OPPONENT_ATTRIBUTE checks the opponent's leader attribute
+        opponent.setLeader(makeLeader(opponent, "opp-leader", "", Attribute.Slash, List.of(Color.Blue)));
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, "Slash", Condition.IF_OPPONENT_ATTRIBUTE, null, null, null, 0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw when opponent leader attribute matches");
     }
 
     // ── THIS_BATTLE power boost ──────────────────────────────────────────────
@@ -1232,19 +1603,21 @@ class EffectFactoryTest {
     void powerBoost_thisBattle_usesBoostBucket() {
         Card c = makeCharCard(source, 3000, 0);
         gs.moveCard(c, source.getField());
-        Target t = tgt(Target.TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 0, 0, 0, 0, 0, null, null,
+                null, null);
         EffectData e = eff(EffectType.POWER_BOOST, 2000, t, null, Duration.THIS_BATTLE, null, null);
         EffectFactory.build(e, c).apply(gs, source);
 
         assertEquals(5000, c.getTotalPower(), "Battle boost should be included in total power");
-        assertEquals(3000, c.getBasePower(),  "Base power should remain unchanged");
+        assertEquals(3000, c.getBasePower(), "Base power should remain unchanged");
     }
 
     @Test
     void powerBoost_thisTurn_usesTurnBucket() {
         Card c = makeCharCard(source, 3000, 0);
         gs.moveCard(c, source.getField());
-        Target t = tgt(Target.TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 0, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 0, 0, 0, 0, 0, null, null,
+                null, null);
         EffectData e = eff(EffectType.POWER_BOOST, 2000, t, null, Duration.THIS_TURN, null, null);
         EffectFactory.build(e, c).apply(gs, source);
 
@@ -1261,7 +1634,7 @@ class EffectFactoryTest {
 
         // Give attacker a THIS_BATTLE boost
         Card attacker = makeCharCard(source, 3000, 0);
-        Card target   = makeCharCard(opponent, 2000, 0);
+        Card target = makeCharCard(opponent, 2000, 0);
         gs.moveCard(attacker, source.getField());
         gs.moveCard(target, opponent.getField());
         target.rest();
@@ -1280,7 +1653,8 @@ class EffectFactoryTest {
     void powerReduce_thisBattle_usesBattleBucket() {
         Card c = makeCharCard(opponent, 5000, 0);
         gs.moveCard(c, opponent.getField());
-        Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0);
+        Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null,
+                null, null);
         EffectData e = eff(EffectType.POWER_REDUCE, 2000, t, null, Duration.THIS_BATTLE, null, null);
         EffectFactory.build(e, null).apply(gs, source);
 
@@ -1288,4 +1662,517 @@ class EffectFactoryTest {
         c.clearBattlePowerBoosts();
         assertEquals(5000, c.getTotalPower(), "After clearing battle boosts, power should be restored");
     }
+    // ── Target filters — name / subtype / attribute ──────────────────────────────
+
+    @Test
+    void matchName_exactMatch() {
+        Card c = makeCharCard(source, 3000, 0);
+        Card namedCard = makeNameCard(source, 10, 10, "luffy");
+        Card wrongNamedCard = makeNameCard(source, 10, 10, "zoro");
+        gs.moveCard(namedCard, source.getHand());
+        gs.moveCard(wrongNamedCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, "luffy", null,
+                null);
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(5, namedCard.getEffectiveCost(), "Card with matching name should have cost modified");
+        assertEquals(10, wrongNamedCard.getEffectiveCost(), "Card without matching name should not be modified");
+    }
+
+    @Test
+    void matchName_partialMatch() {
+        Card c = makeCharCard(source, 3000, 0);
+        Card multiNamedCard = makeNameCard(source, 10, 10, "Monkey D. Luffy");
+        Card wrongMultiNamedCard = makeNameCard(source, 10, 10, "Roronoa Zoro");
+        gs.moveCard(multiNamedCard, source.getHand());
+        gs.moveCard(wrongMultiNamedCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, "Luffy", null,
+                null);
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(5, multiNamedCard.getEffectiveCost(), "Card with matching name should have cost modified");
+        assertEquals(10, wrongMultiNamedCard.getEffectiveCost(), "Card without matching name should not be modified");
+    }
+
+    @Test
+    void matchSubtype_exactMatch() {
+        Card c = makeCharCard(source, 3000, 0);
+        Card subtypeCard = makeSubtypeCard(source, 10, 10, "pirate");
+        Card wrongSubtypeCard = makeSubtypeCard(source, 10, 10, "marine");
+        gs.moveCard(subtypeCard, source.getHand());
+        gs.moveCard(wrongSubtypeCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, "pirate", null, null,
+                null);
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(5, subtypeCard.getEffectiveCost(), "Card with matching subtype should have cost modified");
+        assertEquals(10, wrongSubtypeCard.getEffectiveCost(), "Card without matching subtype should not be modified");
+    }
+
+    @Test
+    void matchSubtype_partialMatch() {
+        Card c = makeCharCard(source, 3000, 0);
+        Card multiSubtypeCard = makeSubtypeCard(source, 10, 10, "pirate marine");
+        Card wrongMultiSubtypeCard = makeSubtypeCard(source, 10, 10, "marine soldier");
+        gs.moveCard(multiSubtypeCard, source.getHand());
+        gs.moveCard(wrongMultiSubtypeCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, "pirate", null, null,
+                null);
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(5, multiSubtypeCard.getEffectiveCost(), "Card with matching subtype should have cost modified");
+        assertEquals(10, wrongMultiSubtypeCard.getEffectiveCost(),
+                "Card without matching subtype should not be modified");
+    }
+
+    @Test
+    void matchAttribute_exactMatch() {
+        Card c = makeCharCard(source, 3000, 0);
+        Card attributeCard = makeAttributeCard(source, 10, 10, Attribute.Slash);
+        Card wrongAttributeCard = makeAttributeCard(source, 10, 10, Attribute.Special);
+        gs.moveCard(attributeCard, source.getHand());
+        gs.moveCard(wrongAttributeCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null,
+                Attribute.Slash, null);
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(5, attributeCard.getEffectiveCost(), "Card with matching attribute should have cost modified");
+        assertEquals(10, wrongAttributeCard.getEffectiveCost(),
+                "Card without matching attribute should not be modified");
+    }
+
+    // ── Conditions — leader state ─────────────────────────────────────────────
+    @Test
+    void conditionalLeader_colorCondition_fires() {
+        source.setLeader(makeLeader(source, "test-leader", "", null, List.of(Color.Red, Color.Blue)));
+        Card c = makeCharCard(source, 3000, 10);
+        gs.moveCard(c, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                null);
+        EffectData e = eff(EffectType.COST_MODIFY, -8, t, Condition.IF_LEADER_MULTICOLORED, null, null, null, 0);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(2, c.getEffectiveCost(), "Multicolored leader should apply cost reduction");
+    }
+
+    @Test
+    void conditionalLeader_colorCondition_skips() {
+        source.setLeader(makeLeader(source, "test-leader", "", null, List.of(Color.Red)));
+        Card c = makeCharCard(source, 3000, 10);
+        gs.moveCard(c, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                null);
+        EffectData e = eff(EffectType.COST_MODIFY, -8, t, Condition.IF_LEADER_MULTICOLORED, null, null, null, 0);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(10, c.getEffectiveCost(), "Single-color leader should not apply cost reduction");
+    }
+
+    @Test
+    void conditionalLeader_typeCondition_fires() {
+        source.setLeader(makeLeader(source, "test-leader", "pirate", null, List.of(Color.Red)));
+        Card c = makeCharCard(source, 8000, 10);
+        gs.moveCard(c, source.getField());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null,
+                null, null);
+        EffectData e = eff(EffectType.POWER_BOOST, -4000, t, "pirate", Condition.IF_LEADER_TYPE, null, null, null, 0);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(4000, c.getTotalPower(), "Leader with matching type should apply power reduction");
+    }
+
+    @Test
+    void conditionalLeader_typeCondition_skips() {
+        source.setLeader(makeLeader(source, "test-leader", "marine", null, List.of(Color.Blue)));
+        Card c = makeCharCard(source, 8000, 10);
+        gs.moveCard(c, source.getField());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null,
+                null, null);
+        EffectData e = eff(EffectType.POWER_BOOST, -4000, t, "pirate", Condition.IF_LEADER_TYPE, null, null, null, 0);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(8000, c.getTotalPower(), "Leader without matching type should not apply power reduction");
+    }
+
+    @Test
+    void conditionalLeader_nameCondition_fires() {
+        source.setLeader(makeLeader(source, "luffy", "", null, List.of(Color.Red)));
+        Card c = makeCharCard(source, 8000, 10);
+        gs.moveCard(c, source.getField());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null,
+                null, null);
+        EffectData e = eff(EffectType.POWER_BOOST, 4000, t, "luffy", Condition.IF_LEADER_NAME, null, null, null, 0);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(12000, c.getTotalPower(), "Leader with matching name should apply power boost");
+    }
+
+    @Test
+    void conditionalLeader_nameCondition_skips() {
+        source.setLeader(makeLeader(source, "zoro", "", null, List.of(Color.Green)));
+        Card c = makeCharCard(source, 8000, 10);
+        gs.moveCard(c, source.getField());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null,
+                null, null);
+        EffectData e = eff(EffectType.POWER_BOOST, 4000, t, "luffy", Condition.IF_LEADER_NAME, null, null, null, 0);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(8000, c.getTotalPower(), "Leader with non-matching name should not apply power boost");
+    }
+
+    @Test
+    void conditionalLeader_attributeCondition_fires() {
+        source.setLeader(makeLeader(source, "test-leader", "", Attribute.Slash, List.of(Color.Red)));
+        Card c = makeCharCard(source, 8000, 10);
+        gs.moveCard(c, source.getField());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null,
+                null, null);
+        EffectData e = eff(EffectType.POWER_BOOST, 4000, t, "Slash", Condition.IF_LEADER_ATTRIBUTE, null, null, null,
+                0);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(12000, c.getTotalPower(), "Leader with matching attribute should apply power boost");
+    }
+
+    @Test
+    void conditionalLeader_attributeCondition_skips() {
+        source.setLeader(makeLeader(source, "test-leader", "", Attribute.Strike, List.of(Color.Blue)));
+        Card c = makeCharCard(source, 8000, 10);
+        gs.moveCard(c, source.getField());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null,
+                null, null);
+        EffectData e = eff(EffectType.POWER_BOOST, 4000, t, "Slash", Condition.IF_LEADER_ATTRIBUTE, null, null, null,
+                0);
+        EffectFactory.build(e, c).apply(gs, source);
+        assertEquals(8000, c.getTotalPower(), "Leader with non-matching attribute should not apply power boost");
+    }
+
+    @Test
+    void condition_ifFieldCharacterPower_skips() {
+        // Field has a 3000-power card; threshold is 5000 → no card meets it → skip
+        Card c = makeCharCard(source, 3000, 0);
+        gs.moveCard(c, source.getField());
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_FIELD_CHARACTER_POWER, null, null, null, 5000);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw when no field character has power >= 5000");
+    }
+
+    @Test
+    void condition_ifFieldCharacterPower_fires() {
+        // Field has a 6000-power card; threshold is 5000 → fires
+        Card c = makeCharCard(source, 6000, 0);
+        gs.moveCard(c, source.getField());
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_FIELD_CHARACTER_POWER, null, null, null, 5000);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw when a field character has power >= 5000");
+    }
+
+    @Test
+    void condition_ifFieldCharacterCostCount_skips() {
+        // 2 chars with cost=4; need ≥3 with cost≥3 → only 2 qualify → skip
+        for (int i = 0; i < 2; i++) {
+            gs.moveCard(makeCharCard(source, 3000, 4), source.getField());
+        }
+        gs.moveCard(makeCharCard(source, 3000, 1), source.getField()); // cost=1 doesn't qualify
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        // subtype="3" (minCost), conditionValue=3 (minCount)
+        EffectData effect = eff(EffectType.DRAW, 1, t, "3", Condition.IF_FIELD_CHARACTER_COST_COUNT, null, null, null, 3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw when fewer than 3 field characters have cost >= 3");
+    }
+
+    @Test
+    void condition_ifFieldCharacterCostCount_fires() {
+        // 3 chars with cost=4; need ≥3 with cost≥3 → all 3 qualify → fires
+        for (int i = 0; i < 3; i++) {
+            gs.moveCard(makeCharCard(source, 3000, 4), source.getField());
+        }
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, "3", Condition.IF_FIELD_CHARACTER_COST_COUNT, null, null, null, 3);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw when 3 or more field characters have cost >= 3");
+    }
+
+    @Test
+    void condition_ifOpponentFieldCharacterPower_skips() {
+        // Opponent field has a 3000-power card; threshold is 5000 → skip
+        Card c = makeCharCard(opponent, 3000, 0);
+        gs.moveCard(c, opponent.getField());
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_FIELD_CHARACTER_POWER, null, null, null, 5000);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().getCards().size(), "Shouldn't draw when no opponent character has power >= 5000");
+    }
+
+    @Test
+    void condition_ifOpponentFieldCharacterPower_fires() {
+        // Opponent field has a 6000-power card; threshold is 5000 → fires
+        Card c = makeCharCard(opponent, 6000, 0);
+        gs.moveCard(c, opponent.getField());
+        buildDeck(source, 5);
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, Condition.IF_OPPONENT_FIELD_CHARACTER_POWER, null, null, null, 5000);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(1, source.getHand().getCards().size(), "Should draw when an opponent character has power >= 5000");
+    }
+
+    // Field Condition Tests (e.g. IF_FIELD_CHARACTER_COST,
+    // IF_FIELD_CHARACTER_POWER, etc.)
+    @Test
+    void condition_ifFieldCharacterType_fires() {
+        Card charCard = makeSubtypeCard(source, 3000, 0, "pirate");
+        gs.moveCard(charCard, source.getField());
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 3, t, "pirate", Condition.IF_FIELD_CHARACTER_TYPE, null, null, null,
+                0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(3, source.getHand().size(), "Should draw 3 cards when character of type 'pirate' is on field");
+    }
+
+    @Test
+    void condition_ifFieldCharacterType_skips() {
+        Card marineCard = makeSubtypeCard(source, 3000, 0, "marine");
+        gs.moveCard(marineCard, source.getField());
+        for (int i = 0; i < 5; i++) {
+            gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        }
+        Card ifCard = makeEventCard(source, 0);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 3, t, "pirate", Condition.IF_FIELD_CHARACTER_TYPE, null, null, null,
+                0);
+        EffectFactory.build(effect, ifCard).apply(gs, source);
+        assertEquals(0, source.getHand().size(), "Should not draw when no character of type 'pirate' is on field");
+    }
+
+    // ── Target filters — color ──────────────────────────────────────────────────
+    @Test
+    void colorFilter_singleColor_match() {
+        Card redCard = makeColorCard(source, 10, 10, Color.Red, CardType.CHARACTER);
+        Card blueCard = makeColorCard(source, 10, 10, Color.Blue, CardType.CHARACTER);
+        gs.moveCard(redCard, source.getHand());
+        gs.moveCard(blueCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                List.of(Color.Red));
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null, 0);
+        EffectFactory.build(e, null).apply(gs, source);
+        assertEquals(5, redCard.getEffectiveCost(), "Card with matching color should have cost modified");
+        assertEquals(10, blueCard.getEffectiveCost(), "Card without matching color should not be modified");
+    }
+
+    @Test
+    void colorFilter_singleColor_exclude() {
+        Card redCard = makeColorCard(source, 10, 10, Color.Red, CardType.CHARACTER);
+        Card blueCard = makeColorCard(source, 10, 10, Color.Blue, CardType.CHARACTER);
+        gs.moveCard(redCard, source.getHand());
+        gs.moveCard(blueCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                List.of(Color.Green));
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null, 0);
+        EffectFactory.build(e, null).apply(gs, source);
+        assertEquals(10, redCard.getEffectiveCost(), "Card with non-matching color should not be modified");
+        assertEquals(10, blueCard.getEffectiveCost(), "Card with non-matching color should not be modified");
+    }
+
+    @Test
+    void colorFilter_multiColor_matchesFirstColor() {
+        Card multiColorCard = makeColorCard(source, 10, 10, List.of(Color.Red, Color.Blue), CardType.CHARACTER);
+        Card wrongMultiColorCard = makeColorCard(source, 10, 10, List.of(Color.Green, Color.Yellow),
+                CardType.CHARACTER);
+        gs.moveCard(multiColorCard, source.getHand());
+        gs.moveCard(wrongMultiColorCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                List.of(Color.Red));
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null, 0);
+        EffectFactory.build(e, null).apply(gs, source);
+        assertEquals(5, multiColorCard.getEffectiveCost(), "Card with matching color should have cost modified");
+        assertEquals(10, wrongMultiColorCard.getEffectiveCost(), "Card without matching color should not be modified");
+    }
+
+    @Test
+    void colorFilter_multiColor_matchesSecondColor() {
+        Card multiColorCard = makeColorCard(source, 10, 10, List.of(Color.Red, Color.Blue), CardType.CHARACTER);
+        Card wrongMultiColorCard = makeColorCard(source, 10, 10, List.of(Color.Green, Color.Yellow),
+                CardType.CHARACTER);
+        gs.moveCard(multiColorCard, source.getHand());
+        gs.moveCard(wrongMultiColorCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                List.of(Color.Blue));
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null, 0);
+        EffectFactory.build(e, null).apply(gs, source);
+        assertEquals(5, multiColorCard.getEffectiveCost(), "Card with matching color should have cost modified");
+        assertEquals(10, wrongMultiColorCard.getEffectiveCost(), "Card without matching color should not be modified");
+    }
+
+    @Test
+    void colorFilter_multiColor_matchesBothColors() {
+        Card multiColorCard = makeColorCard(source, 10, 10, List.of(Color.Red, Color.Blue), CardType.CHARACTER);
+        Card wrongMultiColorCard = makeColorCard(source, 10, 10, List.of(Color.Green, Color.Yellow),
+                CardType.CHARACTER);
+        gs.moveCard(multiColorCard, source.getHand());
+        gs.moveCard(wrongMultiColorCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                List.of(Color.Red, Color.Blue));
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null, 0);
+        EffectFactory.build(e, null).apply(gs, source);
+        assertEquals(5, multiColorCard.getEffectiveCost(), "Card with matching colors should have cost modified");
+        assertEquals(10, wrongMultiColorCard.getEffectiveCost(), "Card without matching colors should not be modified");
+    }
+
+    @Test
+    void colorFilter_multiColor_excludedWhenNoColorMatches() {
+        Card multiColorCard = makeColorCard(source, 10, 10, List.of(Color.Red, Color.Yellow), CardType.CHARACTER);
+        gs.moveCard(multiColorCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                List.of(Color.Green));
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null, 0);
+        EffectFactory.build(e, null).apply(gs, source);
+        assertEquals(10, multiColorCard.getEffectiveCost(), "Card with no matching colors should not be modified");
+    }
+
+    @Test
+    void colorFilter_nullFilter_passesAll() {
+        Card redCard = makeColorCard(source, 10, 10, Color.Red, CardType.CHARACTER);
+        Card blueCard = makeColorCard(source, 10, 10, Color.Blue, CardType.CHARACTER);
+        gs.moveCard(redCard, source.getHand());
+        gs.moveCard(blueCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 2, 0, 0, 0, 0, null, null, null,
+                null);
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null, 0);
+        EffectFactory.build(e, null).apply(gs, source);
+        assertEquals(5, redCard.getEffectiveCost(), "Without color filter, all cards should be modified");
+        assertEquals(5, blueCard.getEffectiveCost(), "Without color filter, all cards should be modified");
+    }
+
+    // ── IF_NOT_FIELD_CHARACTER_NAME ──────────────────────────────────────────────
+
+    @Test
+    void condition_ifNotFieldCharacterName_skips_ownField() {
+        // Named card exists on SOURCE's own field → condition false → no draw
+        Card luffy = makeNameCard(source, 5000, 3, "Monkey.D.Luffy");
+        gs.moveCard(luffy, source.getField());
+        buildDeck(source, 5);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, "Monkey.D.Luffy",
+                Condition.IF_NOT_FIELD_CHARACTER_NAME, null, null, null, 0);
+        EffectFactory.build(effect, null).apply(gs, source);
+        assertEquals(0, source.getHand().size(),
+                "Should not draw when named card is on own field");
+    }
+
+    @Test
+    void condition_ifNotFieldCharacterName_skips_opponentField() {
+        // Named card exists on OPPONENT's field → condition false → no draw
+        Card luffy = makeNameCard(opponent, 5000, 3, "Monkey.D.Luffy");
+        gs.moveCard(luffy, opponent.getField());
+        buildDeck(source, 5);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, "Monkey.D.Luffy",
+                Condition.IF_NOT_FIELD_CHARACTER_NAME, null, null, null, 0);
+        EffectFactory.build(effect, null).apply(gs, source);
+        assertEquals(0, source.getHand().size(),
+                "Should not draw when named card is on opponent's field");
+    }
+
+    @Test
+    void condition_ifNotFieldCharacterName_fires() {
+        // Named card absent from both fields → condition true → draw fires
+        buildDeck(source, 5);
+        Target t = tgt(Target.TargetPlayer.SELF, null, null, 0, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.DRAW, 1, t, "Monkey.D.Luffy",
+                Condition.IF_NOT_FIELD_CHARACTER_NAME, null, null, null, 0);
+        EffectFactory.build(effect, null).apply(gs, source);
+        assertEquals(1, source.getHand().size(),
+                "Should draw when named card is absent from both fields");
+    }
+
+    // ── NEGATE (Group 1 — targeted THIS_TURN) ───────────────────────────────────
+
+    /** Helper: build a minimal Ability with the given trigger and attach it to card. */
+    private Ability attachAbility(Card card, Trigger trigger) {
+        AbilityData data = new AbilityData(trigger, 0, null, false, null, null, List.of());
+        Ability ability = new Ability(data);
+        card.addAbility(ability);
+        return ability;
+    }
+
+    @Test
+    void negate_setsAbilitiesNegatedOnTargetCard() {
+        // NEGATE targeting an opponent's Character sets isNegated() on every ability
+        Card oppChar = makeCharCard(opponent, 4000, 2);
+        Ability a1 = attachAbility(oppChar, Trigger.ON_PLAY);
+        Ability a2 = attachAbility(oppChar, Trigger.WHEN_ATTACKING);
+        gs.moveCard(oppChar, opponent.getField());
+
+        Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER,
+                1, 0, 0, 0, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.NEGATE, 0, t, null, null, null, null, 0);
+        EffectFactory.build(effect, null).apply(gs, source);
+
+        assertTrue(a1.isNegated(), "ON_PLAY ability should be negated");
+        assertTrue(a2.isNegated(), "WHEN_ATTACKING ability should be negated");
+    }
+
+    @Test
+    void negate_doesNotAffectUntargetedCards() {
+        // Only the targeted card's abilities are negated; other field cards are unaffected
+        Card oppChar1 = makeCharCard(opponent, 4000, 2);
+        Card oppChar2 = makeCharCard(opponent, 5000, 3);
+        Ability a1 = attachAbility(oppChar1, Trigger.ON_PLAY);
+        Ability a2 = attachAbility(oppChar2, Trigger.ON_PLAY);
+        gs.moveCard(oppChar1, opponent.getField());
+        gs.moveCard(oppChar2, opponent.getField());
+
+        // max=1 so only one card is targeted (whichever resolveTargets picks first)
+        Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER,
+                1, 0, 0, 4000, 0, null, null, null, null);
+        EffectData effect = eff(EffectType.NEGATE, 0, t, null, null, null, null, 0);
+        EffectFactory.build(effect, null).apply(gs, source);
+
+        // oppChar1 has maxPower=4000 filter so it matches; oppChar2 (5000) does not
+        assertTrue(a1.isNegated(), "Targeted card's ability should be negated");
+        assertFalse(a2.isNegated(), "Untargeted card's ability should not be negated");
+    }
+
+    @Test
+    void negate_resetsTurn() {
+        // isNegated is cleared by Ability.resetTurn() (called during REFRESH phase)
+        Card oppChar = makeCharCard(opponent, 4000, 2);
+        Ability a = attachAbility(oppChar, Trigger.ON_PLAY);
+        gs.moveCard(oppChar, opponent.getField());
+
+        Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER,
+                1, 0, 0, 0, 0, null, null, null, null);
+        EffectFactory.build(eff(EffectType.NEGATE, 0, t, null, null, null, null, 0), null)
+                .apply(gs, source);
+        assertTrue(a.isNegated(), "Ability should be negated after NEGATE fires");
+
+        a.resetTurn();
+        assertFalse(a.isNegated(), "resetTurn() should clear isNegated");
+    }
+
+    @Test
+    void colorFilter_combinedWithCardType() {
+        Card redCharCard = makeColorCard(source, 10, 10, Color.Red, CardType.CHARACTER);
+        Card blueEventCard = makeColorCard(source, 10, 10, Color.Blue, CardType.EVENT);
+        gs.moveCard(redCharCard, source.getHand());
+        gs.moveCard(blueEventCard, source.getHand());
+        Target t = tgt(Target.TargetPlayer.SELF, ZoneType.HAND, CardType.CHARACTER, 1, 0, 0, 0, 0, null, null, null,
+                List.of(Color.Red));
+        EffectData e = eff(EffectType.COST_MODIFY, -5, t, null, null, null, null, 0);
+        EffectFactory.build(e, null).apply(gs, source);
+        assertEquals(5, redCharCard.getEffectiveCost(), "Red character card should be modified");
+        assertEquals(10, blueEventCard.getEffectiveCost(),
+                "Blue event card should not be modified due to card type filter");
+    }
+
 }

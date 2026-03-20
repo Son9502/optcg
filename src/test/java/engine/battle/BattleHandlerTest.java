@@ -426,7 +426,7 @@ public class BattleHandlerTest {
     void preventKo_opponentCharacter() {
         Card defender = TestUtils.makeCard(p2, 3000);
         p2.getField().add(defender);
-        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null);
+        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null,null,null,null);
         EffectData e = new EffectData(EffectType.PREVENT_KO, 0, t, null, null, null, null, null, 0);
         EffectFactory.build(e, defender).apply(gameState, p1);
         Card attacker = TestUtils.makeCard(p1, 4000);
@@ -439,7 +439,7 @@ public class BattleHandlerTest {
     void preventAttack_opponentCharacter() {
         Card attacker = TestUtils.makeCard(p2, 4000);
         p2.getField().add(attacker);
-        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null);
+        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null,null,null,null);
         EffectData e = new EffectData(EffectType.PREVENT_ATTACK, 0, t, null, null, null, null, null, 0);
         EffectFactory.build(e, attacker).apply(gameState, p1);
         Card defender = TestUtils.makeCard(p1, 3000);
@@ -456,7 +456,7 @@ public class BattleHandlerTest {
         Card lifCard = TestUtils.makeCard(p1, 0);
         p1.getLife().add(lifCard);
         p1.getField().add(blocker);
-        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null);
+        Target t = new Target(TargetPlayer.THIS_CARD, ZoneType.CHARACTER, CardType.CHARACTER, 1, 0, 0, 0, 0, null,null,null,null);
         EffectData e = new EffectData(EffectType.PREVENT_BLOCK, 0, t, null, null, null, null, null, 0);
         EffectFactory.build(e, attacker).apply(gameState, p1);
         battleSystem.resolve(attacker, blocker, 0);
@@ -514,7 +514,7 @@ public class BattleHandlerTest {
                 engine.cards.effects.EffectType.POWER_BOOST, powerBoost,
                 new engine.cards.effects.Target(
                         engine.cards.effects.Target.TargetPlayer.SELF,
-                        null, null, 1, 0, 0, 0, 0, null),
+                        null, null, 1, 0, 0, 0, 0, null,null,null,null),
                 null, null, engine.cards.effects.Duration.THIS_BATTLE, null, null, 0);
         engine.cards.abilities.AbilityData abilityData = new engine.cards.abilities.AbilityData(
                 Trigger.COUNTER, 0, null, false, null, null, List.of(boostEffect));

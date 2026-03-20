@@ -274,7 +274,7 @@ public class EffectParserTest {
     @Test
     void parse_ifLeaderMulticolored_conditionIsLeaderColor() {
         List<ParsedEffect> effects = many("If your Leader is multicolored, draw 1 card.", 1);
-        assertEquals("IF_LEADER_COLOR", effects.get(0).condition());
+        assertEquals("IF_LEADER_MULTICOLORED", effects.get(0).condition());
     }
 
     // ── Condition: IF_LEADER_NAME ─────────────────────────────────────────────

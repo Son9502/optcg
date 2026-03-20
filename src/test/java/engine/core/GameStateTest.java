@@ -514,7 +514,7 @@ public class GameStateTest {
 
         // Event with KO (cost 0 so no DON needed)
         Target tgt = new Target(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER,
-                CardType.CHARACTER, 1, 5, 0, 0, 0, null);
+                CardType.CHARACTER, 1, 5, 0, 0, 0, null,null,null,null);
         EffectData ko = new EffectData(EffectType.KO, 0, tgt, null, null, null, null, null, 0);
         AbilityData ab = new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(ko));
 
