@@ -18,24 +18,28 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 - Cost payment enforcement: paying a card's DON cost by resting DON cards from the cost zone
 - Summoning sickness: characters cannot attack the turn they are played
 - Keyword enforcement: Rush (character can attack turn played), Blocker (can intercept attacks), Double Attack (deals 2 damage on hit), Banish (life card goes to trash instead of hand), Unblockable (opponent cannot activate Blocker), Trigger (activates when a life card is revealed; player is offered the choice to activate)
-- `GRANT_KEYWORD` effect: cards can temporarily grant keywords (e.g. gains [Blocker] until end of turn); cleared automatically during REFRESH
+- `GRANT_KEYWORD` effect: cards can temporarily grant keywords (e.g. gains [Blocker] until end of turn); `WHILE_IN_PLAY` duration adds a permanent `Ability` object instead; cleared automatically during REFRESH for temporary grants
 - `SEARCH_DECK` effect: look at top N cards, player selects up to M matching cards to hand, rest return to deck top
 - `MOVE_TO_TOP_DECK` / `MOVE_TO_BOTTOM_DECK` effects: move cards to top or bottom of a player's deck
-- `PREVENT_ATTACK` / `PREVENT_KO` / `PREVENT_BLOCK` effects: enforced via temporary keywords (`CANNOT_ATTACK`, `CANNOT_KO`, `UNBLOCKABLE`); cleared during REFRESH
+- `PREVENT_ATTACK` / `PREVENT_KO` / `PREVENT_BLOCK` effects: enforced via temporary keywords (`CANNOT_ATTACK`, `CANNOT_KO`, `UNBLOCKABLE`); cleared during REFRESH; `WHILE_IN_PLAY` duration adds permanent `Ability` object
 - `PLAY_CARD` effect: play a card for free from hand or trash (routes by card type: CHARACTER → field, EVENT → trash, STAGE → stage); `ON_PLAY` dispatched normally
 - `MODAL` effect: choose-one branching; engine picks branch 0 by default (CliController interactive menu pending)
+- `NEGATE` effect: suppresses all abilities on the targeted card for the current turn via `Ability.isNegated` flag; `AbilityManager.dispatch()` skips negated abilities; cleared by `ability.resetTurn()` during REFRESH
 - `RUSH_CHARACTER` keyword: character can attack on the turn it is played; valid targets restricted to rested Characters only (cannot attack the opponent's Leader)
+- Duration correctness: all four `Duration` values route to separate power/cost buckets — `THIS_BATTLE` → `bonusBattlePower` (cleared post-battle); `THIS_TURN` → `bonusPower`/`bonusCost` (cleared each turn); `OPPONENTS_NEXT_TURN` → `bonusPowerOpponentTurn`/`bonusCostOpponentTurn` (cleared by `TurnManager.endTurn()` on non-active player); `WHILE_IN_PLAY` → `bonusPowerWhileInPlay`/`bonusCostWhileInPlay` (cleared when card leaves field)
 - Field character limit: 5 characters max per player; UI prompts to replace when full
 - Stage card limit: 1 stage card per player; new stage replaces the old one
-- Two pre-built test decks via `GameFactory` (Luffy/Red and Zoro/Green), with keyword-bearing cards at each cost tier and named ability cards (Nami, Sanji, Coby, Marco, Vivi, Perona, Kuzan) for manual testing of each Phase 2 tier
+- 12 selectable dummy decks via `GameFactory`: 6 single-color (Red, Blue, Green, Purple, Black, Yellow) + 6 dual-color; players pick from a numbered menu before game start via `Main.java`; each deck's 50 cards mirror its color identity (aggression, control, DON!! engine, etc.)
 - Ability/effect descriptions shown under each card in hand view, field view, and card-played announcements; falls back to formatted keyword list (e.g. `[Rush]`, `[Blocker]`) for generic test cards
 - Multi-color card support: `CardData.colors` is `List<Color>`; CLI alternates ANSI codes per character for dual-color cards (e.g. Green/Yellow → alternating letters)
+- Target filtering by subtype, name, attribute, and color: `Target` record carries `subtype`, `nameFilter`, `attribute`, `color` fields; `matchesFilters()` checks all four against card data
+- 15 new `Condition` values implemented: `IF_FIELD_CHARACTER_POWER`, `IF_FIELD_CHARACTER_NAME`, `IF_FIELD_CHARACTER_NAME_RESTED`, `IF_FIELD_CHARACTER_COST_COUNT`, `IF_RESTED_CHARACTER_COUNT`, `IF_NOT_FIELD_CHARACTER_NAME`, `IF_OPPONENT_CHARACTER_COUNT`, `IF_OPPONENT_RESTED_CHARACTER_COUNT`, `IF_OPPONENT_DON_COUNT`, `IF_OPPONENT_FIELD_CHARACTER_POWER`, `IF_OPPONENT_LIFE_COUNT`, `IF_OPPONENT_HAND_COUNT`, `IF_LEADER_MULTICOLORED`, `IF_LEADER_NAME`, `IF_LEADER_ATTRIBUTE`
 - Card data pipeline: raw scraped JSON → `CardCompiler` → compiled JSON → `CardDatabase`
 - `Parser`: structured ability extraction from card text into `{trigger, condition, cost, character, effect}` records
 - `CardData` record carries a `subTypes` field (normalized from API `sub_types` strings)
 - `CardDatabase` secondary index: `getByName()` (O(1)), `getBySubtype()` (O(n)), `getAllCards()`
 - `CsvGenerator`: offline tool that rebuilds `card_names_subtypes.csv` from compiled (or raw) JSON with name normalization and deduplication
-- 300 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty)
+- 355 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty; 1 shuffle test is probabilistically flaky by design)
 
 ---
 
@@ -77,6 +81,32 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 **Key rules clarifications (from official rulebook):**
 - `[DON!! xX]` is a **condition** (§8-3-2-3), not a cost — the card must have ≥X DON attached to activate the effect
 - `DON!! −X` (§8-3-1-6) is a distinct **cost type**: return X DON cards to the DON deck (not the cost zone)
+
+---
+
+## Color Identity
+
+Each color has a dominant playstyle reflected in its most-played effect types (derived from the compiled card corpus across all sets):
+
+| Color | Dominant Effects | Playstyle |
+|-------|-----------------|-----------|
+| **Red** | `POWER_BOOST` (181), `KO` (57), `ATTACH_DON` (32), `GRANT_KEYWORD` (24) | **Aggression.** Overwhelm through raw power. DON!! attachment pumps characters; keywords like Rush and Double Attack push for early damage. |
+| **Blue** | `DRAW` (101), `MOVE_TO_BOTTOM_DECK` (100), `RETURN_TO_HAND` (75), `SEARCH_DECK` (68) | **Control / Hand.** Disrupt and grind. Bounce opponent's cards, bury threats to the deck bottom, dig for answers. Card advantage engine. |
+| **Green** | `REST` (113), `PLAY_CARD` (58), `SET_DON_ACTIVE` (55), `UNREST` (45) | **DON!! / Field Control.** Tempo through DON!! manipulation. Rest opponent characters to lock attacks; unrest your own to reuse Blockers mid-turn. |
+| **Purple** | `ADD_DON` (169), `REST` (84), `SET_DON_ACTIVE` (81), `PLAY_CARD` (50) | **DON!! Engine / Big Plays.** The most DON!!-centric color. Stacks DON!! to power up massive plays, activates spent resources. Explosive ceiling. |
+| **Black** | `TRASH` (134), `KO` (76), `COST_MODIFY` (72), `PLAY_CARD` (52) | **Removal / Graveyard.** Surgical destruction. Trash as both resource and weapon — discard opponent cards, play threats from trash, cost-reduce for value. |
+| **Yellow** | `PLAY_CARD` (101), `ADD_LIFE` (63), `DRAW` (56), `KO` (54) | **Life / Triggers.** Buffer damage with added life cards, stack Trigger effects that fire when life is hit. Plays reactively — deceptively resilient. |
+
+**Common dual-color pairings and their combined identity:**
+
+| Pairing | Identity |
+|---------|----------|
+| Red / Green | Power + Field Lock — pump your cards while resting theirs |
+| Blue / Black | Control + Removal — bounce or KO everything, grind the opponent out |
+| Purple / Green | DON!! Overdrive — both colors manipulate DON!! for explosive multi-threat turns |
+| Yellow / Red | Life Buffer + Aggression — pad your life total while swinging hard |
+| Blue / Purple | Draw + DON!! Engine — dig through your deck while fueling large plays |
+| Black / Yellow | Removal + Resilience — eliminate threats and replenish life to extend the game |
 
 ---
 
@@ -153,8 +183,8 @@ mvn exec:java -Dexec.mainClass="tools.CsvGenerator"
 mvn test
 ```
 
-**Current test suite: 300 tests, 0 failures, 0 errors.**
-10 `CardDatabaseTest` cases are data-dependent and skip automatically (via `assumeTrue`) when `raw/data/` is empty — run `CardScraper` first to populate.
+**Current test suite: 355 tests, 0 failures, 0 errors.**
+10 `CardDatabaseTest` cases are data-dependent and skip automatically (via `assumeTrue`) when `raw/data/` is empty — run `CardScraper` first to populate. 1 shuffle test is probabilistically flaky by design (documented in the test).
 
 | Test class | Tests | Coverage area |
 |---|---|---|
@@ -164,7 +194,7 @@ mvn test
 | `GameStateTest` | 14 | Draw, trash, play card, remove life, refresh, cost payment, field/stage limits |
 | `GameSetupTest` | 4 | Initialization, mulligan, life setup |
 | `CardTest` | 7 | Rest/activate, Don attachment and detach, summoning sickness, grantKeyword, clearGrantedKeywords, hasKeyword (permanent survives clear) |
-| `EffectFactoryTest` | 56 | All implemented EffectTypes, target resolution, condition gates, GRANT_KEYWORD, SEARCH_DECK, PREVENT_ATTACK/KO/BLOCK, PLAY_CARD, MODAL (branch selection) |
+| `EffectFactoryTest` | 131 | All EffectTypes, target resolution, all condition gates, GRANT_KEYWORD, SEARCH_DECK, PREVENT_ATTACK/KO/BLOCK, PLAY_CARD, MODAL, NEGATE, FLIP_LIFE, COUNTER, all Duration buckets (THIS_BATTLE/THIS_TURN/OPPONENTS_NEXT_TURN/WHILE_IN_PLAY), all new field/opponent conditions |
 | `DeckTest` | 4 | Draw, draw from empty, search |
 | `ZoneTest` | 6 | Add, remove, draw top, move card, shuffle |
 | `PlayerTest` | 2 | Zone initialization, leader assignment |
@@ -213,7 +243,7 @@ src/
 │   │   │   │   └── Player.java
 │   │   │   ├── setup/
 │   │   │   │   ├── DeckBuilder.java
-│   │   │   │   ├── GameFactory.java             ← Pre-built test decks (Luffy vs Zoro)
+│   │   │   │   ├── GameFactory.java             ← Test decks (Luffy vs Zoro) + 12 selectable game decks
 │   │   │   │   └── GameSetup.java               ← initializeGame, mulligan, setUpLife
 │   │   │   ├── ui/
 │   │   │   │   └── cli/
@@ -317,7 +347,7 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 - `EffectTemplateCsvGenerator`: reads compiled JSON, re-runs `Parser.parse()`, generalises effect text, splits compound effects on `•`/`. Then, `/`If X, Y.`, strips modal trigger labels, deduplicates on `(simplified, trigger)`, writes generic/unique CSV pair
 - `LexerCoverageReport`: runs `EffectLexer` on all CSV templates, reports fully-tokenised vs. UNKNOWN, lists top unknown tokens by frequency — current coverage **99.0% generic / 96.0% unique**
 - `Parser.splitOnEmbeddedTriggers`: fixed `[Blocker] (explanation) [On Block] effect` being parsed as one ability; added `sawKeyword` tracking + parenthetical skip so the embedded trigger fires the split
-- `Duration` enum added (`THIS_BATTLE`, `THIS_TURN`, `OPPONENTS_NEXT_TURN`, `PERMANENT`); `EffectData.duration` promoted from `int` to `Duration`
+- `Duration` enum added (`THIS_BATTLE`, `THIS_TURN`, `OPPONENTS_NEXT_TURN`, `WHILE_IN_PLAY`); `EffectData.duration` promoted from `int` to `Duration`; each value routes to a separate power/cost bucket in `Card` cleared at the correct time
 - `ParsedEffect` record: intermediate structured representation of a single parsed effect clause (tools pipeline; not part of game runtime)
 - `MODIFIER` token type added to `TokenType` (10th value): `may` (optional action) and `must` (forced action); `EffectParser` reads the MODIFIER flag to populate `ParsedEffect.optional`
 - `EffectParser` Phase 1 complete: `List<Token>` → `List<ParsedEffect>`; covers DRAW, TRASH, REST, KO, RETURN_TO_HAND, POWER_BOOST, COST_MODIFY, ADD_DON, SET_DON_ACTIVE, GRANT_KEYWORD, PLAY_CARD, NEGATE, PREVENT_ATTACK, UNREST, ATTACH_DON; clause splitting on CONNECTOR; condition classification; optional flag from MODIFIER tokens; subject-first clause handling
@@ -332,11 +362,8 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 - `EffectFactory.evaluateCondition()` real implementations: `IF_LEADER_COLOR` (`colors().size() > 1`), `IF_LEADER_NAME` (name equalsIgnoreCase), `IF_LEADER_TYPE` (`containsSubtype`), `IF_LEADER_ATTRIBUTE` (attribute enum name match), `IF_FIELD_CHARACTER_TYPE` (field scan); `Condition` enum gained `IF_LEADER_NAME` and `IF_LEADER_ATTRIBUTE`
 
 **Remaining:**
-- **MODAL** — CliController interactive menu (engine picks branch 0 by default; `ModalSelector` and `applyModal()` are wired)
-- Attribute + subtype/name filtering in `Target.matchesFilters()` (items #17 partial, #21)
-- Cross-turn effect tracking for `OPPONENTS_NEXT_TURN` duration; enforce `YOUR_TURN` / `OPPONENTS_TURN` / `ONCE_PER_TURN` conditions at runtime (item #20)
-- Event card resolution: play → resolve effect → move to trash
-- `[Activate:Main]` effects: player-activated abilities during the Main Phase
+- `[Activate:Main]` effects (item #26): player-activated abilities during the Main Phase for Leader, Stage, and Character cards; pay cost (rest N DON or trash hand card) → dispatch via `AbilityManager`; uncomment "Use Leader's Ability" stub in `CliController`
+- `[Opponent's Turn]` trigger dispatch (item #27): add `OPPONENTS_TURN` to `Trigger` enum; `TurnManager` dispatches at start of opponent's turn for all field cards + leader; power/keyword boosts inside use `THIS_TURN` duration and clear naturally via `refreshField()`
 
 ### Phase 2.5 — Enhanced CMU (Tmux UI)
 

@@ -107,7 +107,7 @@ Emitted by `FILTER_PATTERNS` (regex) or plain-text phrase entries in `EffectTabl
 ### SUBTYPE_FILTER
 A curly-brace-delimited subtype or type identifier: `{Straw Hat Crew}`, `{Animal Kingdom Pirates}`.
 `EffectParser` uses this token type to classify `IF_LEADER_TYPE` and `IF_FIELD_CHARACTER_TYPE` conditions,
-and (once item #21 is done) to filter targets by subtype in `matchesFilters()`.
+and to filter targets by subtype in `matchesFilters()` (item #21 — done).
 
 ---
 
@@ -120,8 +120,8 @@ A square-bracket-delimited named card or keyword reference: `[Sanji]`, `[Blocker
 
 ### ATTRIBUTE_FILTER
 A parenthesis-delimited attribute identifier: `(Slash)`, `(Ranged)`, `(Strike)`.
-`EffectParser` uses this token type to classify `IF_LEADER_ATTRIBUTE` conditions and (once
-item #17's target filtering is done) to filter targets by attribute in `matchesFilters()`.
+`EffectParser` uses this token type to classify `IF_LEADER_ATTRIBUTE` conditions and to filter
+targets by attribute in `matchesFilters()` (item #17 — done).
 
 ---
 
@@ -129,8 +129,8 @@ item #17's target filtering is done) to filter targets by attribute in `matchesF
 > model as `IF_LEADER_TYPE` (SUBTYPE_FILTER) with an identity fallback. The identity check is
 > rare enough to defer to manual JSON override.
 >
-> **Color filter on target** (Phase 2 gap): `"a purple {Big Mom Pirates} type Character"` — color
-> is an additional filter. `Target` needs a `color` field to store it.
+> **Color filter on target** (item #24 — done): `"a purple {Big Mom Pirates} type Character"` — color
+> is an additional FILTER. `Target.color` (String field, case-insensitive) stores it; `matchesFilters()` checks against `card.getData().colors()`. Parser does not yet extract this field — requires hand-compiled JSON for cards using color-filtered targets.
 
 ---
 
@@ -159,8 +159,8 @@ rested                   — placement state for DON!! or Character (enters rest
 ---
 
 ### DURATION
-How long the effect lasts. If omitted, the effect is permanent (until the card leaves the field).
-Maps to the `Duration` enum: `THIS_TURN`, `THIS_BATTLE`, `OPPONENTS_NEXT_TURN`, `PERMANENT`.
+How long the effect lasts. If omitted, the effect persists while the card is on the field.
+Maps to the `Duration` enum: `THIS_TURN`, `THIS_BATTLE`, `OPPONENTS_NEXT_TURN`, `WHILE_IN_PLAY`.
 
 ```
 during this turn                                  → THIS_TURN
@@ -171,8 +171,14 @@ until the start of your next turn                 → OPPONENTS_NEXT_TURN  (most
 until the end of your next turn                   → OPPONENTS_NEXT_TURN
 until the end of your opponent's next turn        → OPPONENTS_NEXT_TURN
 until the end of your opponent's next End Phase   → OPPONENTS_NEXT_TURN
-(omitted)                                         → PERMANENT
+(omitted)                                         → WHILE_IN_PLAY  (null in compiled JSON; treated as WHILE_IN_PLAY by engine)
 ```
+
+> **Duration bucket semantics (engine layer):**
+> `THIS_BATTLE` → `bonusBattlePower` (cleared at end of each battle).
+> `THIS_TURN` / null → `bonusPower` / `bonusCost` (cleared by `refreshField()` each turn start).
+> `OPPONENTS_NEXT_TURN` → `bonusPowerOpponentTurn` / `bonusCostOpponentTurn` (cleared by `TurnManager.endTurn()` on the non-active player's cards at end of each turn).
+> `WHILE_IN_PLAY` → `bonusPowerWhileInPlay` / `bonusCostWhileInPlay` (never cleared by `refreshField()`; cleared by `GameState.moveCard()` when card leaves the CHARACTER zone).
 
 ---
 
@@ -198,9 +204,21 @@ Implemented conditions are marked ✓. Unimplemented are deferred to later phase
 | `IF_LEADER_TYPE` | `If your Leader has the {Type} type` — SUBTYPE_FILTER token | ✓ containsSubtype |
 | `IF_LEADER_ATTRIBUTE` | `If your Leader has the (Attribute) attribute` — ATTRIBUTE_FILTER token | ✓ attribute enum name match |
 | `IF_FIELD_CHARACTER_TYPE` | `If you have a {Type} type Character` — SUBTYPE_FILTER + CARD_TYPE=character before it | ✓ field card scan |
+| `IF_OPPONENT_CHARACTER_COUNT` | `If your opponent has N or more Characters` | ✓ |
+| `IF_OPPONENT_RESTED_CHARACTER_COUNT` | `If your opponent has N or more rested Characters` | ✓ |
+| `IF_OPPONENT_DON_COUNT` | `If your opponent has N or more DON!! cards on their field` | ✓ |
+| `IF_OPPONENT_FIELD_CHARACTER_POWER` | `If your opponent has a Character with N or more power` | ✓ |
+| `IF_FIELD_CHARACTER_POWER` | `If you have a Character with N or more power` | ✓ |
+| `IF_FIELD_CHARACTER_NAME` | `If you have a [Name] Character` — NAME_FILTER subtype, conditionValue = minBasePower | ✓ |
+| `IF_FIELD_CHARACTER_NAME_RESTED` | `If you have a rested [Name] Character` — NAME_FILTER subtype | ✓ |
+| `IF_FIELD_CHARACTER_COST_COUNT` | `If you have N or more Characters with a cost of N or more` — conditionValue = minCount, subtype = minCost string | ✓ |
+| `IF_RESTED_CHARACTER_COUNT` | `If you have N or more rested Characters` | ✓ |
+| `IF_NOT_FIELD_CHARACTER_NAME` | `If you do not have a [Name] Character on your field` | ✓ |
 | `IF_DON_COMPARISON` | `If the number of DON!! cards on your field is equal to or less than your opponent's` | pending |
 | `IF_THIS_POWER` | `If this Character has [POWER] power or more` | pending |
 | `IF_REVEALED_COST` | `If the revealed card has a cost of N or more` — follows a SEARCH_DECK clause | pending |
+
+> **Parser extraction gap (Item 22):** All conditions above marked ✓ are implemented in `EffectFactory.evaluateCondition()` but `EffectParser.classifyConditionClause()` does not yet extract them from raw card text. Cards using these conditions require hand-compiled JSON for now.
 
 ---
 
@@ -358,7 +376,7 @@ How parsed tokens map to `EffectData` record fields:
 | `target.maxPower` | FILTER(power) token |
 | `target.subType` | FILTER(type) token |
 | `condition` | CONDITION token on the preamble or inline `If` clause |
-| `duration` | DURATION token (`0` = permanent, `1` = this turn, `-1` = this battle) |
+| `duration` | DURATION token (`THIS_TURN`, `THIS_BATTLE`, `OPPONENTS_NEXT_TURN`, `WHILE_IN_PLAY`; null = WHILE_IN_PLAY) |
 
 ---
 
