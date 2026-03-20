@@ -721,10 +721,12 @@ public class CliController {
             String name = colorize(card.getData().name(), card.getData().colors());
             int cost = card.getData().cost();
             int power = card.getData().power();
+            int counter = card.getData().counter();
+            String counterStr = counter > 0 ? ", Counter: +" + counter : "";
             String stats = (availableDon >= cost)
-                    ? GREEN + "(Type: " + card.getData().cardType() + ", Cost: " + cost + ", Power: " + power + ")"
+                    ? GREEN + "(Type: " + card.getData().cardType() + ", Cost: " + cost + ", Power: " + power + counterStr + ")"
                             + RESET
-                    : RED + "(Type: " + card.getData().cardType() + ", Cost: " + cost + ", Power: " + power + ")"
+                    : RED + "(Type: " + card.getData().cardType() + ", Cost: " + cost + ", Power: " + power + counterStr + ")"
                             + RESET;
             System.out.printf("%d. %s %s%n", i + 1, name, stats);
         }
