@@ -249,15 +249,22 @@ public class CardCompiler {
         int minCost  = pe.minCost();
         int maxPower = pe.maxPower();
         int minPower = pe.minPower();
+        String subtype = pe.targetSubtype();
+        String nameFilter = pe.nameFilter();
+        String attribute = pe.targetAttribute();
 
         boolean hasData = player != null || zone != null || cardType != null
-                || max != 0 || maxCost != 0 || minCost != 0 || maxPower != 0 || minPower != 0;
+                || max != 0 || maxCost != 0 || minCost != 0 || maxPower != 0 || minPower != 0
+                || subtype != null || nameFilter != null || attribute != null;
         if (!hasData) return null;
 
         ObjectNode n = mapper.createObjectNode();
         if (player   != null) n.put("player",   player);   else n.putNull("player");
         if (zone     != null) n.put("zone",      zone);     else n.putNull("zone");
         if (cardType != null) n.put("cardType",  cardType); else n.putNull("cardType");
+        if (subtype != null) n.put("subtype",   subtype);  else n.putNull("subtype");
+        if (nameFilter != null) n.put("nameFilter", nameFilter); else n.putNull("nameFilter");
+        if (attribute != null) n.put("attribute", attribute); else n.putNull("attribute");
         n.put("max",      max);
         n.put("maxCost",  maxCost);
         n.put("minCost",  minCost);

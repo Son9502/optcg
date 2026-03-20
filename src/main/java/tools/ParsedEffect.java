@@ -32,16 +32,19 @@ package tools;
  *   optional         = false
  */
 public record ParsedEffect(
-        String  effectType,      // EffectType enum name: "DRAW", "REST", "ADD_DON", etc.
-        int     value,           // signed int: +2000 power boost, -3 cost, 2 cards drawn; 0 = unspecified
-        String  targetPlayer,    // TargetPlayer name: "SELF" | "OPPONENT" | "ALL" | null
-        String  targetZone,      // Zone lexer token raw value: "hand" | "deck" | "don!! deck" | etc. | null
-        String  targetCardType,  // CardType name: "CHARACTER" | "DON_CARD" | "CARD" | null
-        int     max,             // "up to N" max count; 0 = unspecified
-        int     maxCost,         // upper cost filter ("with a cost of N or less"); 0 = none
-        int     minCost,         // lower cost filter ("with a cost of N or more"); 0 = none
-        int     maxPower,        // upper power filter ("with N power or less"); 0 = none
-        int     minPower,        // lower power filter ("with N power or more"); 0 = none
+        String  effectType,       // EffectType enum name: "DRAW", "REST", "ADD_DON", etc.
+        int     value,            // signed int: +2000 power boost, -3 cost, 2 cards drawn; 0 = unspecified
+        String  targetPlayer,     // TargetPlayer name: "SELF" | "OPPONENT" | "ALL" | null
+        String  targetZone,       // Zone lexer token raw value: "hand" | "deck" | "don!! deck" | etc. | null
+        String  targetCardType,   // CardType name: "CHARACTER" | "DON_CARD" | "CARD" | null
+        int     max,              // "up to N" max count; 0 = unspecified
+        int     maxCost,          // upper cost filter ("with a cost of N or less"); 0 = none
+        int     minCost,          // lower cost filter ("with a cost of N or more"); 0 = none
+        int     maxPower,         // upper power filter ("with N power or less"); 0 = none
+        int     minPower,         // lower power filter ("with N power or more"); 0 = none
+        String  targetSubtype,    // {Subtype} filter on target cards; null if not applicable
+        String  nameFilter,       // [Name] filter on target cards; null if not applicable
+        String  targetAttribute,  // (Attribute) filter on target cards; null if not applicable  
         String  condition,        // Condition enum name: "IF_LIFE_COUNT", "IF_CHARACTER_COUNT", etc. | null
         String  conditionSubtype, // name/subtype/attribute value for string-based conditions; null if not applicable
         String  duration,         // Duration enum name: "THIS_TURN" | "THIS_BATTLE" | "OPPONENTS_NEXT_TURN" | "PERMANENT"

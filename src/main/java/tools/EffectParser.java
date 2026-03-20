@@ -190,7 +190,7 @@ public final class EffectParser {
             if (t.type() == TokenType.FILTER && r.equals("rested"))
                 return "IF_RESTED";
             if (t.type() == TokenType.FILTER && r.equals("multicolored"))
-                return "IF_LEADER_COLOR";
+                return "IF_LEADER_MULTICOLORED";
             if (t.type() == TokenType.FILTER && r.equals("type"))
                 return "IF_LEADER_TYPE"; // "type" word seen without an adjacent SUBTYPE_FILTER
             if (t.type() == TokenType.SUBTYPE_FILTER) {
@@ -362,7 +362,7 @@ public final class EffectParser {
         // MODAL — return stub immediately.
         if (effectType.equals("MODAL")) {
             return new ParsedEffect("MODAL", 0, null, null, null,
-                    0, 0, 0, 0, 0, condition, conditionSubtype, null, optional);
+                    0, 0, 0, 0, 0,null, null, null, condition, conditionSubtype, null, optional);
         }
 
         // 4d. Quantities.
@@ -398,13 +398,23 @@ public final class EffectParser {
         int maxPower = filters[2];
         int minPower = filters[3];
 
+        // 4i. Subtype / name / attribute filter for condition clauses.
+        String subtype = null;
+        String nameFilter = null;
+        String attribute = null;
+        for (Token token : clause) {
+            if (token.type() == TokenType.SUBTYPE_FILTER && subtype == null) subtype = (String) token.value();
+            if (token.type() == TokenType.NAME_FILTER && nameFilter == null) nameFilter = (String) token.value();
+            if (token.type() == TokenType.ATTRIBUTE_FILTER && attribute == null) attribute = (String) token.value();
+        }
+
         // 4i. Duration.
         String duration = extractDuration(clause);
 
         // 4j. Assemble.
         return new ParsedEffect(effectType, value, player, zone, cardType,
                 max, maxCost, minCost, maxPower, minPower,
-                condition, conditionSubtype, duration, optional);
+                subtype, nameFilter, attribute, condition, conditionSubtype, duration, optional);
     }
 
     // ── Verb → EffectType resolution ─────────────────────────────────────────
