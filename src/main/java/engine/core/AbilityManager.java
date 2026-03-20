@@ -43,7 +43,8 @@ public class AbilityManager {
      * Fires all abilities on {@code card} whose trigger matches {@code trigger}.
      *
      * <p>Skips KEYWORD abilities, abilities blocked by the once-per-turn gate,
-     * and abilities whose [DON!! xX] passive requirement is not met.
+     * abilities whose [DON!! xX] passive requirement is not met, and abilities
+     * whose effects are currently negated.
      *
      * @param trigger      the game event that occurred
      * @param card         the card whose abilities are checked
@@ -55,6 +56,8 @@ public class AbilityManager {
             if (ability.getTriggerType() != trigger) continue;
             if (!ability.canActivate()) continue;                    // once-per-turn gate
             if (!meetsDonRequirement(ability, card)) continue;       // [DON!! xX] passive check
+            if (ability.isNegated()) continue;                       // effect negation check
+            if (card.getOwner().isOnPlayNegated()) continue;        // on-play negation check
             fireAbility(ability, card, actingPlayer);
         }
     }
