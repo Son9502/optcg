@@ -434,19 +434,22 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
 - `engine/ui/cli/TmuxLauncher.java` — programmatically creates and configures the tmux session on startup
 - `engine/ui/cli/ChatLog.java` — append-only shared chat file writer/tailer
 
-### Phase 3 — Graphics / GUI
-- `GameStateClient` subclass in JavaFX: connects to the same local socket as the Tmux board renderer and renders game state graphically
-- Render the board: character area, hand, life zone, cost zone, trash, stage
-- Card display with images (`card_image` / `card_image_id` already in compiled JSON), power, cost, and rest/active state
-- Animated zone transitions (play card, attack, draw, life reveal)
-- `CliController` + Tmux layout kept as a fallback / debug mode; the socket layer means both can run simultaneously
+### Phase 3 — Engine Completion
+- `MAIN` trigger dispatch (231 cards): `[Main]` event effect cards; `CliController.runMainPhases()` needs a "Play Event" path
+- `OPPONENTS_ATTACK` trigger dispatch (42 cards): fires after opponent's `WHEN_ATTACKING` resolves
+- `ON_BLOCK` trigger dispatch (11 cards): fires when a Blocker is declared
+- `WHILE_IN_PLAY` recalculate-on-query layer: `getPowerWithEffects()` scans active continuous-effect abilities on each call instead of stale buckets
+- Replacement effects: interrupt hook in `BattleSystem` + `GameState` for "if this would be K.O.'d… instead" effects
+- `GameFactory` real-card decks: replace 12 synthetic dummy decks with compiled cards selected via `CardCompatibilityReport`
+- `CliController` + Tmux UI kept as the primary play surface throughout this phase
 
 ### Phase 4 — Training Mode
 - **Tutorial**: guided walkthrough of rules and actions
 - **Self vs Self**: control both sides from one machine
 - **Self vs AI**: automated opponent with configurable difficulty and playstyle
 
-### Phase 5 — Battle Mode
+### Phase 5 — Battle Mode + GUI
+- **JavaFX GUI**: `GameStateClient` subclass in JavaFX connects to the same local socket as the Tmux board renderer; renders board graphically with card images (`card_image` / `card_image_id` already in compiled JSON), animated zone transitions, power/cost/rest state; `CliController` + Tmux kept as fallback / debug mode
 - **Local play**: two players on one machine
 - **Online play**: vs friend (gamer tag), vs local (region matchmaking), vs global
 - **Tournament mode**: bracket-style matchups

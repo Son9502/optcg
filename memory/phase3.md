@@ -19,13 +19,9 @@
 | 8 | CardCompiler compound cost pattern extraction | pending | `EffectParser` does not yet recognize all compound cost patterns from card text. Run `CardCompatibilityReport` after each compiler pass to track progress. |
 | 9 | `GameFactory` real-card decks | pending | Replace the 12 synthetic dummy decks with real compiled cards from `CardDatabase`, selected using `CardCompatibilityReport` to ensure fully-playable picks. |
 
-## Tier 3 — GUI (JavaFX)
+## Note on GUI
 
-- `GameStateClient` subclass in JavaFX: connects to the same local socket as the Phase 2.5 Tmux board renderer
-- Render the board: character area, hand, life zone, cost zone, trash, stage
-- Card display with images (`card_image` / `card_image_id` already in compiled JSON)
-- Animated zone transitions (play card, attack, draw, life reveal)
-- `CliController` + Tmux kept as fallback/debug mode — socket layer means both can run simultaneously
+JavaFX GUI moved to **Phase 5** (Battle Mode). An existing OPTCG sim already covers the "play a game visually" use case; the engine + training work in Phases 3–4 are more valuable first. The IPC socket layer from Phase 2.5 makes the GUI swap trivial when Phase 5 arrives — it's a renderer drop-in, not a re-architecture.
 
 ---
 
