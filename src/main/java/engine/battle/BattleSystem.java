@@ -108,11 +108,10 @@ public class BattleSystem {
             if (card.getData().counter() > 0) {
                 counters.add(card);
             }
-            // Any card with a KEYWORD ability that could potentially be a counter (e.g. an
-            // Event card with a counter keyword) is included here for testing purposes, but
-            // this will be refined once we implement specific counter mechanics based on
-            // card effects.
-            else if (card.hasKeyword(Keyword.COUNTER)) {
+            // Event cards with a [Counter] ability (Trigger.COUNTER) can be played
+            // during the Counter Step.
+            else if (card.getAbilities().stream()
+                    .anyMatch(a -> a.getTriggerType() == engine.cards.abilities.Trigger.COUNTER)) {
                 counters.add(card);
             }
         }

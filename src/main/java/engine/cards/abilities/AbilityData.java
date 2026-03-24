@@ -8,7 +8,7 @@ import java.util.List;
 public record AbilityData(
     @JsonProperty("triggerType")   Trigger          triggerType,
     @JsonProperty("donRequired")   int              donRequired,
-    @JsonProperty("cost")          Cost             cost,
+    @JsonProperty("costs")         List<Cost>       costs,
     @JsonProperty("isOncePerTurn") boolean          isOncePerTurn,
     @JsonProperty("condition")     Condition        condition,
     /** Non-null only when triggerType == KEYWORD. */

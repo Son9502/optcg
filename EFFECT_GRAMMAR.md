@@ -171,7 +171,7 @@ until the start of your next turn                 → OPPONENTS_NEXT_TURN  (most
 until the end of your next turn                   → OPPONENTS_NEXT_TURN
 until the end of your opponent's next turn        → OPPONENTS_NEXT_TURN
 until the end of your opponent's next End Phase   → OPPONENTS_NEXT_TURN
-(omitted)                                         → WHILE_IN_PLAY  (null in compiled JSON; treated as WHILE_IN_PLAY by engine)
+(omitted)                                         → null in compiled JSON; treated as THIS_TURN by the engine (bonusPower/bonusCost, cleared each turn start); specify WHILE_IN_PLAY explicitly for lasting field effects
 ```
 
 > **Duration bucket semantics (engine layer):**
@@ -199,7 +199,7 @@ Implemented conditions are marked ✓. Unimplemented are deferred to later phase
 | `IF_FIELD_CHARACTER_COST` | `If any Character on your field has cost N or more` | ✓ |
 | `IF_RESTED` | `If this Character is rested` — FILTER token `rested` detected in condition | ✓ |
 | `IF_YOU_DO` | `If you do,` — follow-up conditional on the previous clause succeeding | ✓ |
-| `IF_LEADER_COLOR` | `If your Leader is multicolored` | ✓ `colors().size() > 1` |
+| `IF_LEADER_MULTICOLORED` | `If your Leader is multicolored` | ✓ `colors().size() > 1` |
 | `IF_LEADER_NAME` | `If your Leader is [CARD_REF]` — NAME_FILTER token in condition body | ✓ name equalsIgnoreCase |
 | `IF_LEADER_TYPE` | `If your Leader has the {Type} type` — SUBTYPE_FILTER token | ✓ containsSubtype |
 | `IF_LEADER_ATTRIBUTE` | `If your Leader has the (Attribute) attribute` — ATTRIBUTE_FILTER token | ✓ attribute enum name match |
@@ -218,7 +218,7 @@ Implemented conditions are marked ✓. Unimplemented are deferred to later phase
 | `IF_THIS_POWER` | `If this Character has [POWER] power or more` | pending |
 | `IF_REVEALED_COST` | `If the revealed card has a cost of N or more` — follows a SEARCH_DECK clause | pending |
 
-> **Parser extraction gap (Item 22):** All conditions above marked ✓ are implemented in `EffectFactory.evaluateCondition()` but `EffectParser.classifyConditionClause()` does not yet extract them from raw card text. Cards using these conditions require hand-compiled JSON for now.
+> **Parser extraction note:** All conditions above marked ✓ are implemented in `EffectFactory.evaluateCondition()`. `EffectParser.classifyConditionClause()` extracts `IF_LEADER_NAME`, `IF_LEADER_TYPE`, `IF_LEADER_ATTRIBUTE`, `IF_LEADER_MULTICOLORED`, and `IF_FIELD_CHARACTER_TYPE` from raw card text via bracket token types. The remaining conditions (count-based and opponent-facing) still require hand-compiled JSON — the parser does not yet extract numeric threshold conditions from text.
 
 ---
 
@@ -265,7 +265,11 @@ DON!! -N (You may return the specified number of DON!! cards from your field to 
 rest this Character
 trash N card(s) from your hand
 return N DON!! card(s) to your DON!! deck
+N card(s) from the top of your Life area (→ LIFE_TO_HAND or LIFE_TO_TRASH)
 ```
+`LIFE_TO_HAND`: places life cards into hand (Big Mom archetype — `"place … into your hand"`).
+`LIFE_TO_TRASH`: trashes life cards outright (`"trash … from your Life area"`).
+`CardCompiler` detects the destination via `"into your hand"` / `"to your hand"` / `"add"` patterns in the cost text.
 
 ---
 

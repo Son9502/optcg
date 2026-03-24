@@ -3,6 +3,7 @@ package engine.core;
 import engine.TestUtils;
 import engine.cards.Card;
 import engine.cards.DonCard;
+import engine.cards.abilities.Cost;
 import engine.cards.abilities.Ability;
 import engine.cards.abilities.AbilityData;
 import engine.cards.abilities.Trigger;
@@ -26,7 +27,7 @@ class AbilityManagerTest {
 
     @BeforeEach
     void setUp() {
-        source   = new Player("p1");
+        source = new Player("p1");
         opponent = new Player("p2");
         gs = new GameState(source, opponent);
         am = new AbilityManager(gs);
@@ -191,5 +192,154 @@ class AbilityManagerTest {
         gs.trash(source, card); // card was in hand, not field
 
         assertTrue(source.getHand().getCards().isEmpty(), "ON_KO should not fire when trashed from hand");
+    }
+
+    // ── ACTIVATED_MAIN ────────────────────────────────────────────────────────
+
+    /**
+     * ACTIVATED_MAIN ability with a REST cost and a DRAW effect (once-per-turn).
+     */
+    private Ability activatedDrawAbility() {
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null, null, 0);
+        Cost cost = new Cost();
+        cost.type = Cost.CostType.REST_SELF;
+        cost.amount = 1;
+        AbilityData data = new AbilityData(Trigger.ACTIVATED_MAIN, 0, List.of(cost), true, null, null, List.of(draw));
+        return new Ability(data);
+    }
+
+    @Test
+    void activatedMain_firesAndMarksUsed() {
+        gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        Card card = TestUtils.makeCard(source, 2000);
+        Ability ability = activatedDrawAbility();
+        card.addAbility(ability);
+
+        am.dispatch(Trigger.ACTIVATED_MAIN, card, source);
+
+        assertEquals(1, source.getHand().getCards().size());
+        assertTrue(ability.isUsedThisTurn(), "Ability should be marked used after activation");
+    }
+
+    @Test
+    void activatedMain_oncePerTurn_blocksRepeat() {
+        gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        gs.moveCard(TestUtils.makeCard(source, 2000), source.getDeck());
+        Card card = TestUtils.makeCard(source, 3000);
+        Ability ability = activatedDrawAbility();
+        card.addAbility(ability);
+
+        am.dispatch(Trigger.ACTIVATED_MAIN, card, source);
+        am.dispatch(Trigger.ACTIVATED_MAIN, card, source); // blocked
+
+        assertEquals(1, source.getHand().getCards().size(), "Second activation should be blocked");
+    }
+
+    @Test
+    void payActivationCost_restSelf_restsCardAndReturnsTrue() {
+        Card card = TestUtils.makeCard(source, 2000);
+        gs.moveCard(card, source.getField());
+
+        Cost cost = new Cost();
+        cost.type = Cost.CostType.REST_SELF;
+        cost.amount = 1;
+
+        boolean result = gs.payActivationCost(source, List.of(cost), card);
+
+        assertTrue(result, "Should return true when REST cost can be paid");
+        assertTrue(card.isRested(), "Card should be rested after paying REST cost");
+    }
+
+    @Test
+    void payActivationCost_donMinus_cannotAffordWhenNoDon() {
+        Card card = TestUtils.makeCard(source, 2000);
+
+        Cost cost = new Cost();
+        cost.type = Cost.CostType.DON_MINUS;
+        cost.amount = 1;
+
+        boolean result = gs.payActivationCost(source, List.of(cost), card);
+
+        assertFalse(result, "Should return false when no DON in cost zone");
+    }
+
+    // --- Compound Cost Tests ---
+
+    @Test
+    void canAffordActivation_compound_trueWhenAllAffordable() {
+        Card card = TestUtils.makeCard(source, 2000);
+        gs.moveCard(card, source.getField());
+        gs.moveCard(TestUtils.makeCard(source, 1000), source.getHand()); // for TRASH
+
+        Cost cost1 = new Cost();
+        cost1.type = Cost.CostType.REST_SELF;
+        Cost cost2 = new Cost();
+        cost2.type = Cost.CostType.TRASH;
+        cost2.amount = 1;
+
+        assertTrue(gs.canAffordActivation(source, List.of(cost1, cost2), card),
+                "Should be affordable: card not rested + hand has 1 card");
+    }
+
+    @Test
+    void canAffordActivation_compound_falseWhenOneUnaffordable() {
+        Card card = TestUtils.makeCard(source, 2000);
+        gs.moveCard(card, source.getField());
+        // TRASH requires 1 hand card, but hand is empty
+
+        Cost cost1 = new Cost();
+        cost1.type = Cost.CostType.REST_SELF;
+        Cost cost2 = new Cost();
+        cost2.type = Cost.CostType.TRASH;
+        cost2.amount = 1;
+
+        assertFalse(gs.canAffordActivation(source, List.of(cost1, cost2), card),
+                "Should be unaffordable: hand is empty, cannot pay TRASH cost");
+    }
+
+    @Test
+    void canAffordActivation_emptyList_returnsTrue() {
+        Card card = TestUtils.makeCard(source, 2000);
+        assertTrue(gs.canAffordActivation(source, List.of(), card),
+                "Empty cost list should always be affordable");
+    }
+
+    @Test
+    void payActivationCost_compound_allCostsPaid() {
+        Card card = TestUtils.makeCard(source, 2000);
+        gs.moveCard(card, source.getField());
+        Card handCard = TestUtils.makeCard(source, 1000);
+        gs.moveCard(handCard, source.getHand());
+
+        Cost trash = new Cost();
+        trash.type = Cost.CostType.TRASH;
+        trash.amount = 1;
+        Cost trashSelf = new Cost();
+        trashSelf.type = Cost.CostType.TRASH_SELF;
+
+        boolean result = gs.payActivationCost(source, List.of(trash, trashSelf), card);
+
+        assertTrue(result, "Both costs should be paid");
+        assertTrue(source.getHand().getCards().isEmpty(), "Hand card should be trashed");
+        assertTrue(source.getTrash().getCards().contains(card), "Source card should be trashed");
+    }
+
+    @Test
+    void payActivationCost_compound_atomicFailure() {
+        // TRASH (1 from hand) + REST_SELF — hand is empty so canAffordActivation blocks both
+        Card card = TestUtils.makeCard(source, 2000);
+        gs.moveCard(card, source.getField());
+        // hand is empty — TRASH cost cannot be paid
+
+        Cost trash = new Cost();
+        trash.type = Cost.CostType.TRASH;
+        trash.amount = 1;
+        Cost restSelf = new Cost();
+        restSelf.type = Cost.CostType.REST_SELF;
+
+        boolean result = gs.payActivationCost(source, List.of(trash, restSelf), card);
+
+        assertFalse(result, "Should return false when any cost cannot be paid");
+        assertFalse(card.isRested(), "Card should not be rested (atomic failure — no partial payment)");
     }
 }

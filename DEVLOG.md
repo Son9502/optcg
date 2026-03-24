@@ -963,3 +963,93 @@ All existing 6-arg `new EffectData(...)` call sites updated with trailing `null`
 
 **Result:** 300 tests, 0 failures.
 
+---
+
+### Item 26 — `ACTIVATED_MAIN` abilities in CliController (collab)
+
+**Problem:** Ability cards with `[Activate:Main]` triggers (Leader abilities, Stage effects, Character activations) were never offered to the player during the main phase.
+
+**Design decisions (developer):**
+- `GameState.canAffordActivation(Player, List<Cost>, Card)` — checks each cost independently; returns false on first unaffordable cost (atomic)
+- `GameState.payActivationCost(Player, List<Cost>, Card)` — iterates costs only after the guard passes; blocked by `canAffordActivation`
+- All 9 `CostType` values handled in both methods: `DON`, `DON_MINUS`, `DON_REST`, `TRASH`, `TRASH_SELF`, `REST_SELF`, `REST_NAMED`, `REST_CHARACTER`, `REST_ANY`
+- `CostType.REST` removed (duplicate of `REST_SELF`); 5 exhaustive switch callsites updated
+- `CliController.activateAbility(Player)`: flat `ActivatablePair` list via `collectActivatable()`; `formatActivationCost()` displays cost inline; `announceActivation()` confirms action
+- `runMainPhases()` fixed: duplicate `case 7` removed, End Phase wired to `case 8`, `readInt` range corrected
+
+**Result:** 4 tests in `AbilityManagerTest`. 359 tests green.
+
+---
+
+### Item 27 — `OPPONENTS_TURN` trigger dispatch (collab)
+
+**Problem:** Abilities with `[Opponent's Turn]` triggers (e.g. "At the start of your opponent's turn") had no dispatch point — `TurnManager` never fired them.
+
+**Design (developer):**
+- `TurnManager.advancePhase(DON)` — already the transition into the active player's turn; adds `am.dispatchAll(OPPONENTS_TURN, opponent, opponent)` here, firing for the non-active player's field cards and leader
+- `opponent` passed as `actingPlayer` so DRAW/POWER_BOOST effects resolve from card owner's perspective, not the active player's
+- Bug found and fixed: initial draft dispatched for `activePlayer`'s cards (wrong); corrected to iterate the opponent's field
+
+**Result:** 4 tests in `TurnManagerTest`. 365 tests green.
+
+---
+
+### Item 28 — Compound activation costs (collab)
+
+**Problem:** ~25 cards use compound activation costs (e.g. "Rest this Character and trash 1 card from your hand"). `AbilityData.cost` was a single `Cost` object — it could not represent two simultaneous cost requirements.
+
+**Design (developer):**
+- `AbilityData` migrated from `Cost cost` to `List<Cost> costs`
+- `canAffordActivation(Player, List<Cost>, Card)` — checks each cost in the list independently; short-circuits on failure
+- `payActivationCost` — iterates costs atomically (all-or-nothing via the guard); if any cost fails the guard, no costs are applied
+- `REST_NAMED`, `REST_CHARACTER`, `REST_ANY` added to all exhaustive switches in `GameState` and `CliController`
+- `CardCompiler` `costs` array emission + parser compound cost extraction deferred to tools pipeline work (Phase 3 item 8)
+
+**Result:** 5 compound tests in `AbilityManagerTest` (`canAffordActivation_compound_true`, `_false`, `_emptyList`, `payActivationCost_compound_allPaid`, `_atomicFailure`). 370 tests green.
+
+---
+
+### Item 29 — `CardCompatibilityReport` + `LIFE` cost split (collab)
+
+**`CostType.LIFE` split (developer decision):**
+`LIFE` was a single cost type, but two distinct behaviours exist: Big Mom archetype places life cards into hand; other cards trash life cards outright. Developer chose Option A (split the enum value):
+- `LIFE_TO_HAND` — place N cards from the top of Life area into hand
+- `LIFE_TO_TRASH` — trash N cards from the top of Life area
+- `CardCompiler.parseSingleCostNode()` detects destination via `"into your hand"` / `"to your hand"` / `"add"` patterns in cost text
+- All 30 previously `LIFE`-flagged cards resolved to one of the two new values
+
+**`CardCompatibilityReport` (collab — developer-directed design):**
+
+Offline analysis tool. Walks all cards in `CardDatabase`, flags each against the engine's currently implemented sets of triggers, effects, conditions, and costs. Flags:
+- `UNIMPLEMENTED_TRIGGER` — trigger type not yet dispatched by the engine
+- `UNIMPLEMENTED_EFFECT` — `EffectType` not yet handled in `EffectFactory`
+- `UNIMPLEMENTED_CONDITION` — `Condition` not yet in `evaluateCondition()`
+- `UNIMPLEMENTED_COST` — `CostType` not yet in `canAffordActivation()`
+- `COMPOUND_COST` — `costs.size() > 1` (engine now supports this, but CardCompiler may not emit it)
+- `WHILE_IN_PLAY_DURATION` — source-dependent continuous effects not yet handled
+- `NO_ABILITIES` — non-blank description but `abilities` list is empty (parser gap)
+
+Outputs `csv/card_compatibility_report.csv` + console summary.
+
+**Key structural decisions (developer-identified fixes during collab):**
+- `UNIMPLEMENTED_TRIGGERS = Set.of(MAIN, ON_BLOCK, OPPONENTS_ATTACK)` — the three unimplemented triggers; all other triggers fire correctly
+- `IMPLEMENTED_CONDITIONS = EnumSet.allOf(Condition.class)` — all `Condition` enum values are implemented in `evaluateCondition()`; no `UNIMPLEMENTED_CONDITION` rows fire
+- `ability.costs()` null-guarded before iteration
+- `collectRows()` and per-card helpers extracted to class-level static methods
+- `groupingBy` stored in `Map<Flag, Long>` with `EnumMap` for ordered output
+- `checkEffects()` recursive for MODAL `choices` sub-branches
+
+**Baseline result:** 2322 total cards, 1903 fully playable (82%). Remaining gaps:
+- `UNIMPLEMENTED_TRIGGER`: 286 (MAIN×231, OPPONENTS_ATTACK×42, ON_BLOCK×11, 2 others)
+- `NO_ABILITIES`: 107 (keyword-only or counter-only text — genuine parser gap)
+- `COMPOUND_COST`: 4 cards (engine handles these; CardCompiler extraction pending)
+- `WHILE_IN_PLAY_DURATION`: remaining continuous effects (Phase 3)
+
+**Result:** All 30 LIFE cost cards resolved. `CardCompatibilityReport` writes correctly. 370 tests unchanged.
+
+---
+
+### Phase 2 complete — 370 tests, 1903/2322 cards (82%) fully playable
+
+All 29 Phase 2 items done. Deferred engine work (MAIN/ON_BLOCK/OPPONENTS_ATTACK triggers, WHILE_IN_PLAY recalc layer, replacement effects, real-card GameFactory decks) moved to `memory/phase3.md`. Next: Phase 2.5 — Tmux UI + local socket IPC layer (see `memory/phase2.5.md`).
+

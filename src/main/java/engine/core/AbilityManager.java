@@ -23,7 +23,7 @@ import java.util.List;
  *   <li>{@link Trigger#ON_KO}                  — {@code GameState.trash()}, when card was in CHARACTER zone</li>
  *   <li>{@link Trigger#END_OF_YOUR_TURN}       — {@code TurnManager.advancePhase(END)}, active player's cards</li>
  *   <li>{@link Trigger#END_OF_OPPONENTS_TURN}  — {@code TurnManager.advancePhase(END)}, opponent's cards</li>
- *   <li>{@link Trigger#TRIGGER}               — TODO (Tier 2): BattleSystem life-damage reveal</li>
+ *   <li>{@link Trigger#TRIGGER}               — {@code BattleSystem.resolveTrigger(Player, Card)}, called by {@code CliController.trigger()} after player confirms; card trashed post-effect</li>
  * </ul>
  *
  * <p>{@link Trigger#KEYWORD} abilities are never dispatched here — they are

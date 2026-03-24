@@ -7,6 +7,8 @@ public enum Trigger {
     ON_BLOCK,                // [On Block]           — auto effect when Blocker is activated (§10-2-15)
     ACTIVATED_MAIN,          // [Activate: Main]     — activate effect during Main Phase (§10-2-2)
     MAIN,                    // [Main]               — Event card effect in Main Phase (§10-2-3)
+    OPPONENTS_TURN,          // [Opponent's Turn]  — engine dispatch point at start of opponent's turn (§10-2-12);
+                             //   distinct from Condition.OPPONENTS_TURN which is the rulebook condition gate
     COUNTER,                 // [Counter]            — Event card effect in Counter Step (§10-2-4)
     TRIGGER,                 // [Trigger]            — life card trigger on damage (§10-1-5)
     END_OF_YOUR_TURN,        // [End of Your Turn]   — auto effect at End Phase (§10-2-7)
