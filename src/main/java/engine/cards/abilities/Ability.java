@@ -43,8 +43,8 @@ public class Ability {
     }
 
     /** The cost to activate this ability (DON, DON−X, TRASH, REST, etc.). */
-    public Cost getCost() {
-        return data.cost();
+    public List<Cost> getCosts() {
+        return data.costs();
     }
 
     /** Whether this ability can only be used once per turn. */

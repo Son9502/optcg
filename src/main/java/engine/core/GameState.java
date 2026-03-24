@@ -338,6 +338,157 @@ public class GameState {
     }
 
     /**
+     * Returns true if the player can currently afford the given activation cost
+     * without modifying any game state. Used to filter the activate-ability menu.
+     *
+     * @param player     the player who would pay
+     * @param cost       the cost to check (null = compound cost, not yet supported
+     *                   → false)
+     * @param sourceCard the card bearing the ability (needed for SELF-type costs)
+     */
+    public boolean canAffordActivation(Player player, List<Cost> costs, Card sourceCard) {
+
+        if (costs == null || costs.isEmpty())
+            return true;
+        for (Cost cost : costs) {
+            if (!canAffordSingleCost(player, cost, sourceCard)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Returns true if the player can afford a single cost without modifying any
+     * game state. Used for checking individual costs within a compound cost.
+     *
+     * @param player     the player who would pay
+     * @param cost       the cost to check
+     * @param sourceCard the card bearing the ability (needed for SELF-type costs)
+     * @return true if the player can afford the cost, false otherwise
+     */
+    public boolean canAffordSingleCost(Player player, Cost cost, Card sourceCard) {
+        return switch (cost.type) {
+            case DON -> activeDonInCostZone(player) >= cost.amount;
+            case DON_MINUS -> player.getCost().getCards().stream()
+                    .filter(c -> c instanceof DonCard).count() >= cost.amount;
+            case DON_REST -> activeDonOnField(player) >= cost.amount;
+            case TRASH -> player.getHand().size() >= cost.amount;
+            case TRASH_SELF, RETURN_SELF, PLACE_BOTTOM_SELF -> true;
+            case REST_SELF -> sourceCard != null && !sourceCard.isRested();
+            case REST_NAMED, REST_CHARACTER, REST_ANY ->
+                player.getField().getCards().stream().anyMatch(c -> !c.isRested());
+            case LIFE_TO_HAND, LIFE_TO_TRASH -> player.getLife().size() >= cost.amount;
+        };
+    }
+
+    /**
+     * Pays the activation cost of an [Activate:Main] ability. Mutates game state.
+     * Call {@link #canAffordActivation} first to guard.
+     *
+     * @param player     the player paying
+     * @param cost       the cost to pay (null = compound cost, not supported →
+     *                   false)
+     * @param sourceCard the card bearing the ability (needed for SELF-type costs)
+     * @return true if cost was paid successfully
+     */
+    public boolean payActivationCost(Player player, List<Cost> costs, Card sourceCard) {
+        if (!canAffordActivation(player, costs, sourceCard))
+            return false;
+        for (Cost cost : costs) {
+            switch (cost.type) {
+                case DON -> {
+                    int paid = 0;
+                    for (Card c : player.getCost().getCards()) {
+                        if (paid >= cost.amount)
+                            break;
+                        if (c instanceof DonCard don && !don.isRested() && !don.isAttached()) {
+                            don.rest();
+                            paid++;
+                        }
+                    }
+                }
+
+                case DON_MINUS -> {
+                    int returned = 0;
+                    List<Card> toReturn = new ArrayList<>();
+                    for (Card c : player.getCost().getCards()) {
+                        if (returned >= cost.amount)
+                            break;
+                        if (c instanceof DonCard) {
+                            toReturn.add(c);
+                            returned++;
+                        }
+                    }
+                    toReturn.forEach(c -> moveCard(c, player.getDonDeck()));
+                }
+                case DON_REST -> {
+                    int rested = 0;
+                    for (Card c : player.getField().getCards()) {
+                        if (rested >= cost.amount)
+                            break;
+                        if (c instanceof DonCard don && !don.isRested()) {
+                            don.rest();
+                            rested++;
+                        }
+                    }
+                }
+                case TRASH -> {
+                    // TargetSelector handles interactive pick; auto-picks first in non-CLI contexts
+                    List<Card> hand = new ArrayList<>(player.getHand().getCards());
+                    for (int i = 0; i < cost.amount && i < hand.size(); i++)
+                        trash(player, hand.get(i));
+                }
+                case TRASH_SELF -> trash(player, sourceCard);
+                case REST_SELF -> sourceCard.rest();
+                case REST_NAMED, REST_CHARACTER, REST_ANY -> {
+                    // Interactive selection deferred — auto-rest first N eligible field cards
+                    int rested = 0;
+                    for (Card c : List.copyOf(player.getField().getCards())) {
+                        if (rested >= cost.amount)
+                            break;
+                        if (!c.isRested()) {
+                            c.rest();
+                            rested++;
+                        }
+                    }
+                }
+                case RETURN_SELF -> moveCard(sourceCard, player.getHand());
+                case PLACE_BOTTOM_SELF -> moveCardtoBottom(sourceCard, player.getDeck());
+                case LIFE_TO_HAND -> {
+                    List<Card> life = new ArrayList<>(player.getLife().getCards());
+                    for (int i = 0; i < cost.amount && i < life.size(); i++)
+                        moveCard(life.get(i), player.getHand());
+                }
+                case LIFE_TO_TRASH -> {
+                    List<Card> life = new ArrayList<>(player.getLife().getCards());
+                    for (int i = 0; i < cost.amount && i < life.size(); i++)
+                        moveCard(life.get(i), player.getTrash());
+                }
+            }
+        }
+        return true;
+    }
+
+    // ── Activation cost helpers ──────────────────────────────────────────────
+
+    private int activeDonInCostZone(Player player) {
+        int count = 0;
+        for (Card c : player.getCost().getCards())
+            if (c instanceof DonCard don && !don.isRested() && !don.isAttached())
+                count++;
+        return count;
+    }
+
+    private int activeDonOnField(Player player) {
+        int count = 0;
+        for (Card c : player.getField().getCards())
+            if (c instanceof DonCard don && !don.isRested())
+                count++;
+        return count;
+    }
+
+    /**
      * Attach a Don card to a target card. This method will check if the specified
      * Don card
      * is in the cost zone and is not already rested, and if the target card is

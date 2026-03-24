@@ -33,7 +33,7 @@ public record CardData(
         @JsonProperty("abilities")    List<AbilityData> abilities) {
     public CardData {
         // Validate and set default values for optional fields
-        if (description == null) {
+        if (description == null || description.equalsIgnoreCase("null")) {
             description = "";
         }
         if (subTypes == null || subTypes.equalsIgnoreCase("null")) {

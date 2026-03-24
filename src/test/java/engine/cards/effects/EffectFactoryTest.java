@@ -12,6 +12,7 @@ import engine.cards.abilities.Trigger;
 import engine.cards.types.Attribute;
 import engine.cards.types.CardType;
 import engine.cards.types.Color;
+import engine.core.AbilityManager;
 import engine.core.GameState;
 import engine.player.Player;
 import engine.zones.ZoneType;
@@ -2175,4 +2176,46 @@ class EffectFactoryTest {
                 "Blue event card should not be modified due to card type filter");
     }
 
+    @Test
+    void negate_negatedCard_abilitySkippedByDispatch() {
+        // After NEGATE fires, dispatching the card's trigger should be a no-op
+        gs.moveCard(TestUtils.makeCard(source, 1000), source.getDeck());
+        Card oppChar = makeCharCard(opponent, 4000, 2);
+        EffectData draw = new EffectData(EffectType.DRAW, 1, null, null, null, null, null, null, 0);
+        AbilityData abilityData = new AbilityData(Trigger.ON_PLAY, 0, null, false, null, null, List.of(draw));
+        oppChar.addAbility(new Ability(abilityData));
+        gs.moveCard(oppChar, opponent.getField());
+
+        // Negate the card
+        Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER,
+                1, 0, 0, 0, 0, null, null, null, null);
+        EffectFactory.build(eff(EffectType.NEGATE, 0, t, null, null, null, null, 0), null)
+                .apply(gs, source);
+
+        // Dispatch should skip the negated ability
+        AbilityManager am = new AbilityManager(gs);
+        gs.setAbilityManager(am);
+        am.dispatch(Trigger.ON_PLAY, oppChar, opponent);
+
+        assertTrue(opponent.getHand().getCards().isEmpty(), "Negated ability should not fire");
+    }
+
+    @Test
+    void negate_allCardsOnField_abilitiesNegated() {
+        // When max covers all field cards, every matching card's abilities are negated
+        Card oppChar1 = makeCharCard(opponent, 3000, 1);
+        Card oppChar2 = makeCharCard(opponent, 4000, 2);
+        Ability a1 = attachAbility(oppChar1, Trigger.ON_PLAY);
+        Ability a2 = attachAbility(oppChar2, Trigger.ON_PLAY);
+        gs.moveCard(oppChar1, opponent.getField());
+        gs.moveCard(oppChar2, opponent.getField());
+
+        Target t = tgt(Target.TargetPlayer.OPPONENT, ZoneType.CHARACTER, CardType.CHARACTER,
+                2, 0, 0, 0, 0, null, null, null, null);
+        EffectFactory.build(eff(EffectType.NEGATE, 0, t, null, null, null, null, 0), null)
+                .apply(gs, source);
+
+        assertTrue(a1.isNegated(), "First card's ability should be negated");
+        assertTrue(a2.isNegated(), "Second card's ability should be negated");
+    }
 }

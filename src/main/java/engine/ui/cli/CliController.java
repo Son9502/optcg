@@ -21,6 +21,7 @@ import engine.cards.effects.TargetSelector;
 import engine.cards.keywords.Keyword;
 import engine.cards.types.CardType;
 import engine.cards.types.Color;
+import engine.cards.abilities.Cost;
 import engine.battle.BattleSystem;
 
 import java.util.stream.Collectors;
@@ -512,11 +513,10 @@ public class CliController {
             System.out.printf("%d. Reveal Opponent's Field\n", mod + 3);
             System.out.printf("%d. Play Card\n", mod + 4);
             System.out.printf("%d. Attach Don\n", mod + 5);
-            // TODO: Use Leader's Ability (ACTIVATED_MAIN trigger — not yet implemented)
-            // System.out.printf("%d. Use Leader's Ability\n", mod + 6);
-            System.out.printf("%d. End Phase\n", mod + 6);
-            int choice = inputHandler.readInt("Choose an action: ", 1, 7 - (mod == 0 ? 1 : 0));
-            switch (choice + (mod == 0 ? 1 : 0)) {
+            System.out.printf("%d. Activate an ability\n", mod + 6);
+            System.out.printf("%d. End Phase\n", mod + 7);
+            int choice = inputHandler.readInt("Choose an action: ", 1, 8 - (mod == 0 ? 2 : 0));
+            switch (choice + (mod == 0 ? 2 : 0)) {
                 case 1:
                     battle(currentPlayer);
                     break;
@@ -535,10 +535,10 @@ public class CliController {
                 case 6:
                     attachDon(currentPlayer);
                     break;
-                // case 7: Use Leader's Ability — stub, uncomment when ACTIVATED_MAIN is wired
-                // System.out.println("Leader ability not yet implemented.");
-                // break;
                 case 7:
+                    activateAbility(currentPlayer);
+                    break;
+                case 8:
                     finished = true;
                     turnManager.advancePhase();
                     break;
@@ -691,6 +691,115 @@ public class CliController {
         String desc = cardTriggerLine(triggerCard);
         System.out.println("  → " + player.getName() + " activates " + name
                 + "'s [Trigger]" + (desc.isEmpty() ? "!" : ": " + WHITE + desc + RESET));
+    }
+
+    // ── Activate:Main ────────────────────────────────────────────────────────
+
+    /** (Card, Ability) pair used to build the flat activate-ability menu. */
+    private record ActivatablePair(Card card, String cardLabel, engine.cards.abilities.Ability ability) {}
+
+    /**
+     * Shows a flat numbered menu of every affordable [Activate:Main] ability
+     * available to {@code player} across their Leader, field, and stage.
+     * Each (card, ability) pair is its own line.  Player picks one or cancels.
+     */
+    public void activateAbility(Player player) {
+        List<ActivatablePair> options = new ArrayList<>();
+
+        // Leader
+        Card leader = player.getLeader();
+        if (leader != null) collectActivatable(player, leader, "[Leader]", options);
+
+        // Field characters (snapshot to avoid CME if effect moves cards)
+        for (Card c : List.copyOf(player.getField().getCards()))
+            collectActivatable(player, c, "[Character]", options);
+
+        // Stage
+        if (!player.getStage().getCards().isEmpty()) {
+            Card stage = player.getStage().getCards().iterator().next();
+            collectActivatable(player, stage, "[Stage]", options);
+        }
+
+        if (options.isEmpty()) {
+            System.out.println("  No abilities available to activate.");
+            return;
+        }
+
+        System.out.println("\nActivate an ability:");
+        for (int i = 0; i < options.size(); i++) {
+            ActivatablePair p = options.get(i);
+            String costStr = formatActivationCost(p.ability().getCosts());
+            String desc    = cardAbilityLine(p.card());
+            String name    = boldColorize(p.card().getData().name(), p.card().getData().colors());
+            System.out.printf("  %d. %s %s%s — [Activate: Main] %s%s%s%n",
+                    i + 1, p.cardLabel(), name, RESET, costStr,
+                    desc.isEmpty() ? "" : " " + WHITE + desc + RESET, "");
+        }
+        System.out.println("  0. Cancel");
+
+        int choice = inputHandler.readInt("Choose an ability: ", 0, options.size());
+        if (choice == 0) return;
+
+        ActivatablePair chosen = options.get(choice - 1);
+        boolean paid = gameState.payActivationCost(player, chosen.ability().getCosts(), chosen.card());
+        if (!paid) {
+            System.out.println("  Cannot pay the activation cost.");
+            return;
+        }
+        gameState.getAbilityManager().dispatch(Trigger.ACTIVATED_MAIN, chosen.card(), player);
+        announceActivation(player, chosen.card(), chosen.ability());
+    }
+
+    /** Adds all affordable ACTIVATED_MAIN abilities on {@code card} to {@code out}. */
+    private void collectActivatable(Player player, Card card,
+                                    String label, List<ActivatablePair> out) {
+        for (engine.cards.abilities.Ability a : card.getAbilities()) {
+            if (a.getTriggerType() != Trigger.ACTIVATED_MAIN) continue;
+            if (!a.canActivate()) continue;
+            if (!gameState.canAffordActivation(player, a.getCosts(), card)) continue;
+            out.add(new ActivatablePair(card, label, a));
+        }
+    }
+
+    /** Formats a Cost for display, e.g. "(DON!! −1)" or "(REST)". */
+    private String formatActivationCost(List<Cost> costs) {
+        if (costs == null || costs.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (Cost cost : costs) {
+            sb.append(formatSingleCost(cost)).append(" + ");
+        }
+        if (sb.length() >= 3) {
+            sb.setLength(sb.length() - 3); // Remove the trailing " + "
+        }
+        return sb.toString();
+    }
+
+    /** Formats a single Cost for display. */
+    private String formatSingleCost(Cost cost) {
+        return switch (cost.type) {
+            case DON              -> "(DON!! ×" + cost.amount + ")";
+            case DON_MINUS        -> "(DON!! −" + cost.amount + ")";
+            case DON_REST         -> "(rest " + cost.amount + " DON!!)";
+            case TRASH            -> "(trash " + cost.amount + " cards from hand)";
+            case TRASH_SELF       -> "(trash this card)";
+            case REST_SELF        -> "(rest this card)";
+            case REST_NAMED       -> "(rest 1 of your [" + (cost.amount > 0 ? cost.amount : "?") + "] cards)";
+            case REST_CHARACTER   -> "(rest " + cost.amount + " of your Characters)";
+            case REST_ANY         -> "(rest " + cost.amount + " of your cards)";
+            case RETURN_SELF      -> "(return this card to hand)";
+            case PLACE_BOTTOM_SELF-> "(place this card at bottom of deck)";
+            case LIFE_TO_HAND     -> "(place " + cost.amount + " life → hand)";
+            case LIFE_TO_TRASH    -> "(trash " + cost.amount + " life)";
+        };
+    }
+
+    /** Printed when a player activates an [Activate:Main] ability. */
+    public void announceActivation(Player player, Card card,
+                                   engine.cards.abilities.Ability ability) {
+        String name = boldColorize(card.getData().name(), card.getData().colors());
+        String desc = cardAbilityLine(card);
+        System.out.println("  → " + player.getName() + " activates " + name + RESET
+                + "'s [Activate: Main]" + (desc.isEmpty() ? "!" : ": " + WHITE + desc + RESET));
     }
 
     /**

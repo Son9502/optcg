@@ -4,9 +4,9 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 
 ---
 
-## Current Status — Phase 2 *(in progress)*
+## Current Status — Phase 2 *(complete)*
 
-> **CMU (Command-line Minimum UI)** is the first milestone: a fully playable single game via the terminal with no graphics. Phase 1 is complete. Phase 2 is wiring keyword and effect semantics into the rules engine.
+> **CMU (Command-line Minimum UI)** is the first milestone: a fully playable single game via the terminal with no graphics. Phase 1 and Phase 2 are complete. All 29 Phase 2 items are done — 370 tests green, 1903/2322 cards (82%) fully playable. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse.
 
 **What works today:**
 - Full turn cycle: REFRESH → DRAW → DON → MAIN → END
@@ -23,7 +23,7 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 - `MOVE_TO_TOP_DECK` / `MOVE_TO_BOTTOM_DECK` effects: move cards to top or bottom of a player's deck
 - `PREVENT_ATTACK` / `PREVENT_KO` / `PREVENT_BLOCK` effects: enforced via temporary keywords (`CANNOT_ATTACK`, `CANNOT_KO`, `UNBLOCKABLE`); cleared during REFRESH; `WHILE_IN_PLAY` duration adds permanent `Ability` object
 - `PLAY_CARD` effect: play a card for free from hand or trash (routes by card type: CHARACTER → field, EVENT → trash, STAGE → stage); `ON_PLAY` dispatched normally
-- `MODAL` effect: choose-one branching; engine picks branch 0 by default (CliController interactive menu pending)
+- `MODAL` effect: choose-one branching; `ModalSelector` functional interface stored on `GameState`; engine picks branch 0 by default (interactive CLI menu available via `setModalSelector`)
 - `NEGATE` effect: suppresses all abilities on the targeted card for the current turn via `Ability.isNegated` flag; `AbilityManager.dispatch()` skips negated abilities; cleared by `ability.resetTurn()` during REFRESH
 - `RUSH_CHARACTER` keyword: character can attack on the turn it is played; valid targets restricted to rested Characters only (cannot attack the opponent's Leader)
 - Duration correctness: all four `Duration` values route to separate power/cost buckets — `THIS_BATTLE` → `bonusBattlePower` (cleared post-battle); `THIS_TURN` → `bonusPower`/`bonusCost` (cleared each turn); `OPPONENTS_NEXT_TURN` → `bonusPowerOpponentTurn`/`bonusCostOpponentTurn` (cleared by `TurnManager.endTurn()` on non-active player); `WHILE_IN_PLAY` → `bonusPowerWhileInPlay`/`bonusCostWhileInPlay` (cleared when card leaves field)
@@ -39,7 +39,11 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 - `CardData` record carries a `subTypes` field (normalized from API `sub_types` strings)
 - `CardDatabase` secondary index: `getByName()` (O(1)), `getBySubtype()` (O(n)), `getAllCards()`
 - `CsvGenerator`: offline tool that rebuilds `card_names_subtypes.csv` from compiled (or raw) JSON with name normalization and deduplication
-- 355 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty; 1 shuffle test is probabilistically flaky by design)
+- 370 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty; 1 shuffle test is probabilistically flaky by design)
+- `CardCompatibilityReport` tool: flags UNIMPLEMENTED_TRIGGER, UNIMPLEMENTED_EFFECT, UNIMPLEMENTED_COST, COMPOUND_COST, WHILE_IN_PLAY_DURATION, NO_ABILITIES; baseline: 2322 total cards, 1903 fully playable (82%); writes `csv/card_compatibility_report.csv`
+- `[Activate:Main]` abilities wired in `CliController`: `GameState.canAffordActivation()` / `payActivationCost()` for all 9 `CostType` values; `CliController.activateAbility(Player)` with interactive cost display; compound activation costs (`List<Cost>`) checked atomically
+- `[Opponent's Turn]` trigger dispatch: `TurnManager.advancePhase(DON)` calls `am.dispatchAll(OPPONENTS_TURN, opponent, opponent)` — fires for non-active player's field + leader; power/keyword boosts use `THIS_TURN` duration and clear via `refreshField()`
+- `CostType.LIFE` split into `LIFE_TO_HAND` (place life → hand, Big Mom archetype) and `LIFE_TO_TRASH` (trash life cards); `CardCompiler` detects destination from cost text patterns
 
 ---
 
@@ -183,14 +187,14 @@ mvn exec:java -Dexec.mainClass="tools.CsvGenerator"
 mvn test
 ```
 
-**Current test suite: 355 tests, 0 failures, 0 errors.**
+**Current test suite: 370 tests, 0 failures, 0 errors.**
 10 `CardDatabaseTest` cases are data-dependent and skip automatically (via `assumeTrue`) when `raw/data/` is empty — run `CardScraper` first to populate. 1 shuffle test is probabilistically flaky by design (documented in the test).
 
 | Test class | Tests | Coverage area |
 |---|---|---|
 | `BattleHandlerTest` | 35 | `canAttack`, `getValidAttackers`, `getValidTargets`, `resolve`, keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, Rush:Character) |
-| `AbilityManagerTest` | 11 | `dispatch` for ON_PLAY, WHEN_ATTACKING, ON_KO, END_OF_YOUR_TURN, DON!! xX condition gate, once-per-turn, TRIGGER |
-| `TurnManagerTest` | 6 | Phase transitions, turn count, Don draw counts |
+| `AbilityManagerTest` | 20 | `dispatch` for ON_PLAY, WHEN_ATTACKING, ON_KO, END_OF_YOUR_TURN, DON!! xX condition gate, once-per-turn, TRIGGER; `canAffordActivation`/`payActivationCost` for all 9 CostType values; compound costs (atomic check + payment) |
+| `TurnManagerTest` | 10 | Phase transitions, turn count, Don draw counts, OPPONENTS_TURN dispatch for field + leader |
 | `GameStateTest` | 14 | Draw, trash, play card, remove life, refresh, cost payment, field/stage limits |
 | `GameSetupTest` | 4 | Initialization, mulligan, life setup |
 | `CardTest` | 7 | Rest/activate, Don attachment and detach, summoning sickness, grantKeyword, clearGrantedKeywords, hasKeyword (permanent survives clear) |
@@ -269,7 +273,8 @@ src/
 │   │       ├── EffectTemplateCsvGenerator.java  ← Reads compiled JSON → Parser → generalise → split compound effects → write generic/unique CSV pair
 │   │       ├── CardChecklistCsvGenerator.java   ← Reads compiled cards → EffectLexer → collects UNKNOWN tokens → writes csv/card_checklist.csv
 │   │       ├── LexerCoverageReport.java         ← Runs EffectLexer on all CSV templates; reports fully-tokenised % and top unknown tokens
-│   │       └── Report.java                      ← Shared CSV row record used by LexerCoverageReport
+│   │       ├── Report.java                      ← Shared CSV row record used by LexerCoverageReport
+│   │       └── CardCompatibilityReport.java     ← Flags cards not yet fully playable by the engine; writes csv/card_compatibility_report.csv
 │   └── resources/
 │       ├── compiled/data/                       ← Engine-ready JSON (CardDatabase reads this)
 │       │   ├── sets/                            ← One file per card set (e.g. OP01.json)
@@ -330,7 +335,9 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 - `asText()` deprecation resolved in `CardCompiler` and `CsvGenerator` (`asText(null)` → `textValue()`)
 - Rulebook-correct keyword list: Rush, Rush: Character, Blocker, Double Attack, Banish, Unblockable, Trigger, Counter
 
-### Phase 2 — Abilities, Effects, and Keywords *(in progress)*
+### Phase 2 — Abilities, Effects, and Keywords *(complete)*
+
+All 29 items complete. 370 tests green. 1903/2322 cards (82%) fully playable per `CardCompatibilityReport`.
 
 **Complete:**
 - `AbilityData` wired end-to-end: `CardCompiler` emits typed ability JSON, `CardDatabase` deserializes into `List<AbilityData>`, `AbilityFactory` hydrates runtime `Ability` objects on every card, `Card.hasKeyword()` works as a single-line predicate
@@ -359,11 +366,12 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 - **`SHUFFLE_DECK`** effect: `Deck.shuffle()` implemented; wired in `EffectFactory`
 - **`GRANT_KEYWORD`** effect: `Card.grantKeyword(Keyword)` / `clearGrantedKeywords()`; `hasKeyword()` checks runtime grants before permanent abilities; `GameState.refreshField()` clears grants each turn; `EffectData.keyword` field added
 
-- `EffectFactory.evaluateCondition()` real implementations: `IF_LEADER_COLOR` (`colors().size() > 1`), `IF_LEADER_NAME` (name equalsIgnoreCase), `IF_LEADER_TYPE` (`containsSubtype`), `IF_LEADER_ATTRIBUTE` (attribute enum name match), `IF_FIELD_CHARACTER_TYPE` (field scan); `Condition` enum gained `IF_LEADER_NAME` and `IF_LEADER_ATTRIBUTE`
-
-**Remaining:**
-- `[Activate:Main]` effects (item #26): player-activated abilities during the Main Phase for Leader, Stage, and Character cards; pay cost (rest N DON or trash hand card) → dispatch via `AbilityManager`; uncomment "Use Leader's Ability" stub in `CliController`
-- `[Opponent's Turn]` trigger dispatch (item #27): add `OPPONENTS_TURN` to `Trigger` enum; `TurnManager` dispatches at start of opponent's turn for all field cards + leader; power/keyword boosts inside use `THIS_TURN` duration and clear naturally via `refreshField()`
+- `EffectFactory.evaluateCondition()` real implementations: `IF_LEADER_MULTICOLORED` (`colors().size() > 1`), `IF_LEADER_NAME` (name equalsIgnoreCase), `IF_LEADER_TYPE` (`containsSubtype`), `IF_LEADER_ATTRIBUTE` (attribute enum name match), `IF_FIELD_CHARACTER_TYPE` (field scan); `Condition` enum gained `IF_LEADER_NAME` and `IF_LEADER_ATTRIBUTE`; `IF_LEADER_COLOR` renamed to `IF_LEADER_MULTICOLORED`
+- `[Activate:Main]` abilities wired in `CliController`: `GameState.canAffordActivation(Player, List<Cost>, Card)` + `payActivationCost`; all 9 `CostType` values handled (DON, DON_MINUS, DON_REST, TRASH, TRASH_SELF, REST_SELF, REST_NAMED, REST_CHARACTER, REST_ANY); `CliController.activateAbility(Player)` with interactive cost menu and `formatActivationCost()` display
+- `[Opponent's Turn]` trigger dispatch: `TurnManager.advancePhase(DON)` calls `am.dispatchAll(OPPONENTS_TURN, opponent, opponent)` for non-active player's field + leader; power/keyword boosts use `THIS_TURN` duration
+- Compound activation costs: `AbilityData` uses `List<Cost> costs`; `canAffordActivation` checks all costs atomically; `payActivationCost` iterates only after the guard succeeds
+- `CostType.LIFE` split into `LIFE_TO_HAND` (place top life cards → hand, Big Mom archetype) and `LIFE_TO_TRASH` (trash life cards); `CardCompiler` detects destination from cost text; all 30 previously flagged LIFE cost cards resolved
+- `CardCompatibilityReport` tool: offline analysis of `CardDatabase` against engine; flags UNIMPLEMENTED_TRIGGER, UNIMPLEMENTED_EFFECT, UNIMPLEMENTED_CONDITION, UNIMPLEMENTED_COST, COMPOUND_COST, WHILE_IN_PLAY_DURATION, NO_ABILITIES; writes `csv/card_compatibility_report.csv`; baseline: 2322 cards, 1903 fully playable (82%)
 
 ### Phase 2.5 — Enhanced CMU (Tmux UI)
 
@@ -464,4 +472,4 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
 
 See [DEVLOG.md](DEVLOG.md) for a full account of what was built manually, what was AI-assisted, the key prompts used, and what changed through iteration.
 
-*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is in progress: all keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, GRANT_KEYWORD) are implemented and tested; the full tools pipeline (EffectLexer → EffectParser → CardCompiler → compiled JSON) is operational with 99%/96% lexer coverage and EffectParser Phase 1 complete; Counter resolution, Event effects, and [Activate:Main] ability evaluation remain. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*
+*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is complete: all 29 items done, 370 tests green, 1903/2322 cards (82%) fully playable; keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, GRANT_KEYWORD), the full tools pipeline (EffectLexer → EffectParser → CardCompiler → compiled JSON) with 99%/96% lexer coverage, ACTIVATED_MAIN interactive abilities, OPPONENTS_TURN dispatch, compound costs, and the CardCompatibilityReport playability baseline are all in. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*
