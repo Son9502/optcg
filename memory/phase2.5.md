@@ -1,6 +1,6 @@
 # Phase 2.5 Roadmap — Enhanced CMU (Tmux UI + IPC Layer)
 
-A purely terminal-based upgrade. The rules engine is **completely unchanged** — only the presentation layer is extended. This phase also builds the local socket IPC layer that the Phase 3 GUI will reuse.
+A purely terminal-based upgrade. The rules engine is **completely unchanged** — only the presentation layer is extended. This phase also builds the local socket IPC layer that the Phase 5 GUI will reuse (GUI was moved from Phase 3 to Phase 5 — see `memory/phase3.md`).
 
 ## Architecture
 
@@ -9,7 +9,7 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
                                     │
                     ┌───────────────┼─────────────────┐
                     ▼               ▼                 ▼
-             BoardRenderer     ChatLog.java      [Phase 3]
+             BoardRenderer     ChatLog.java      [Phase 5]
              (ANSI/Tmux)      (chat.log tail)   JavaFX GUI
 ```
 

@@ -1,4 +1,4 @@
-# Phase 3 Roadmap — Engine Completion + GUI
+# Phase 3 Roadmap — Engine Completion
 
 ## Tier 1 — Remaining Engine (Blocks Correct Gameplay)
 
@@ -15,7 +15,7 @@
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | 6 | Passive-global NEGATE (Teach OP09-081, Roger OP13-064) | pending | Negate all `[On Play]` effects globally. Requires a permanent-effect layer checked at dispatch time in `AbilityManager.dispatch()`. |
-| 7 | `NO_ABILITIES` 107 cards — parser gap | pending | Cards with keyword-only or counter-only text produce no `AbilityData`. Audit via `CardCompatibilityReport` CSV to determine how many genuinely need parser work vs. are correctly ability-less. |
+| 7 | `NO_ABILITIES` parser gap | resolved | Re-verified 2026-09-14 by regenerating `compiled/` from `raw/` and re-running `CardCompatibilityReport`: 0 `NO_ABILITIES` rows in the current baseline (was 107 at end of Phase 2). No further work needed here. |
 | 8 | CardCompiler compound cost pattern extraction | pending | `EffectParser` does not yet recognize all compound cost patterns from card text. Run `CardCompatibilityReport` after each compiler pass to track progress. |
 | 9 | `GameFactory` real-card decks | pending | Replace the 12 synthetic dummy decks with real compiled cards from `CardDatabase`, selected using `CardCompatibilityReport` to ensure fully-playable picks. |
 
@@ -25,9 +25,11 @@ JavaFX GUI moved to **Phase 5** (Battle Mode). An existing OPTCG sim already cov
 
 ---
 
-## CardCompatibilityReport baseline (end of Phase 2)
-- Total cards: 2322 | Fully playable: 1903 (82%)
+## CardCompatibilityReport baseline (re-verified 2026-09-14)
+- Total cards: 2322 | Fully playable: 2032 (87.5%)
 - UNIMPLEMENTED_TRIGGER: 286 (MAIN×231, OPPONENTS_ATTACK×42, ON_BLOCK×11, and 2 others)
 - UNIMPLEMENTED_COST: 0 (LIFE split into LIFE_TO_HAND / LIFE_TO_TRASH — resolved)
 - COMPOUND_COST: 4 cards
-- NO_ABILITIES: 107 cards
+- NO_ABILITIES: 0 cards (was 107 at end of Phase 2 — resolved since, see item 7 above)
+
+Note: the `compiled/` directory is gitignored (regenerated locally from `raw/` via `CardCompiler`, never committed). The 1903/82% figure recorded in `DEVLOG.md` at Phase 2 completion is a legitimate historical snapshot from that session, but the local `compiled/` cache in this checkout had gone stale since (found still emitting the pre-Item-28 singular `"cost"` field instead of `"costs"`, causing `CardDatabase` to silently skip most cards on load). Regenerating via `CardCompiler` before reporting fixed it — the numbers above are from the fresh run. If a future session's `CardCompatibilityReport` output looks implausibly low (e.g. only a few hundred cards analyzed), regenerate `compiled/` first before trusting the number.

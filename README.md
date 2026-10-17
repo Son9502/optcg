@@ -6,7 +6,7 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 
 ## Current Status — Phase 2 *(complete)*
 
-> **CMU (Command-line Minimum UI)** is the first milestone: a fully playable single game via the terminal with no graphics. Phase 1 and Phase 2 are complete. All 29 Phase 2 items are done — 370 tests green, 1903/2322 cards (82%) fully playable. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse.
+> **CMU (Command-line Minimum UI)** is the first milestone: a fully playable single game via the terminal with no graphics. Phase 1 and Phase 2 are complete. All 29 Phase 2 items are done — 370 tests green, 2032/2322 cards (87.5%) fully playable. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 5's GUI will reuse.
 
 **What works today:**
 - Full turn cycle: REFRESH → DRAW → DON → MAIN → END
@@ -40,7 +40,7 @@ A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term v
 - `CardDatabase` secondary index: `getByName()` (O(1)), `getBySubtype()` (O(n)), `getAllCards()`
 - `CsvGenerator`: offline tool that rebuilds `card_names_subtypes.csv` from compiled (or raw) JSON with name normalization and deduplication
 - 370 unit tests — 0 failures (10 data-dependent `CardDatabaseTest` tests skip cleanly when `raw/data/` is empty; 1 shuffle test is probabilistically flaky by design)
-- `CardCompatibilityReport` tool: flags UNIMPLEMENTED_TRIGGER, UNIMPLEMENTED_EFFECT, UNIMPLEMENTED_COST, COMPOUND_COST, WHILE_IN_PLAY_DURATION, NO_ABILITIES; baseline: 2322 total cards, 1903 fully playable (82%); writes `csv/card_compatibility_report.csv`
+- `CardCompatibilityReport` tool: flags UNIMPLEMENTED_TRIGGER, UNIMPLEMENTED_EFFECT, UNIMPLEMENTED_COST, COMPOUND_COST, WHILE_IN_PLAY_DURATION, NO_ABILITIES; baseline: 2322 total cards, 2032 fully playable (87.5%); writes `csv/card_compatibility_report.csv`
 - `[Activate:Main]` abilities wired in `CliController`: `GameState.canAffordActivation()` / `payActivationCost()` for all 9 `CostType` values; `CliController.activateAbility(Player)` with interactive cost display; compound activation costs (`List<Cost>`) checked atomically
 - `[Opponent's Turn]` trigger dispatch: `TurnManager.advancePhase(DON)` calls `am.dispatchAll(OPPONENTS_TURN, opponent, opponent)` — fires for non-active player's field + leader; power/keyword boosts use `THIS_TURN` duration and clear via `refreshField()`
 - `CostType.LIFE` split into `LIFE_TO_HAND` (place life → hand, Big Mom archetype) and `LIFE_TO_TRASH` (trash life cards); `CardCompiler` detects destination from cost text patterns
@@ -213,6 +213,8 @@ mvn test
 
 ## Project Architecture
 
+> For *how* these pieces fit together — data flow, who owns combat vs. state vs. presentation, and the invariants that keep them from drifting apart — see [ARCHITECTURE.md](ARCHITECTURE.md). This section below is just the file tree.
+
 ```
 src/
 ├── main/
@@ -337,7 +339,7 @@ Single-machine two-player CLI game with dummy decks. Validates the core rules en
 
 ### Phase 2 — Abilities, Effects, and Keywords *(complete)*
 
-All 29 items complete. 370 tests green. 1903/2322 cards (82%) fully playable per `CardCompatibilityReport`.
+All 29 items complete. 370 tests green. 2032/2322 cards (87.5%) fully playable per `CardCompatibilityReport`.
 
 **Complete:**
 - `AbilityData` wired end-to-end: `CardCompiler` emits typed ability JSON, `CardDatabase` deserializes into `List<AbilityData>`, `AbilityFactory` hydrates runtime `Ability` objects on every card, `Card.hasKeyword()` works as a single-line predicate
@@ -371,13 +373,13 @@ All 29 items complete. 370 tests green. 1903/2322 cards (82%) fully playable per
 - `[Opponent's Turn]` trigger dispatch: `TurnManager.advancePhase(DON)` calls `am.dispatchAll(OPPONENTS_TURN, opponent, opponent)` for non-active player's field + leader; power/keyword boosts use `THIS_TURN` duration
 - Compound activation costs: `AbilityData` uses `List<Cost> costs`; `canAffordActivation` checks all costs atomically; `payActivationCost` iterates only after the guard succeeds
 - `CostType.LIFE` split into `LIFE_TO_HAND` (place top life cards → hand, Big Mom archetype) and `LIFE_TO_TRASH` (trash life cards); `CardCompiler` detects destination from cost text; all 30 previously flagged LIFE cost cards resolved
-- `CardCompatibilityReport` tool: offline analysis of `CardDatabase` against engine; flags UNIMPLEMENTED_TRIGGER, UNIMPLEMENTED_EFFECT, UNIMPLEMENTED_CONDITION, UNIMPLEMENTED_COST, COMPOUND_COST, WHILE_IN_PLAY_DURATION, NO_ABILITIES; writes `csv/card_compatibility_report.csv`; baseline: 2322 cards, 1903 fully playable (82%)
+- `CardCompatibilityReport` tool: offline analysis of `CardDatabase` against engine; flags UNIMPLEMENTED_TRIGGER, UNIMPLEMENTED_EFFECT, UNIMPLEMENTED_CONDITION, UNIMPLEMENTED_COST, COMPOUND_COST, WHILE_IN_PLAY_DURATION, NO_ABILITIES; writes `csv/card_compatibility_report.csv`; baseline: 2322 cards, 2032 fully playable (87.5%)
 
 ### Phase 2.5 — Enhanced CMU (Tmux UI)
 
 A purely terminal-based upgrade that gives the CMU a persistent, multi-pane layout using **Tmux** — no graphics, no framework, no new runtime dependencies. The rules engine is completely unchanged; only the presentation layer is extended.
 
-This phase also builds the **local socket IPC layer** that the Phase 3 GUI will reuse. Since the GUI and CLI will have identical capabilities in different formats, the state-broadcast infrastructure built here is not throwaway work — Phase 3 simply swaps the Tmux board renderer for a JavaFX one connected to the same socket.
+This phase also builds the **local socket IPC layer** that the Phase 5 GUI will reuse. Since the GUI and CLI will have identical capabilities in different formats, the state-broadcast infrastructure built here is not throwaway work — Phase 5 simply swaps the Tmux board renderer for a JavaFX one connected to the same socket.
 
 **Layout (3 panes):**
 ```
@@ -407,7 +409,7 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
                                     │
                     ┌───────────────┼─────────────────┐
                     ▼               ▼                 ▼
-             BoardRenderer     ChatLog.java      [Phase 3]
+             BoardRenderer     ChatLog.java      [Phase 5]
              (ANSI/Tmux)      (chat.log tail)   JavaFX GUI
 ```
 
@@ -421,7 +423,7 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
 - Opponent's field is always in view during decision-making
 - Card colors are visually scannable (ANSI codes — Red/Green/Blue/Purple/Black/Yellow) rather than plain text labels
 - Chat is persistent and kept separate from game output
-- The socket layer is the foundation both the Tmux board renderer and the Phase 3 GUI connect to — building it here means Phase 3 is purely a renderer swap, not a re-architecture
+- The socket layer is the foundation both the Tmux board renderer and the Phase 5 GUI connect to — building it here means Phase 5 is purely a renderer swap, not a re-architecture
 
 **What it cannot do vs. a GUI:**
 - No card images, drag-and-drop, or mouse interaction
@@ -440,8 +442,12 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
 - `ON_BLOCK` trigger dispatch (11 cards): fires when a Blocker is declared
 - `WHILE_IN_PLAY` recalculate-on-query layer: `getPowerWithEffects()` scans active continuous-effect abilities on each call instead of stale buckets
 - Replacement effects: interrupt hook in `BattleSystem` + `GameState` for "if this would be K.O.'d… instead" effects
+- Passive-global `NEGATE` (e.g. Teach OP09-081, Roger OP13-064): negate all `[On Play]` effects globally, not just on one targeted card; needs a permanent-effect layer checked at dispatch time in `AbilityManager.dispatch()`
+- `CardCompiler` compound-cost pattern extraction (4 cards): `EffectParser` does not yet recognize every compound cost pattern from card text
 - `GameFactory` real-card decks: replace 12 synthetic dummy decks with compiled cards selected via `CardCompatibilityReport`
 - `CliController` + Tmux UI kept as the primary play surface throughout this phase
+
+None of these are started yet — `CardCompatibilityReport`'s current baseline (2322 cards, 2032 playable) is entirely UNIMPLEMENTED_TRIGGER (286: MAIN×231, OPPONENTS_ATTACK×42, ON_BLOCK×11, 2 others) and COMPOUND_COST (4); the `NO_ABILITIES` parser gap that used to account for 107 cards is now fully closed.
 
 ### Phase 4 — Training Mode
 - **Tutorial**: guided walkthrough of rules and actions
@@ -475,4 +481,4 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
 
 See [DEVLOG.md](DEVLOG.md) for a full account of what was built manually, what was AI-assisted, the key prompts used, and what changed through iteration.
 
-*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is complete: all 29 items done, 370 tests green, 1903/2322 cards (82%) fully playable; keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, GRANT_KEYWORD), the full tools pipeline (EffectLexer → EffectParser → CardCompiler → compiled JSON) with 99%/96% lexer coverage, ACTIVATED_MAIN interactive abilities, OPPONENTS_TURN dispatch, compound costs, and the CardCompatibilityReport playability baseline are all in. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 3's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats.*
+*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is complete: all 29 items done, 370 tests green, 2032/2322 cards (87.5%) fully playable; keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, GRANT_KEYWORD), the full tools pipeline (EffectLexer → EffectParser → CardCompiler → compiled JSON) with 99%/96% lexer coverage, ACTIVATED_MAIN interactive abilities, OPPONENTS_TURN dispatch, compound costs, and the CardCompatibilityReport playability baseline are all in. Neither Phase 2.5 nor Phase 3 has been started. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 5's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats. The end-to-end match-flow validation (playing a full game through to a win condition via the CLI, confirming the whole turn/phase/battle/trigger sequence holds together) also has not been done yet — unit-test coverage and integration/playthrough correctness are separate claims.*
