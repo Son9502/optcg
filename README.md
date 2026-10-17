@@ -2,6 +2,8 @@
 
 A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term vision is a full-featured platform where players can battle locally or globally, train against themselves or an AI, observe and replay matches, and run strategic simulations — all built on top of a faithful rules engine.
 
+> This is an unofficial, non-commercial fan project. "One Piece Card Game," its card data, names, and text are the property of Bandai and the One Piece Card Game's respective rights holders. This project is not affiliated with or endorsed by them. Card data is sourced from the community-run [optcgapi.com](https://www.optcgapi.com) API, not from Bandai directly. The official rules this engine implements are published by Bandai as the [Comprehensive Rules](https://en.onepiece-cardgame.com/pdf/rule_comprehensive.pdf) — § references throughout this repo's docs point to that document.
+
 ---
 
 ## Current Status — Phase 2 *(complete)*
@@ -178,6 +180,8 @@ Multi-color cards (e.g., `"Green Yellow"` in the API) are fully supported: `Colo
 ```bash
 mvn exec:java -Dexec.mainClass="tools.CsvGenerator"
 ```
+
+`raw/`, `compiled/`, `csv/card_checklist.csv`, and `csv/effect_templates_{generic,unique}.csv` are gitignored and not shipped in this repo — they're large, regenerable outputs that reproduce most of the scraped card-text database in bulk. Run `CardScraper` → `CardCompiler` locally to populate them; nothing in `engine/` depends on them being present at build time, only on `CardDatabase`'s runtime load path actually finding data in `compiled/`.
 
 ---
 
@@ -476,6 +480,12 @@ None of these are started yet — `CardCompatibilityReport`'s current baseline (
 - Pause replay at any moment and take over either side manually
 - Observe live or recorded games from other players (on-air and off-air)
 - Broadcast infrastructure for tournament coverage
+
+---
+
+## License
+
+The engine's source code is MIT-licensed — see [LICENSE](LICENSE). "One Piece Card Game" and all card data/names/text belong to Bandai and are not covered by this license; see the disclaimer at the top of this README.
 
 ---
 

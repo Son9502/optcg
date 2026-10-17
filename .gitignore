@@ -12,3 +12,6 @@ Thumbs.db
 
 # Generated CSV output
 csv/
+
+# Third-party copyrighted reference material — not ours to redistribute
+OPTCG.pdf
