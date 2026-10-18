@@ -51,6 +51,8 @@ A Java-based digital engine for the One Piece Card Game (OPTCG), built primarily
 
 ## Game Rules Summary
 
+The table and bullets below are a condensed summary of what this engine implements — for the official source, see Bandai's [Rule Manual](https://en.onepiece-cardgame.com/pdf/rule_manual.pdf?20230623) (quick-start basics) and [Comprehensive Rules](https://en.onepiece-cardgame.com/pdf/rule_comprehensive.pdf) (full reference; § citations throughout this repo point here).
+
 | Zone | Contents |
 |---|---|
 | Deck | 50 Character/Event/Stage cards, same color as leader |
