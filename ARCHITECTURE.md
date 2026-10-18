@@ -95,6 +95,103 @@ played onto a Zone (Deque-backed: add()=addFirst/top, draw()=removeFirst/top, ad
 
 ---
 
+## Directory layout
+
+Concrete grounding for the two subsystems above — where each class from the diagrams actually lives:
+
+```
+src/
+├── main/
+│   ├── java/
+│   │   ├── engine/
+│   │   │   ├── Main.java                        ← Entry point
+│   │   │   ├── battle/
+│   │   │   │   └── BattleSystem.java            ← All combat logic
+│   │   │   ├── cards/
+│   │   │   │   ├── Card.java
+│   │   │   │   ├── CardData.java                ← Immutable record; Jackson-mapped
+│   │   │   │   ├── CardFactory.java             ← Creates Leader or Card from CardData
+│   │   │   │   ├── ColorDeserializer.java       ← Handles space-separated multi-color API strings
+│   │   │   │   ├── DonCard.java
+│   │   │   │   ├── Leader.java
+│   │   │   │   ├── abilities/                   ← Trigger, Condition, Cost, AbilityData, Ability, AbilityFactory
+│   │   │   │   ├── effects/                     ← EffectData, EffectType, Duration, Target, EffectFactory
+│   │   │   │   ├── keywords/                    ← Keyword enum (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, Rush: Character)
+│   │   │   │   └── types/                       ← CardType, Color, Attribute, Rarity enums
+│   │   │   ├── core/
+│   │   │   │   ├── GameEngine.java              ← Main game loop
+│   │   │   │   ├── GameState.java               ← All state mutations
+│   │   │   │   ├── Phase.java                   ← Turn phase enum
+│   │   │   │   └── TurnManager.java             ← Phase transitions, active player
+│   │   │   ├── data/
+│   │   │   │   ├── CardDatabase.java            ← Primary (id) + secondary (name) indexes; getByName, getBySubtype, getAllCards
+│   │   │   │   └── NullableIntDeserializer.java ← Handles "NULL" string / string-encoded ints
+│   │   │   ├── history/
+│   │   │   │   ├── GameHistory.java
+│   │   │   │   └── GameHistoryManager.java      ← Snapshot chain for replay/undo
+│   │   │   ├── player/
+│   │   │   │   └── Player.java
+│   │   │   ├── setup/
+│   │   │   │   ├── DeckBuilder.java
+│   │   │   │   ├── GameFactory.java             ← Test decks (Luffy vs Zoro) + 12 selectable game decks
+│   │   │   │   └── GameSetup.java               ← initializeGame, mulligan, setUpLife
+│   │   │   ├── ui/
+│   │   │   │   └── cli/
+│   │   │   │       ├── CliController.java       ← All player-facing prompts and menus
+│   │   │   │       └── InputHandler.java        ← readInt, confirm, readString
+│   │   │   └── zones/
+│   │   │       ├── Deck.java
+│   │   │       ├── DonDeck.java
+│   │   │       ├── Zone.java                    ← Deque-backed; add = top, draw = top
+│   │   │       └── ZoneType.java
+│   │   └── tools/                               ← Offline data pipeline (not part of game runtime)
+│   │       ├── CardScraper.java                 ← Fetches raw card data from API
+│   │       ├── CardCompiler.java                ← raw JSON → compiled JSON + abilities[]
+│   │       ├── CsvGenerator.java                ← Rebuilds card_names_subtypes.csv from compiled/raw data
+│   │       ├── Parser.java                      ← Parses card text into structured abilities
+│   │       ├── ParsedAbility.java               ← Record: trigger, condition, cost, character, effect
+│   │       ├── TokenType.java                   ← 13-value enum (VERB, QUANTITY, PLAYER, CARD_TYPE, FILTER, SUBTYPE_FILTER, NAME_FILTER, ATTRIBUTE_FILTER, ZONE, DURATION, CONDITION, CONNECTOR, MODIFIER)
+│   │       ├── Token.java                       ← Record: (TokenType type, String raw, Object value)
+│   │       ├── EffectTables.java                ← All phrase→TokenType entries, sorted lists, regex filter Patterns (shared by EffectLexer and EffectParser)
+│   │       ├── EffectLexer.java                 ← Word-level scanner; produces List<Token> from raw effect text
+│   │       ├── ParsedEffect.java                ← Intermediate structured effect record (tools pipeline only)
+│   │       ├── EffectParser.java                ← Token→ParsedEffect parser; resolveVerb, splitClauses, extractPlayer/Zone/CardType/Filters/Duration/Condition
+│   │       ├── EffectTemplateCsvGenerator.java  ← Reads compiled JSON → Parser → generalise → split compound effects → write generic/unique CSV pair
+│   │       ├── CardChecklistCsvGenerator.java   ← Reads compiled cards → EffectLexer → collects UNKNOWN tokens → writes csv/card_checklist.csv
+│   │       ├── LexerCoverageReport.java         ← Runs EffectLexer on all CSV templates; reports fully-tokenised % and top unknown tokens
+│   │       ├── Report.java                      ← Shared CSV row record used by LexerCoverageReport
+│   │       └── CardCompatibilityReport.java     ← Flags cards not yet fully playable by the engine; writes csv/card_compatibility_report.csv
+│   └── resources/
+│       ├── compiled/data/                       ← Engine-ready JSON (CardDatabase reads this)
+│       │   ├── sets/                            ← One file per card set (e.g. OP01.json)
+│       │   ├── decks/                           ← Pre-constructed deck files
+│       │   └── promos/                          ← Promotional card files
+│       └── raw/data/                            ← Scraped JSON from API (CardScraper output)
+│           ├── sets/
+│           ├── decks/
+│           └── promos/
+└── test/
+    └── java/
+        ├── engine/
+        │   ├── TestUtils.java                   ← Shared makeCardData / makeCard helpers
+        │   ├── battle/BattleHandlerTest.java
+        │   ├── cards/CardTest.java
+        │   ├── core/GameStateTest.java
+        │   ├── core/TurnManagerTest.java
+        │   ├── data/CardDatabaseTest.java
+        │   ├── player/PlayerTest.java
+        │   ├── setup/GameSetupTest.java
+        │   ├── setup/GameFactoryTest.java
+        │   └── zones/DeckTest.java, ZoneTest.java
+        └── tools/
+            ├── ParserTest.java
+            ├── TokenTest.java
+            ├── EffectLexerTest.java
+            └── EffectParserTest.java
+```
+
+---
+
 ## Invariants (violate these and something subtle breaks)
 
 - **`BattleSystem` owns all combat logic; `CliController` is presentation only.**
