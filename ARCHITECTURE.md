@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes how `optcg` is put together: the two subsystems in the repo, how a card goes from scraped text to a runtime object, how a turn actually executes, and the invariants that keep those pieces from drifting apart. For feature status and what's left to build, see [README.md](README.md)'s Roadmap and `memory/phase3.md` — this file is about structure, not progress.
+This document describes how `optcg` is put together: the two subsystems in the repo, how a card goes from scraped text to a runtime object, how a turn actually executes, and the invariants that keep those pieces from drifting apart. For feature status and what's left to build, see [README.md](README.md)'s Roadmap and `memory/phase3.md`; for what "minimum shippable product" concretely means, see [MVP.md](MVP.md) — this file is about structure, not progress or scope.
 
 ---
 

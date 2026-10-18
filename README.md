@@ -1,6 +1,6 @@
 # One Piece Virtual TCG — `optcg`
 
-A Java-based digital engine for the One Piece Card Game (OPTCG). The long-term vision is a full-featured platform where players can battle locally or globally, train against themselves or an AI, observe and replay matches, and run strategic simulations — all built on top of a faithful rules engine.
+A Java-based digital engine for the One Piece Card Game (OPTCG), built primarily as a **text-based learning and practice tool**: a place for new or returning players to learn the game by playing it correctly against a terminal opponent, and to practice against an AI whose difficulty can be tuned. The longer-term goal is for that AI's play to be grounded in real games played by real people, rather than hand-tuned heuristics alone — see [MVP.md](MVP.md) for what "done enough to call it a product" actually means, and why that's scoped well short of the full roadmap below. Secondary extensions explored further down this roadmap — online play, replay/broadcast tooling, a story mode, simulating specific decks or playstyles — are exploratory stretch goals that follow *after* the core learn/practice loop works, not prerequisites for it.
 
 > This is an unofficial, non-commercial fan project. "One Piece Card Game," its card data, names, and text are the property of Bandai and the One Piece Card Game's respective rights holders. This project is not affiliated with or endorsed by them. Card data is sourced from the community-run [optcgapi.com](https://www.optcgapi.com) API, not from Bandai directly. The official rules this engine implements are published by Bandai as the [Comprehensive Rules](https://en.onepiece-cardgame.com/pdf/rule_comprehensive.pdf) — § references throughout this repo's docs point to that document.
 
@@ -454,9 +454,13 @@ GameEngine ──► GameState ──► GameStateServer (local socket)
 None of these are started yet — `CardCompatibilityReport`'s current baseline (2322 cards, 2032 playable) is entirely UNIMPLEMENTED_TRIGGER (286: MAIN×231, OPPONENTS_ATTACK×42, ON_BLOCK×11, 2 others) and COMPOUND_COST (4); the `NO_ABILITIES` parser gap that used to account for 107 cards is now fully closed.
 
 ### Phase 4 — Training Mode
+
+This is the core of the project's stated purpose — see [MVP.md](MVP.md) for the minimum slice of this phase that counts as a usable product.
+
 - **Tutorial**: guided walkthrough of rules and actions
 - **Self vs Self**: control both sides from one machine
-- **Self vs AI**: automated opponent with configurable difficulty and playstyle
+- **Self vs AI**: automated opponent with configurable difficulty and playstyle — difficulty starts as hand-tuned heuristics (no training data required) and is only later informed by real played games, once enough exist to learn from (see Phase 6 and the data caveat there)
+- **Move advisor**: ask "what's the best move here and why" mid-game — reuses the same move-scoring the AI opponent uses to pick its own moves, just surfaced as a query instead of an action
 
 ### Phase 5 — Battle Mode + GUI
 - **JavaFX GUI**: `GameStateClient` subclass in JavaFX connects to the same local socket as the Tmux board renderer; renders board graphically with card images (`card_image` / `card_image_id` already in compiled JSON), animated zone transitions, power/cost/rest state; `CliController` + Tmux kept as fallback / debug mode
@@ -468,6 +472,9 @@ None of these are started yet — `CardCompatibilityReport`'s current baseline (
 - AI reconstruction: analyze a recorded opponent's playstyle and simulate their decision-making
 - Take over either side of a saved game at any point in time
 - AI plays as the opponent from that point forward (analyzes and reconstructs behavior)
+- Simulating a specific deck archetype's typical playstyle (e.g. "play like a Red Zoro aggro deck") rather than a specific person is the more tractable version of this phase — it only needs enough games *with that decklist* pooled together, not one person's full history
+
+**Data caveat (read before planning around this phase):** everything here needs a corpus of real played games to learn from, and no public OPTCG game-log dataset exists yet. This phase is gated on either real usage data accumulating from Phase 4's practice mode, or manually transcribing tournament footage — it is not a near-term deliverable, and `MVP.md` deliberately excludes it for that reason. Simulating one specific human player's style (rather than a deck archetype's) is data-starved enough that it isn't recommended as scoped at all.
 
 ### Phase 7 — Story Mode *(future)*
 - Choose a leader (Luffy, Zoro, …) and run a campaign
