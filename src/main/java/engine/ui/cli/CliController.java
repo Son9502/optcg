@@ -515,8 +515,9 @@ public class CliController {
             System.out.printf("%d. Attach Don\n", mod + 5);
             System.out.printf("%d. Activate an ability\n", mod + 6);
             System.out.printf("%d. End Phase\n", mod + 7);
-            int choice = inputHandler.readInt("Choose an action: ", 1, 8 - (mod == 0 ? 2 : 0));
-            switch (choice + (mod == 0 ? 2 : 0)) {
+            // Without the Attack option the menu shows 1-7, so shift each choice up by one to reach cases 2-8.
+            int choice = inputHandler.readInt("Choose an action: ", 1, mod + 7);
+            switch (choice + (1 - mod)) {
                 case 1:
                     battle(currentPlayer);
                     break;

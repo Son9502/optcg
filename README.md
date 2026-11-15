@@ -198,13 +198,13 @@ mvn test
 
 | Test class | Tests | Coverage area |
 |---|---|---|
-| `BattleHandlerTest` | 35 | `canAttack`, `getValidAttackers`, `getValidTargets`, `resolve`, keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, Rush:Character) |
+| `BattleHandlerTest` | 40 | `canAttack`, `getValidAttackers`, `getValidTargets`, `resolve`, keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, Rush:Character) |
 | `AbilityManagerTest` | 20 | `dispatch` for ON_PLAY, WHEN_ATTACKING, ON_KO, END_OF_YOUR_TURN, DON!! xX condition gate, once-per-turn, TRIGGER; `canAffordActivation`/`payActivationCost` for all 9 CostType values; compound costs (atomic check + payment) |
 | `TurnManagerTest` | 10 | Phase transitions, turn count, Don draw counts, OPPONENTS_TURN dispatch for field + leader |
-| `GameStateTest` | 14 | Draw, trash, play card, remove life, refresh, cost payment, field/stage limits |
+| `GameStateTest` | 18 | Draw, trash, play card, remove life, refresh, cost payment, field/stage limits |
 | `GameSetupTest` | 4 | Initialization, mulligan, life setup |
 | `CardTest` | 7 | Rest/activate, Don attachment and detach, summoning sickness, grantKeyword, clearGrantedKeywords, hasKeyword (permanent survives clear) |
-| `EffectFactoryTest` | 131 | All EffectTypes, target resolution, all condition gates, GRANT_KEYWORD, SEARCH_DECK, PREVENT_ATTACK/KO/BLOCK, PLAY_CARD, MODAL, NEGATE, FLIP_LIFE, COUNTER, all Duration buckets (THIS_BATTLE/THIS_TURN/OPPONENTS_NEXT_TURN/WHILE_IN_PLAY), all new field/opponent conditions |
+| `EffectFactoryTest` | 139 | All EffectTypes, target resolution, all condition gates, GRANT_KEYWORD, SEARCH_DECK, PREVENT_ATTACK/KO/BLOCK, PLAY_CARD, MODAL, NEGATE, FLIP_LIFE, COUNTER, all Duration buckets (THIS_BATTLE/THIS_TURN/OPPONENTS_NEXT_TURN/WHILE_IN_PLAY), all new field/opponent conditions |
 | `DeckTest` | 4 | Draw, draw from empty, search |
 | `ZoneTest` | 6 | Add, remove, draw top, move card, shuffle |
 | `PlayerTest` | 2 | Zone initialization, leader assignment |
