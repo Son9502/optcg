@@ -24,7 +24,7 @@ Ordered by build sequence. Items 1–4 make the game correct and completable; it
 | 4 | **Real-card decks**: 4–6 real starter decks in `GameFactory`, shipped as card-ID lists; card data fetched and compiled on first run | The point is to learn *this* game with *its* cards. Shipping IDs only keeps card text out of the repo and spares a new player from running the scraper by hand. | Not started (`memory/phase3.md` item 9) |
 | 5 | **Heuristic AI opponent** | Without this there's no "practice" in "practice tool." Doesn't need to be strong, just legal and not obviously dumb: greedy selection over item 1's legal-move list, scored on board, life, DON and card advantage. No training data needed. | Not started |
 | 6 | **Difficulty levels** | "Based on a certain difficulty" is explicit in the project's purpose statement. Cheapest version: vary lookahead depth, how often the AI deliberately picks a weaker move, and how aggressively it blocks/attacks. | Not started |
-| 7 | **Move advisor** ("what's the best move and why") | This *is* the "helper agent" half of the purpose, and nearly free once #5 exists: the same scoring function exposed as a question instead of an action. | Not started |
+| 7 | **Move advisor** ("what's the best move and why") | This *is* the "helper agent" half of the purpose, and nearly free once #5 exists: the same scoring function exposed as a question instead of an action. The AI returns its reasons as structured data and the advisor prints them as sentences. An optional LLM may reword those reasons, but never chooses the move or states a rule, and the advisor must work offline without it. | Not started |
 | 8 | **Minimal guided walkthrough** (a scripted first-few-turns explainer, not a polished tutorial UI) | "Learning tool for new players" implies *some* onboarding beyond "figure out the CLI menus yourself". | Not started |
 
 ### Design rules for v1 (so v4 can plug in)
@@ -43,6 +43,7 @@ Not separate deliverables, but item 1 and the engine work should hold to them. T
 | Game recording and replay | Cheap, and the data source for every learned AI, but not needed to practice. | v2.1 |
 | Deck builder, online play, tournament mode | Need accounts and hosted servers. | v3 |
 | ISMCTS, OpenSpiel, self-play or any training infrastructure | A materially bigger lift than a heuristic opponent, and not necessary to satisfy "practice against a difficulty-tuned AI". Heuristics get there first; v1's design rules keep this cheap to add later. | v4 |
+| LLM features beyond advisor rewording (rules Q&A with RAG, LLM-assisted card parsing) | Useful ideas, but not needed to learn or practice, and an LLM stating rules risks teaching the wrong game. | README ML track (ideas) |
 | Training the AI on real played games | The purpose statement's "hopefully trained on games played by players" is a *direction*, not a near-term deliverable. No played-game dataset exists yet, and one won't until v2.1 has been collecting. | v4 |
 | Simulating a deck archetype's playstyle | The deck-archetype version (e.g. "play like a Red Zoro aggro list") is tractable because it pools games across everyone who played that decklist, but it still needs a corpus of played games. Simulating one specific human is data-starved enough that it isn't recommended at all. | v4 |
 

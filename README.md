@@ -289,6 +289,7 @@ Phases 0–2 built the engine. From here the roadmap is organised by **versions*
 | **v2.1 — Game recording** | Every game saved as a replayable log; the data the v4 AI learns from | Planned |
 | **v3 — Deck builder & online play** | Build and rate decks; play friends online; tournaments | Planned |
 | **v4 — Stronger AI** | Search- and learning-based opponents (OpenSpiel), and "play like this deck" simulation | Planned; needs v2.1 data |
+| **ML track** | Learned models that improve the AI and deck ratings, built step by step from v1 onward | Planned; starts after v1 |
 
 ### v1 — MVP: learn and practice in the terminal
 
@@ -309,7 +310,7 @@ The full definition, with a checkable definition of done, is in [MVP.md](MVP.md)
 4. **Real-card decks.** Replace the 12 synthetic decks in `GameFactory` with 4–6 real starter decks, shipped as **card-ID lists only**. Card data is fetched and compiled on first run, so no card text lives in this repo.
 5. **Heuristic AI opponent.** Greedy move selection over the legal-move list, scored on board, life, DON and card advantage. No training data needed.
 6. **Difficulty levels.** Vary lookahead depth, how often the AI picks a weaker move on purpose, and how aggressively it attacks and blocks.
-7. **Move advisor.** The AI's scoring, exposed as "what's the best move here and why".
+7. **Move advisor.** The AI's scoring, exposed as "what's the best move here and why". The AI returns its reasons as structured data (e.g. "removes their only Blocker", "keeps 2 DON for a counter"), and the advisor prints them as plain sentences. An **optional LLM layer** can reword those reasons more naturally, but it only rephrases what the engine produced: it never picks the move or states a rule. The advisor works fully offline without it.
 8. **Short walkthrough.** A scripted first few turns that explain each menu and rule as it comes up.
 
 **Built so v4 can plug in later.** Three design rules for v1, so OpenSpiel needs a bridge rather than a rewrite:
@@ -350,11 +351,30 @@ GameEngine ──► GameState ──► GameStateServer (WebSocket, JSON snapsh
 ### v4 — Stronger AI and simulation
 
 - **Search-based AI in Java first:** Information Set Monte Carlo Tree Search (ISMCTS), running directly on the v1 cloneable state. Plays hidden-information games well and needs no training data or Python.
-- **OpenSpiel for training:** wrap the engine as an OpenSpiel game (a Python `pyspiel` game backed by the Java engine through the v2 server, or a JSON action protocol). Use it to train policies with self-play (e.g. PPO or NFSP) and with behaviour cloning from v2.1 recordings, then export them back to Java (e.g. ONNX). Training runs offline; the game itself never depends on Python.
+- **OpenSpiel for training:** wrap the engine as an OpenSpiel game (a Python `pyspiel` game backed by the Java engine through the v2 server, or a JSON action protocol). Use it to train policies with self-play (e.g. PPO or NFSP) and with behavior cloning from v2.1 recordings, then export them back to Java (e.g. ONNX). Training runs offline; the game itself never depends on Python.
 - **Deck-archetype simulation:** "play like a Red Zoro aggro list", trained on recorded games pooled by decklist
 - **Take over a saved game:** load any point in a v2.1 recording and let the AI play the other side from there
 
-**Data caveat:** behaviour cloning and archetype simulation need real played games, which only exist once v2.1 has been collecting for a while. Simulating one specific person's style is data-starved enough that it isn't recommended at all.
+**Data caveat:** behavior cloning and archetype simulation need real played games, which only exist once v2.1 has been collecting for a while. Simulating one specific person's style is data-starved enough that it isn't recommended at all.
+
+### ML track (runs alongside v2–v4)
+
+A staircase of machine-learning work, from classic supervised learning up to self-play reinforcement learning. Each step produces something the game uses, and each has a clear yardstick to beat.
+
+The key enabler is v1's AI: **AI-vs-AI games generate unlimited training data**, so steps 1–2 don't wait for real players.
+
+| Step | Model | Learns from | Used for | Yardstick |
+|---|---|---|---|---|
+| 1 | **Deck strength** — regression, then random forests / gradient boosting (scikit-learn) | Deck features (cost curve, removal density, keyword counts, DON ramp) → win rate over simulated games | v3's deck rating | Beats a rating built from hand-picked weights |
+| 2 | **Win probability from a position** — classifier, then a small neural net | Positions from simulated games, labeled with who won | Replaces the AI's hand-tuned scoring; better advisor reasons | The learned AI beats the heuristic AI over many games |
+| 3 | **Behavior cloning** — predict the move a human makes | v2.1 recorded human games | More human-like opponents; first step toward deck-archetype simulation | Move-prediction accuracy on held-out games |
+| 4 | **Self-play RL** — OpenSpiel (e.g. PPO, NFSP) | The engine itself, starting from step 2/3 models | v4's strongest opponents | Win rate vs. ISMCTS and vs. step 2 |
+
+Steps 1–2 need only v1 and Python with scikit-learn: no OpenSpiel, no GPU. Models are trained offline and exported to Java (e.g. ONNX), so the game never depends on Python at runtime.
+
+**Optional LLM features (ideas, not scheduled).** Same rule throughout: the engine decides the rules, and an LLM only explains.
+- **Rules Q&A (RAG):** answer "can I block with a rested character?" by retrieving the matching sections of Bandai's Comprehensive Rules and citing § numbers. The rules document is fetched at runtime, not stored in this repo.
+- **Parser assistant:** for card text `EffectParser` can't handle yet, an LLM proposes the structured effect; it's only accepted once tests and `CardCompatibilityReport` confirm it.
 
 ---
 
