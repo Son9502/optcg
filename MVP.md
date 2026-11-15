@@ -1,6 +1,6 @@
 # MVP — Minimum Viable Project
 
-This document defines the smallest version of `optcg` that actually fulfills the project's stated purpose (see README.md): **a text-based tool a new or returning player can use to learn the One Piece Card Game and practice against a difficulty-tuned AI opponent.** It exists so "MVP" has a concrete, checkable definition instead of meaning "whatever's next" — and so the full roadmap in README.md (online play, GUI, story mode, replay/broadcast, deck/player simulation) is clearly understood as *post*-MVP, not part of it.
+This document defines the smallest version of `optcg` that actually fulfills the project's stated purpose (see README.md): **a text-based tool a new or returning player can use to learn the One Piece Card Game and practice against a difficulty-tuned AI opponent.** It exists so "MVP" has a concrete, checkable definition instead of meaning "whatever's next" — and so the full roadmap in README.md (browser play, game recording, deck builder, online play, stronger AI and deck simulation) is clearly understood as *post*-MVP, not part of it.
 
 Status reporting convention, same as the rest of this repo: a line item below is "done" only when it's actually been exercised, not when the code exists but is untested. See `memory/phase3.md` for the detailed engine-completion checklist this document summarizes against.
 
@@ -14,34 +14,47 @@ A learner can launch the CLI, pick a difficulty, play a full game against the AI
 
 ## In scope
 
+Ordered by build sequence. Items 1–4 make the game correct and completable; items 5–8 are the purpose-defining features.
+
 | # | Item | Why it's load-bearing for the MVP | Current status |
 |---|---|---|---|
-| 1 | Finish Phase 3 engine completion (`MAIN`/`OPPONENTS_ATTACK`/`ON_BLOCK` trigger dispatch, `WHILE_IN_PLAY` recalculation, replacement effects, passive-global `NEGATE`, compound-cost extraction) | A "learning tool" that gets ~12% of cards wrong teaches the wrong game. See `memory/phase3.md` for the itemized list. | Not started |
-| 2 | Real-card decks via `GameFactory`, replacing the 12 synthetic test decks | The point is to learn *this* game with *its* cards — leaders and strategies a learner will recognize, not placeholder decks | Not started (`memory/phase3.md` item 9) |
-| 3 | End-to-end match-flow validation — an automated test that plays a full game through `GameEngine`/`CliController` to an actual win condition | Separates "the pieces work in isolation" (370 unit tests, already true) from "the game actually works," which is currently an open question. This is the single biggest gap between current status and MVP. | Not started — no such test exists in `src/test/` as of this writing |
-| 4 | A heuristic AI opponent — something to practice against | Without this there's no "practice" in "practice tool." Doesn't need to be strong, just legal and not obviously dumb. Can reuse whatever scoring function a deck-rating pass would use (curve, removal density, keyword density, DON ramp) for greedy move selection — no training data needed. | Not started |
-| 5 | Difficulty scaling on top of the heuristic opponent | "Based on a certain difficulty" is explicit in the project's purpose statement. Cheapest version: vary lookahead depth, how often the AI deliberately picks a suboptimal move, and how aggressively it blocks/attacks. Still no training data needed. | Not started |
-| 6 | A move-advisor query ("what's the best move and why") | This *is* the "helper agent" half of the purpose — and it's nearly free once #4 exists, since it's the same scoring function exposed as a question instead of an action | Not started |
-| 7 | A minimal guided walkthrough (even just a scripted first-few-turns explainer, not a polished tutorial UI) | "Learning tool for new players" implies *some* onboarding beyond "figure out the CLI menus yourself" | Not started |
+| 1 | **Player controller layer**: a `PlayerController` interface (human CLI, AI, scripted), an engine-generated legal-move list, and a single input reader replacing the two `Scanner`s on `System.in` | Every later item needs to ask "what are the legal moves?" and hand the choice to someone other than the keyboard. Today all decisions live inside `CliController` (1,100+ lines). Two stdin readers also break piped and scripted input, which item 2 relies on. | Not started |
+| 2 | **End-to-end match test**: an automated test that plays a full game through `GameEngine` to an actual win condition | Separates "the pieces work in isolation" (370 unit tests, already true) from "the game actually works". Proof it's needed: until November 2026, every main-menu choice on turns 1–2 ran the wrong action and all 370 unit tests still passed. | Not started — no such test exists in `src/test/` |
+| 3 | **Engine completion, scoped to the starter decks**: the Phase 3 items in `memory/phase3.md` that any card in the v1 decks needs (`MAIN` dispatch is almost certainly one) | A learning tool that gets cards wrong teaches the wrong game. Scoping to the decks a learner can actually pick turns "near-100% of 2,322 cards" into a finishable target; the rest can follow after v1. | Not started |
+| 4 | **Real-card decks**: 4–6 real starter decks in `GameFactory`, shipped as card-ID lists; card data fetched and compiled on first run | The point is to learn *this* game with *its* cards. Shipping IDs only keeps card text out of the repo and spares a new player from running the scraper by hand. | Not started (`memory/phase3.md` item 9) |
+| 5 | **Heuristic AI opponent** | Without this there's no "practice" in "practice tool." Doesn't need to be strong, just legal and not obviously dumb: greedy selection over item 1's legal-move list, scored on board, life, DON and card advantage. No training data needed. | Not started |
+| 6 | **Difficulty levels** | "Based on a certain difficulty" is explicit in the project's purpose statement. Cheapest version: vary lookahead depth, how often the AI deliberately picks a weaker move, and how aggressively it blocks/attacks. | Not started |
+| 7 | **Move advisor** ("what's the best move and why") | This *is* the "helper agent" half of the purpose, and nearly free once #5 exists: the same scoring function exposed as a question instead of an action. The AI returns its reasons as structured data and the advisor prints them as sentences. An optional LLM may reword those reasons, but never chooses the move or states a rule, and the advisor must work offline without it. | Not started |
+| 8 | **Minimal guided walkthrough** (a scripted first-few-turns explainer, not a polished tutorial UI) | "Learning tool for new players" implies *some* onboarding beyond "figure out the CLI menus yourself". | Not started |
 
-Items 1–3 are prerequisite infrastructure (the game has to actually be correct and completable before "practice against it" means anything); items 4–7 are the purpose-defining features themselves.
+### Design rules for v1 (so v4 can plug in)
+
+Not separate deliverables, but item 1 and the engine work should hold to them. They make the v4 AI (ISMCTS, OpenSpiel) a bridge instead of a rewrite:
+
+- **Numbered actions** — every legal move at a decision point is one entry in a list.
+- **Cloneable, seeded state** — `GameState` can be deep-copied and every shuffle takes a seed, so a search can try a move and rewind, and a recorded game replays exactly.
+- **Per-player views** — a player's view hides the opponent's hand, life cards and deck order. The AI and the move advisor must decide from this view, never from the full state.
 
 ## Explicitly out of scope for MVP
 
-| Item | Why it's excluded |
-|---|---|
-| Training the AI on real played games | The purpose statement's "hopefully trained on games played by players" is a *direction*, not a near-term deliverable — no played-game dataset exists yet, and one won't exist until something like item 4 above has real usage. Building toward this is correct; claiming it as part of the MVP is not. |
-| Simulating a specific deck archetype's playstyle (Phase 6) | Asked about explicitly when scoping this: **yes, this is too broad for MVP as a whole**, but the deck-archetype version (e.g. "play like a Red Zoro aggro list") is meaningfully more tractable than simulating one specific human, because it only needs games *pooled across everyone who played that decklist*, not one person's full history. Still gated on having a corpus of played games at all — see README.md's Phase 6 data caveat. Simulating one specific human player is data-starved enough that it isn't recommended as scoped, full stop. |
-| CFR/MCTS via OpenSpiel, or any self-play training infrastructure | A materially bigger lift than a heuristic opponent, and not necessary to satisfy "practice against a difficulty-tuned AI" — heuristics get you there first. Worth doing *after* MVP if the heuristic ceiling turns out to be too low. |
-| JavaFX GUI, Tmux UI, online play, tournament mode, story mode, replay/broadcast tooling | All real roadmap items (Phases 2.5, 5, 7, 8 in README.md), none of them required for the core learn/practice loop to work over a terminal. |
+| Item | Why it's excluded | Where it lives |
+|---|---|---|
+| Web client, Tmux UI, JavaFX GUI | None are required for the learn/practice loop over a terminal. The Tmux and JavaFX plans are replaced by a single web client. | v2 |
+| Game recording and replay | Cheap, and the data source for every learned AI, but not needed to practice. | v2.1 |
+| Deck builder, online play, tournament mode | Need accounts and hosted servers. | v3 |
+| ISMCTS, OpenSpiel, self-play or any training infrastructure | A materially bigger lift than a heuristic opponent, and not necessary to satisfy "practice against a difficulty-tuned AI". Heuristics get there first; v1's design rules keep this cheap to add later. | v4 |
+| LLM features beyond advisor rewording (rules Q&A with RAG, LLM-assisted card parsing) | Useful ideas, but not needed to learn or practice, and an LLM stating rules risks teaching the wrong game. | README ML track (ideas) |
+| Training the AI on real played games | The purpose statement's "hopefully trained on games played by players" is a *direction*, not a near-term deliverable. No played-game dataset exists yet, and one won't until v2.1 has been collecting. | v4 |
+| Simulating a deck archetype's playstyle | The deck-archetype version (e.g. "play like a Red Zoro aggro list") is tractable because it pools games across everyone who played that decklist, but it still needs a corpus of played games. Simulating one specific human is data-starved enough that it isn't recommended at all. | v4 |
 
 ## Definition of done
 
 MVP is complete when all of the following hold simultaneously, not individually:
 
-- [ ] All Phase 3 engine-completion items in `memory/phase3.md` are checked off and re-verified (not just "the code looks done" — re-run `CardCompatibilityReport` and confirm near-100% playability, not the current 87.5%)
-- [ ] `GameFactory` deals real compiled cards, not synthetic test decks
+- [ ] Decisions go through `PlayerController`; human, AI and scripted players are interchangeable, and there is one stdin reader
 - [ ] An automated test plays a full game to completion via the actual engine entry points and asserts a winner is declared correctly
+- [ ] `GameFactory` deals 4–6 real starter decks from card-ID lists, not synthetic test decks
+- [ ] `CardCompatibilityReport` shows **every card in those decks** as fully playable, re-run and confirmed (not just "the code looks done")
 - [ ] A player can select an opponent difficulty and the AI's play measurably changes with it (not just a label)
 - [ ] A player can ask for a move suggestion at any legal decision point and get a reasoned answer, not just a bare card name
 - [ ] A new player with no prior exposure to the CLI can get through their first game with the built-in walkthrough, without needing to read source code or ask someone else how the menus work
@@ -49,21 +62,22 @@ MVP is complete when all of the following hold simultaneously, not individually:
 ## Relationship to the full roadmap
 
 ```
-Phase 0 ──► Phase 1 ──► Phase 2        [done — current repo state]
-              │
-              ▼
-Phase 3 (engine completion, finished)  ─┐
-GameFactory real decks                  │
-End-to-end match validation             ├──►  MVP
-Heuristic AI opponent + difficulty      │
-Move advisor                            │
-Minimal walkthrough                    ─┘
-              │
-              ▼
-Phase 2.5 (Tmux UI) ──► Phase 4 (full tutorial/Self-vs-Self polish) ──► Phase 5 (GUI, online, tournament)
-              │
-              ▼
-Phase 6 (deck/player simulation — data-gated) ──► Phase 7 (Story Mode) ──► Phase 8 (Replay & TCG TV)
+Phase 0 ──► Phase 1 ──► Phase 2              [done — current repo state]
+                           │
+                           ▼
+        v1 — MVP: controller layer, full-game test, starter-deck engine
+             completion, real decks, heuristic AI + difficulty,
+             move advisor, walkthrough
+                           │
+                           ▼
+        v2 — play in the browser (web client over WebSocket snapshots)
+                           │
+                           ▼
+        v2.1 — game recording & replay  ──────────────┐
+                           │                          │ (data)
+                           ▼                          ▼
+        v3 — deck builder, online play,     v4 — ISMCTS, OpenSpiel training,
+             tournaments                         deck-archetype simulation
 ```
 
-Everything below the "MVP" box is real, intentional roadmap — just not required to call the project a usable product.
+Everything after v1 is real, intentional roadmap — just not required to call the project a usable product. See the README's Roadmap section for each version's detail.

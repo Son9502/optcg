@@ -1,6 +1,6 @@
 # One Piece Virtual TCG — `optcg`
 
-A Java-based digital engine for the One Piece Card Game (OPTCG), built primarily as a **text-based learning and practice tool**: a place for new or returning players to learn the game by playing it correctly against a terminal opponent, and to practice against an AI whose difficulty can be tuned. The longer-term goal is for that AI's play to be grounded in real games played by real people, rather than hand-tuned heuristics alone — see [MVP.md](MVP.md) for what "done enough to call it a product" actually means, and why that's scoped well short of the full roadmap below. Secondary extensions explored further down this roadmap — online play, replay/broadcast tooling, a story mode, simulating specific decks or playstyles — are exploratory stretch goals that follow *after* the core learn/practice loop works, not prerequisites for it.
+A Java-based digital engine for the One Piece Card Game (OPTCG), built primarily as a **text-based learning and practice tool**: a place for new or returning players to learn the game by playing it correctly against a terminal opponent, and to practice against an AI whose difficulty can be tuned. The longer-term goal is for that AI's play to be grounded in real games played by real people, rather than hand-tuned heuristics alone — see [MVP.md](MVP.md) for what "done enough to call it a product" actually means, and why that's scoped well short of the full roadmap below. Secondary extensions explored further down this roadmap — play in the browser, game recording and replay, online play, simulating specific decks — are stretch goals that follow *after* the core learn/practice loop works, not prerequisites for it.
 
 > This is an unofficial, non-commercial fan project. "One Piece Card Game," its card data, names, and text are the property of Bandai and the One Piece Card Game's respective rights holders. This project is not affiliated with or endorsed by them. Card data is sourced from the community-run [optcgapi.com](https://www.optcgapi.com) API, not from Bandai directly. The official rules this engine implements are published by Bandai as the [Comprehensive Rules](https://en.onepiece-cardgame.com/pdf/rule_comprehensive.pdf) — § references throughout this repo's docs point to that document.
 
@@ -8,7 +8,7 @@ A Java-based digital engine for the One Piece Card Game (OPTCG), built primarily
 
 ## Current Status — Phase 2 *(complete)*
 
-> **CMU (Command-line Minimum UI)** is the first milestone: a fully playable single game via the terminal with no graphics. Phase 1 and Phase 2 are complete. All 29 Phase 2 items are done — 370 tests green, 2032/2322 cards (87.5%) fully playable. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 5's GUI will reuse.
+> **CMU (Command-line Minimum UI)** is the first milestone: a fully playable single game via the terminal with no graphics. Phase 1 and Phase 2 are complete. All 29 Phase 2 items are done — 370 tests green, 2032/2322 cards (87.5%) fully playable. Next is **v1**, the learn-and-practice MVP — see [Roadmap](#roadmap) and [MVP.md](MVP.md).
 
 **What works today:**
 - Full turn cycle: REFRESH → DRAW → DON → MAIN → END
@@ -198,13 +198,13 @@ mvn test
 
 | Test class | Tests | Coverage area |
 |---|---|---|
-| `BattleHandlerTest` | 35 | `canAttack`, `getValidAttackers`, `getValidTargets`, `resolve`, keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, Rush:Character) |
+| `BattleHandlerTest` | 40 | `canAttack`, `getValidAttackers`, `getValidTargets`, `resolve`, keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, Rush:Character) |
 | `AbilityManagerTest` | 20 | `dispatch` for ON_PLAY, WHEN_ATTACKING, ON_KO, END_OF_YOUR_TURN, DON!! xX condition gate, once-per-turn, TRIGGER; `canAffordActivation`/`payActivationCost` for all 9 CostType values; compound costs (atomic check + payment) |
 | `TurnManagerTest` | 10 | Phase transitions, turn count, Don draw counts, OPPONENTS_TURN dispatch for field + leader |
-| `GameStateTest` | 14 | Draw, trash, play card, remove life, refresh, cost payment, field/stage limits |
+| `GameStateTest` | 18 | Draw, trash, play card, remove life, refresh, cost payment, field/stage limits |
 | `GameSetupTest` | 4 | Initialization, mulligan, life setup |
 | `CardTest` | 7 | Rest/activate, Don attachment and detach, summoning sickness, grantKeyword, clearGrantedKeywords, hasKeyword (permanent survives clear) |
-| `EffectFactoryTest` | 131 | All EffectTypes, target resolution, all condition gates, GRANT_KEYWORD, SEARCH_DECK, PREVENT_ATTACK/KO/BLOCK, PLAY_CARD, MODAL, NEGATE, FLIP_LIFE, COUNTER, all Duration buckets (THIS_BATTLE/THIS_TURN/OPPONENTS_NEXT_TURN/WHILE_IN_PLAY), all new field/opponent conditions |
+| `EffectFactoryTest` | 139 | All EffectTypes, target resolution, all condition gates, GRANT_KEYWORD, SEARCH_DECK, PREVENT_ATTACK/KO/BLOCK, PLAY_CARD, MODAL, NEGATE, FLIP_LIFE, COUNTER, all Duration buckets (THIS_BATTLE/THIS_TURN/OPPONENTS_NEXT_TURN/WHILE_IN_PLAY), all new field/opponent conditions |
 | `DeckTest` | 4 | Draw, draw from empty, search |
 | `ZoneTest` | 6 | Add, remove, draw top, move card, shuffle |
 | `PlayerTest` | 2 | Zone initialization, leader assignment |
@@ -278,114 +278,103 @@ All 29 items complete. 370 tests green. 2032/2322 cards (87.5%) fully playable p
 - `CostType.LIFE` split into `LIFE_TO_HAND` (place top life cards → hand, Big Mom archetype) and `LIFE_TO_TRASH` (trash life cards); `CardCompiler` detects destination from cost text; all 30 previously flagged LIFE cost cards resolved
 - `CardCompatibilityReport` tool: offline analysis of `CardDatabase` against engine; flags UNIMPLEMENTED_TRIGGER, UNIMPLEMENTED_EFFECT, UNIMPLEMENTED_CONDITION, UNIMPLEMENTED_COST, COMPOUND_COST, WHILE_IN_PLAY_DURATION, NO_ABILITIES; writes `csv/card_compatibility_report.csv`; baseline: 2322 cards, 2032 fully playable (87.5%)
 
-### Phase 2.5 — Enhanced CMU (Tmux UI)
+### What's next: versions
 
-A purely terminal-based upgrade that gives the CMU a persistent, multi-pane layout using **Tmux** — no graphics, no framework, no new runtime dependencies. The rules engine is completely unchanged; only the presentation layer is extended.
+Phases 0–2 built the engine. From here the roadmap is organised by **versions**, each one something a player can actually use:
 
-This phase also builds the **local socket IPC layer** that the Phase 5 GUI will reuse. Since the GUI and CLI will have identical capabilities in different formats, the state-broadcast infrastructure built here is not throwaway work — Phase 5 simply swaps the Tmux board renderer for a JavaFX one connected to the same socket.
+| Version | What a player gets | Status |
+|---|---|---|
+| **v1 — MVP** | Learn and practice in the terminal: real decks, an AI opponent with difficulty levels, a move advisor and a short walkthrough | Not started — see [MVP.md](MVP.md) |
+| **v2 — Play in the browser** | The same game against the AI in a web page, replacing the planned Tmux UI and JavaFX GUI | Planned |
+| **v2.1 — Game recording** | Every game saved as a replayable log; the data the v4 AI learns from | Planned |
+| **v3 — Deck builder & online play** | Build and rate decks; play friends online; tournaments | Planned |
+| **v4 — Stronger AI** | Search- and learning-based opponents (OpenSpiel), and "play like this deck" simulation | Planned; needs v2.1 data |
+| **ML track** | Learned models that improve the AI and deck ratings, built step by step from v1 onward | Planned; starts after v1 |
 
-**Layout (3 panes):**
+### v1 — MVP: learn and practice in the terminal
+
+The full definition, with a checkable definition of done, is in [MVP.md](MVP.md). Build order:
+
+1. **Player controller layer.** Today every decision is read from the keyboard inside `CliController`. Add a `PlayerController` interface (human CLI, AI, scripted) and a legal-move list the engine generates. The AI, the move advisor, the full-game test and the v2 web client all sit on top of this, so it comes first. Merge the two `Scanner`s on `System.in` (`Main` and `InputHandler`) into one input reader at the same time; two readers break piped and scripted input.
+2. **Full-game test.** An automated test that plays a whole game through the real engine entry points to a declared winner. Unit tests didn't catch that every turn 1–2 menu choice ran the wrong action; this would have.
+3. **Engine completion, scoped to the starter decks.** Every card in the 4–6 v1 decks must be fully playable (100%), rather than chasing all 2,322 cards. The remaining engine work:
+   - `MAIN` trigger dispatch (231 cards): `[Main]` event effect cards; `CliController.runMainPhases()` needs a "Play Event" path
+   - `OPPONENTS_ATTACK` trigger dispatch (42 cards): fires after opponent's `WHEN_ATTACKING` resolves
+   - `ON_BLOCK` trigger dispatch (11 cards): fires when a Blocker is declared
+   - `WHILE_IN_PLAY` recalculate-on-query layer: `getPowerWithEffects()` scans active continuous-effect abilities on each call instead of stale buckets
+   - Replacement effects: interrupt hook in `BattleSystem` + `GameState` for "if this would be K.O.'d… instead" effects
+   - Passive-global `NEGATE` (e.g. Teach OP09-081, Roger OP13-064): negate all `[On Play]` effects globally, not just on one targeted card; needs a permanent-effect layer checked at dispatch time in `AbilityManager.dispatch()`
+   - `CardCompiler` compound-cost pattern extraction (4 cards): `EffectParser` does not yet recognize every compound cost pattern from card text
+
+   `CardCompatibilityReport`'s current baseline (2322 cards, 2032 playable) is entirely UNIMPLEMENTED_TRIGGER (286: MAIN×231, OPPONENTS_ATTACK×42, ON_BLOCK×11, 2 others) and COMPOUND_COST (4). Only the gaps that touch the starter decks block v1; the rest can follow.
+4. **Real-card decks.** Replace the 12 synthetic decks in `GameFactory` with 4–6 real starter decks, shipped as **card-ID lists only**. Card data is fetched and compiled on first run, so no card text lives in this repo.
+5. **Heuristic AI opponent.** Greedy move selection over the legal-move list, scored on board, life, DON and card advantage. No training data needed.
+6. **Difficulty levels.** Vary lookahead depth, how often the AI picks a weaker move on purpose, and how aggressively it attacks and blocks.
+7. **Move advisor.** The AI's scoring, exposed as "what's the best move here and why". The AI returns its reasons as structured data (e.g. "removes their only Blocker", "keeps 2 DON for a counter"), and the advisor prints them as plain sentences. An **optional LLM layer** can reword those reasons more naturally, but it only rephrases what the engine produced: it never picks the move or states a rule. The advisor works fully offline without it.
+8. **Short walkthrough.** A scripted first few turns that explain each menu and rule as it comes up.
+
+**Built so v4 can plug in later.** Three design rules for v1, so OpenSpiel needs a bridge rather than a rewrite:
+- **Numbered actions:** every legal move at a decision point is one entry in a list.
+- **Cloneable, seeded state:** `GameState` can be deep-copied and every shuffle uses a seed, so a search can try a move and rewind.
+- **Per-player views:** a player's view hides the opponent's hand, life cards and deck order. OPTCG is a hidden-information game, and both the AI and OpenSpiel must only see what that player could see.
+
+### v2 — Play in the browser
+
+Replaces the earlier Tmux UI (old Phase 2.5) and JavaFX GUI (old Phase 5) plans with one web client. It keeps their core idea: after every state change, the engine broadcasts a JSON snapshot of the game, and clients render it.
+
 ```
-┌──────────────────────────────────────┬──────────────────┐
-│  PANE 0 — BOARD (read-only)          │  PANE 2 — CHAT   │
-│                                      │                  │
-│  ╔══════════ Opponent ═════════════╗ │  P1: gg          │
-│  ║ Leader [RED 5000] Life:4 Don:3  ║ │  P2: nice game   │
-│  ║ [Zoro 5k] [Nami 3k/REST]        ║ │                  │
-│  ╠══════════ Your Side ════════════╣ │                  │
-│  ║ Leader [GRN 5000] Life:5 Don:6  ║ │                  │
-│  ║ [Luffy 4k] [Usopp 2k]           ║ │                  │
-│  ╚════════════════════════════════╝ │                  │
-├──────────────────────────────────────┴──────────────────┤
-│  PANE 1 — ACTIONS (interactive)                         │
-│  Hand: [Chopper(2)] [Robin(4)] [Franky(5)]              │
-│  > 1) Attack  2) Play Card  3) Attach Don  4) End Phase │
-└─────────────────────────────────────────────────────────┘
-```
-
-**IPC architecture (local socket):**
-
-The game process runs a `GameStateServer` on a local socket. After every state mutation, it pushes a serialized snapshot to all connected clients. Each pane (and later the GUI) is a client that connects and renders what it receives:
-
-```
-GameEngine ──► GameState ──► GameStateServer (local socket)
+GameEngine ──► GameState ──► GameStateServer (WebSocket, JSON snapshots)
                                     │
-                    ┌───────────────┼─────────────────┐
-                    ▼               ▼                 ▼
-             BoardRenderer     ChatLog.java      [Phase 5]
-             (ANSI/Tmux)      (chat.log tail)   JavaFX GUI
+                         ┌──────────┴──────────┐
+                         ▼                     ▼
+                  Browser board          Terminal client
+                (React; plays vs AI)    (CLI, kept for debugging)
 ```
 
-- **Board pane**: `BoardRenderer` connects to the socket, receives state snapshots, and redraws the ANSI board on each update
-- **Actions pane**: `CliController` runs here unchanged — normal stdin/stdout
-- **Chat pane**: an append-only `chat.log` that both players write to via `/say` from the actions pane; chat pane tails the file
-- **State snapshots**: `GameState` is serialized to JSON (Jackson, already a dependency) and broadcast on the socket after each mutation — the same format `CardDatabase` already uses
+- Single-player against the v1 AI, hosted alongside the project site
+- Card names, costs and power shown as text; **no card art**, keeping with the disclaimer above
+- The old Tmux design notes stay in [memory/phase2.5.md](memory/phase2.5.md) for reference
 
-**Why it's constructive:**
-- The board stays visible at all times while the active player is typing — no scrolling past game state
-- Opponent's field is always in view during decision-making
-- Card colors are visually scannable (ANSI codes — Red/Green/Blue/Purple/Black/Yellow) rather than plain text labels
-- Chat is persistent and kept separate from game output
-- The socket layer is the foundation both the Tmux board renderer and the Phase 5 GUI connect to — building it here means Phase 5 is purely a renderer swap, not a re-architecture
+### v2.1 — Game recording
 
-**What it cannot do vs. a GUI:**
-- No card images, drag-and-drop, or mouse interaction
-- No animations
+- Save every game as an action log (seed + decks + each chosen action), which replays exactly through the engine
+- Replay any previous match, pause it, and take over either side
+- Opt-in, anonymous collection from the web client; this is the dataset v4 depends on. No public OPTCG game-log dataset exists, so starting early matters
 
-**New files this phase would add:**
-- `engine/ui/GameStateServer.java` — local socket server; broadcasts serialized `GameState` snapshots to all connected clients
-- `engine/ui/GameStateClient.java` — base client; connects to socket, receives and deserializes snapshots
-- `engine/ui/cli/BoardRenderer.java` — `GameStateClient` subclass; renders `GameState` as ANSI/Unicode text to the board pane
-- `engine/ui/cli/TmuxLauncher.java` — programmatically creates and configures the tmux session on startup
-- `engine/ui/cli/ChatLog.java` — append-only shared chat file writer/tailer
+### v3 — Deck builder & online play
 
-### Phase 3 — Engine Completion
-- `MAIN` trigger dispatch (231 cards): `[Main]` event effect cards; `CliController.runMainPhases()` needs a "Play Event" path
-- `OPPONENTS_ATTACK` trigger dispatch (42 cards): fires after opponent's `WHEN_ATTACKING` resolves
-- `ON_BLOCK` trigger dispatch (11 cards): fires when a Blocker is declared
-- `WHILE_IN_PLAY` recalculate-on-query layer: `getPowerWithEffects()` scans active continuous-effect abilities on each call instead of stale buckets
-- Replacement effects: interrupt hook in `BattleSystem` + `GameState` for "if this would be K.O.'d… instead" effects
-- Passive-global `NEGATE` (e.g. Teach OP09-081, Roger OP13-064): negate all `[On Play]` effects globally, not just on one targeted card; needs a permanent-effect layer checked at dispatch time in `AbilityManager.dispatch()`
-- `CardCompiler` compound-cost pattern extraction (4 cards): `EffectParser` does not yet recognize every compound cost pattern from card text
-- `GameFactory` real-card decks: replace 12 synthetic dummy decks with compiled cards selected via `CardCompatibilityReport`
-- `CliController` + Tmux UI kept as the primary play surface throughout this phase
+- Deck builder with legality checks and a deck rating (curve, removal density, keyword density, DON ramp)
+- Online play: vs friend (gamer tag), vs local (region matchmaking), vs global
+- Tournament mode: bracket-style matchups
+- Needs accounts and a hosted game server, so it's the largest jump in hosting cost
 
-None of these are started yet — `CardCompatibilityReport`'s current baseline (2322 cards, 2032 playable) is entirely UNIMPLEMENTED_TRIGGER (286: MAIN×231, OPPONENTS_ATTACK×42, ON_BLOCK×11, 2 others) and COMPOUND_COST (4); the `NO_ABILITIES` parser gap that used to account for 107 cards is now fully closed.
+### v4 — Stronger AI and simulation
 
-### Phase 4 — Training Mode
+- **Search-based AI in Java first:** Information Set Monte Carlo Tree Search (ISMCTS), running directly on the v1 cloneable state. Plays hidden-information games well and needs no training data or Python.
+- **OpenSpiel for training:** wrap the engine as an OpenSpiel game (a Python `pyspiel` game backed by the Java engine through the v2 server, or a JSON action protocol). Use it to train policies with self-play (e.g. PPO or NFSP) and with behavior cloning from v2.1 recordings, then export them back to Java (e.g. ONNX). Training runs offline; the game itself never depends on Python.
+- **Deck-archetype simulation:** "play like a Red Zoro aggro list", trained on recorded games pooled by decklist
+- **Take over a saved game:** load any point in a v2.1 recording and let the AI play the other side from there
 
-This is the core of the project's stated purpose — see [MVP.md](MVP.md) for the minimum slice of this phase that counts as a usable product.
+**Data caveat:** behavior cloning and archetype simulation need real played games, which only exist once v2.1 has been collecting for a while. Simulating one specific person's style is data-starved enough that it isn't recommended at all.
 
-- **Tutorial**: guided walkthrough of rules and actions
-- **Self vs Self**: control both sides from one machine
-- **Self vs AI**: automated opponent with configurable difficulty and playstyle — difficulty starts as hand-tuned heuristics (no training data required) and is only later informed by real played games, once enough exist to learn from (see Phase 6 and the data caveat there)
-- **Move advisor**: ask "what's the best move here and why" mid-game — reuses the same move-scoring the AI opponent uses to pick its own moves, just surfaced as a query instead of an action
+### ML track (runs alongside v2–v4)
 
-### Phase 5 — Battle Mode + GUI
-- **JavaFX GUI**: `GameStateClient` subclass in JavaFX connects to the same local socket as the Tmux board renderer; renders board graphically with card images (`card_image` / `card_image_id` already in compiled JSON), animated zone transitions, power/cost/rest state; `CliController` + Tmux kept as fallback / debug mode
-- **Local play**: two players on one machine
-- **Online play**: vs friend (gamer tag), vs local (region matchmaking), vs global
-- **Tournament mode**: bracket-style matchups
+A staircase of machine-learning work, from classic supervised learning up to self-play reinforcement learning. Each step produces something the game uses, and each has a clear yardstick to beat.
 
-### Phase 6 — Simulation
-- AI reconstruction: analyze a recorded opponent's playstyle and simulate their decision-making
-- Take over either side of a saved game at any point in time
-- AI plays as the opponent from that point forward (analyzes and reconstructs behavior)
-- Simulating a specific deck archetype's typical playstyle (e.g. "play like a Red Zoro aggro deck") rather than a specific person is the more tractable version of this phase — it only needs enough games *with that decklist* pooled together, not one person's full history
+The key enabler is v1's AI: **AI-vs-AI games generate unlimited training data**, so steps 1–2 don't wait for real players.
 
-**Data caveat (read before planning around this phase):** everything here needs a corpus of real played games to learn from, and no public OPTCG game-log dataset exists yet. This phase is gated on either real usage data accumulating from Phase 4's practice mode, or manually transcribing tournament footage — it is not a near-term deliverable, and `MVP.md` deliberately excludes it for that reason. Simulating one specific human player's style (rather than a deck archetype's) is data-starved enough that it isn't recommended as scoped at all.
+| Step | Model | Learns from | Used for | Yardstick |
+|---|---|---|---|---|
+| 1 | **Deck strength** — regression, then random forests / gradient boosting (scikit-learn) | Deck features (cost curve, removal density, keyword counts, DON ramp) → win rate over simulated games | v3's deck rating | Beats a rating built from hand-picked weights |
+| 2 | **Win probability from a position** — classifier, then a small neural net | Positions from simulated games, labeled with who won | Replaces the AI's hand-tuned scoring; better advisor reasons | The learned AI beats the heuristic AI over many games |
+| 3 | **Behavior cloning** — predict the move a human makes | v2.1 recorded human games | More human-like opponents; first step toward deck-archetype simulation | Move-prediction accuracy on held-out games |
+| 4 | **Self-play RL** — OpenSpiel (e.g. PPO, NFSP) | The engine itself, starting from step 2/3 models | v4's strongest opponents | Win rate vs. ISMCTS and vs. step 2 |
 
-### Phase 7 — Story Mode *(future)*
-- Choose a leader (Luffy, Zoro, …) and run a campaign
-- Visual novel-style plot progression
-- Progressive AI difficulty following the story arc
-- Potential card unlocks through campaign progress
+Steps 1–2 need only v1 and Python with scikit-learn: no OpenSpiel, no GPU. Models are trained offline and exported to Java (e.g. ONNX), so the game never depends on Python at runtime.
 
-### Phase 8 — Replay & TCG TV *(future)*
-- Record and replay any previous match in full
-- Pause replay at any moment and take over either side manually
-- Observe live or recorded games from other players (on-air and off-air)
-- Broadcast infrastructure for tournament coverage
+**Optional LLM features (ideas, not scheduled).** Same rule throughout: the engine decides the rules, and an LLM only explains.
+- **Rules Q&A (RAG):** answer "can I block with a rested character?" by retrieving the matching sections of Bandai's Comprehensive Rules and citing § numbers. The rules document is fetched at runtime, not stored in this repo.
+- **Parser assistant:** for card text `EffectParser` can't handle yet, an LLM proposes the structured effect; it's only accepted once tests and `CardCompatibilityReport` confirm it.
 
 ---
 
@@ -397,4 +386,4 @@ The engine's source code is MIT-licensed — see [LICENSE](LICENSE). "One Piece 
 
 See [DEVLOG.md](DEVLOG.md) for a full account of what was built manually, what was AI-assisted, the key prompts used, and what changed through iteration.
 
-*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is complete: all 29 items done, 370 tests green, 2032/2322 cards (87.5%) fully playable; keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, GRANT_KEYWORD), the full tools pipeline (EffectLexer → EffectParser → CardCompiler → compiled JSON) with 99%/96% lexer coverage, ACTIVATED_MAIN interactive abilities, OPPONENTS_TURN dispatch, compound costs, and the CardCompatibilityReport playability baseline are all in. Neither Phase 2.5 nor Phase 3 has been started. Phase 2.5 builds the Tmux UI and the local socket IPC layer that Phase 5's GUI will reuse directly — the CLI and GUI share the same state-broadcast infrastructure and have identical capabilities in different formats. The end-to-end match-flow validation (playing a full game through to a win condition via the CLI, confirming the whole turn/phase/battle/trigger sequence holds together) also has not been done yet — unit-test coverage and integration/playthrough correctness are separate claims.*
+*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is complete: all 29 items done, 370 tests green, 2032/2322 cards (87.5%) fully playable; keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, GRANT_KEYWORD), the full tools pipeline (EffectLexer → EffectParser → CardCompiler → compiled JSON) with 99%/96% lexer coverage, ACTIVATED_MAIN interactive abilities, OPPONENTS_TURN dispatch, compound costs, and the CardCompatibilityReport playability baseline are all in. Next is v1, the learn-and-practice MVP (see [MVP.md](MVP.md)); none of its items have been started. The end-to-end match-flow validation (playing a full game through to a win condition via the CLI, confirming the whole turn/phase/battle/trigger sequence holds together) also has not been done yet — unit-test coverage and integration/playthrough correctness are separate claims.*

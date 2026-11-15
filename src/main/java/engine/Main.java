@@ -12,7 +12,7 @@ public class Main {
         System.out.println("=== One Piece TCG ===");
         System.out.println("Select a deck:");
         for (int i = 0; i < GameFactory.DECK_NAMES.length; i++) {
-            System.out.printf("  %2d. %s%n", i + 1, GameFactory.DECK_NAMES[i]);
+            System.out.println("  " + GameFactory.DECK_NAMES[i]); // names already carry their number
         }
 
         int p1 = readChoice(sc, "Player 1 deck (1-12): ", 12);
