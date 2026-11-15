@@ -21,7 +21,7 @@
 
 ## Note on GUI
 
-JavaFX GUI moved to **Phase 5** (Battle Mode). An existing OPTCG sim already covers the "play a game visually" use case; the engine + training work in Phases 3–4 are more valuable first. The IPC socket layer from Phase 2.5 makes the GUI swap trivial when Phase 5 arrives — it's a renderer drop-in, not a re-architecture.
+*(2026-11-15: the GUI is now **v2 — Play in the browser**, a web client instead of JavaFX; Phase 3's engine items are now scoped to the v1 starter decks — see MVP.md item 3.)* JavaFX GUI moved to **Phase 5** (Battle Mode). An existing OPTCG sim already covers the "play a game visually" use case; the engine + training work in Phases 3–4 are more valuable first. The IPC socket layer from Phase 2.5 makes the GUI swap trivial when Phase 5 arrives — it's a renderer drop-in, not a re-architecture.
 
 ---
 

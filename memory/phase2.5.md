@@ -1,5 +1,7 @@
 # Phase 2.5 Roadmap — Enhanced CMU (Tmux UI + IPC Layer)
 
+> **Superseded (2026-11-15):** the Tmux UI is no longer planned. The snapshot server below carries forward into **v2 — Play in the browser** (README Roadmap), using WebSocket instead of a local socket. Kept for reference.
+
 A purely terminal-based upgrade. The rules engine is **completely unchanged** — only the presentation layer is extended. This phase also builds the local socket IPC layer that the Phase 5 GUI will reuse (GUI was moved from Phase 3 to Phase 5 — see `memory/phase3.md`).
 
 ## Architecture

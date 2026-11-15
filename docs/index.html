@@ -234,13 +234,14 @@ duration: THIS_TURN</pre>
 
 <section class="wrap" aria-labelledby="roadmap">
   <h2 id="roadmap">Roadmap</h2>
-  <p class="sub">The goal is a learn-and-practice tool first. Online play and the rest come after.</p>
+  <p class="sub">The goal is a learn-and-practice tool first. Each version after that is something a player can use.</p>
   <ul class="roadmap">
     <li><span class="tag done">Done</span><div><b>Phases 0–2: playable terminal game</b><span>Full rules engine, card pipeline, ability system and keywords; 29 of 29 Phase 2 items complete.</span></div></li>
-    <li><span class="tag next">Next</span><div><b>Phase 2.5: multi-pane terminal UI</b><span>Tmux board, action and chat panes over a socket that broadcasts JSON game-state snapshots.</span></div></li>
-    <li><span class="tag next">Next</span><div><b>Phase 3: engine completion</b><span>The remaining trigger types ([Main] events, on-opponent-attack, on-block), replacement effects and real-card decks.</span></div></li>
-    <li><span class="tag later">Planned</span><div><b>Phase 4: training mode</b><span>Tutorial, play against an AI with adjustable difficulty, and a "what's the best move?" advisor.</span></div></li>
-    <li><span class="tag later">Planned</span><div><b>Phase 5: battle mode + GUI</b><span>A graphical client on the same game-state socket, with local and online play.</span></div></li>
+    <li><span class="tag next">Next</span><div><b>v1: learn and practice in the terminal</b><span>Real starter decks, an AI opponent with difficulty levels, a "what's the best move and why?" advisor, and a short walkthrough.</span></div></li>
+    <li><span class="tag later">Planned</span><div><b>v2: play in the browser</b><span>The same game against the AI, right on this site, driven by JSON game-state snapshots over WebSocket.</span></div></li>
+    <li><span class="tag later">Planned</span><div><b>v2.1: game recording</b><span>Every game saved as a replayable action log, building the dataset the v4 AI learns from.</span></div></li>
+    <li><span class="tag later">Planned</span><div><b>v3: deck builder and online play</b><span>Build and rate decks, play friends online, run tournaments.</span></div></li>
+    <li><span class="tag later">Planned</span><div><b>v4: stronger AI</b><span>Search-based play (ISMCTS) and OpenSpiel-trained opponents, including "play like this deck" simulation.</span></div></li>
   </ul>
 </section>
 
