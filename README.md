@@ -298,13 +298,14 @@ The full definition, with a checkable definition of done, is in [MVP.md](MVP.md)
 1. **Player controller layer.** Today every decision is read from the keyboard inside `CliController`. Add a `PlayerController` interface (human CLI, AI, scripted) and a legal-move list the engine generates. The AI, the move advisor, the full-game test and the v2 web client all sit on top of this, so it comes first. Merge the two `Scanner`s on `System.in` (`Main` and `InputHandler`) into one input reader at the same time; two readers break piped and scripted input.
 2. **Full-game test.** An automated test that plays a whole game through the real engine entry points to a declared winner. Unit tests didn't catch that every turn 1–2 menu choice ran the wrong action; this would have.
 3. **Engine completion, scoped to the starter decks.** Every card in the 4–6 v1 decks must be fully playable (100%): passing the static check *and* exercised by a scripted test that plays it, rather than chasing all 2,851 cards. The remaining engine work:
-   - `MAIN` trigger dispatch (231 cards): `[Main]` event effect cards; `CliController.runMainPhases()` needs a "Play Event" path
-   - `OPPONENTS_ATTACK` trigger dispatch (42 cards): fires after opponent's `WHEN_ATTACKING` resolves
-   - `ON_BLOCK` trigger dispatch (11 cards): fires when a Blocker is declared
+   - `MAIN` trigger dispatch (298 cards): `[Main]` event effect cards; `CliController.runMainPhases()` needs a "Play Event" path
+   - `OPPONENTS_ATTACK` trigger dispatch (56 cards): fires after opponent's `WHEN_ATTACKING` resolves
+   - `ON_BLOCK` trigger dispatch (12 cards): fires when a Blocker is declared
    - `WHILE_IN_PLAY` recalculate-on-query layer: `getPowerWithEffects()` scans active continuous-effect abilities on each call instead of stale buckets
    - Replacement effects: interrupt hook in `BattleSystem` + `GameState` for "if this would be K.O.'d… instead" effects
    - Passive-global `NEGATE` (e.g. Teach OP09-081, Roger OP13-064): negate all `[On Play]` effects globally, not just on one targeted card; needs a permanent-effect layer checked at dispatch time in `AbilityManager.dispatch()`
-   - `CardCompiler` compound-cost pattern extraction (4 cards): `EffectParser` does not yet recognize every compound cost pattern from card text
+   - `CardCompiler` compound-cost pattern extraction (6 cards): `EffectParser` does not yet recognize every compound cost pattern from card text
+   - Parser gaps on deck cards: `EMPTY_ABILITY` (ability text parsed to no effects) and `UNKNOWN_TOKENS` (unclassified words) flags, fixed in `EffectParser`/`EffectTables` or with a manual override
 
    `CardCompatibilityReport`'s current baseline (2851 cards, 2242 passing, re-measured 2026-11-15) flags UNIMPLEMENTED_TRIGGER (366: MAIN×298, OPPONENTS_ATTACK×56, ON_BLOCK×12), COMPOUND_COST (6), EMPTY_ABILITY (213: an ability the parser produced no effects for) and UNKNOWN_TOKENS (104: words the lexer could not classify). A card can carry several flags. Only the gaps that touch the starter decks block v1; the rest can follow.
 4. **Real-card decks.** Replace the 12 synthetic decks in `GameFactory` with 4–6 real starter decks, shipped as **card-ID lists only**. Card data is fetched and compiled on first run, so no card text lives in this repo.
