@@ -8,7 +8,7 @@ A Java-based digital engine for the One Piece Card Game (OPTCG), built primarily
 
 ## Current Status — Phase 2 *(complete)*
 
-> **CMU (Command-line Minimum UI)** is the first milestone: a fully playable single game via the terminal with no graphics. Phase 1 and Phase 2 are complete. All 29 Phase 2 items are done — 370 tests green, 2032/2322 cards (87.5%) fully playable. Next is **v1**, the learn-and-practice MVP — see [Roadmap](#roadmap) and [MVP.md](MVP.md).
+> **CMU (Command-line Minimum UI)** is the first milestone: a fully playable single game via the terminal with no graphics. Phase 1 and Phase 2 are complete. All 29 Phase 2 items are done — 370 tests green; 2242/2851 cards (78.6%) pass the static `CardCompatibilityReport` check as of the 2026-11-15 rescrape (OP15–OP17, EB05); that check confirms every parsed ability uses only implemented mechanics, not that each card has been played. Next is **v1**, the learn-and-practice MVP — see [Roadmap](#roadmap) and [MVP.md](MVP.md).
 
 **What works today:**
 - Full turn cycle: REFRESH → DRAW → DON → MAIN → END
@@ -289,7 +289,7 @@ Phases 0–2 built the engine. From here the roadmap is organised by **versions*
 | **v2.1 — Game recording** | Every game saved as a replayable log; the data the v4 AI learns from | Planned |
 | **v3 — Deck builder & online play** | Build and rate decks; play friends online; tournaments | Planned |
 | **v4 — Stronger AI** | Search- and learning-based opponents (OpenSpiel), and "play like this deck" simulation | Planned; needs v2.1 data |
-| **ML track** | Learned models that improve the AI and deck ratings, built step by step from v1 onward | Planned; starts after v1 |
+| **ML track** | A card-text model for new sets, then learned models that improve the AI and deck ratings, all measured on a public bot ladder | Planned; step 0 can start now, steps 1–4 after v1 |
 
 ### v1 — MVP: learn and practice in the terminal
 
@@ -297,16 +297,17 @@ The full definition, with a checkable definition of done, is in [MVP.md](MVP.md)
 
 1. **Player controller layer.** Today every decision is read from the keyboard inside `CliController`. Add a `PlayerController` interface (human CLI, AI, scripted) and a legal-move list the engine generates. The AI, the move advisor, the full-game test and the v2 web client all sit on top of this, so it comes first. Merge the two `Scanner`s on `System.in` (`Main` and `InputHandler`) into one input reader at the same time; two readers break piped and scripted input.
 2. **Full-game test.** An automated test that plays a whole game through the real engine entry points to a declared winner. Unit tests didn't catch that every turn 1–2 menu choice ran the wrong action; this would have.
-3. **Engine completion, scoped to the starter decks.** Every card in the 4–6 v1 decks must be fully playable (100%), rather than chasing all 2,322 cards. The remaining engine work:
-   - `MAIN` trigger dispatch (231 cards): `[Main]` event effect cards; `CliController.runMainPhases()` needs a "Play Event" path
-   - `OPPONENTS_ATTACK` trigger dispatch (42 cards): fires after opponent's `WHEN_ATTACKING` resolves
-   - `ON_BLOCK` trigger dispatch (11 cards): fires when a Blocker is declared
+3. **Engine completion, scoped to the starter decks.** Every card in the 4–6 v1 decks must be fully playable (100%): passing the static check *and* exercised by a scripted test that plays it, rather than chasing all 2,851 cards. The remaining engine work:
+   - `MAIN` trigger dispatch (298 cards): `[Main]` event effect cards; `CliController.runMainPhases()` needs a "Play Event" path
+   - `OPPONENTS_ATTACK` trigger dispatch (56 cards): fires after opponent's `WHEN_ATTACKING` resolves
+   - `ON_BLOCK` trigger dispatch (12 cards): fires when a Blocker is declared
    - `WHILE_IN_PLAY` recalculate-on-query layer: `getPowerWithEffects()` scans active continuous-effect abilities on each call instead of stale buckets
    - Replacement effects: interrupt hook in `BattleSystem` + `GameState` for "if this would be K.O.'d… instead" effects
    - Passive-global `NEGATE` (e.g. Teach OP09-081, Roger OP13-064): negate all `[On Play]` effects globally, not just on one targeted card; needs a permanent-effect layer checked at dispatch time in `AbilityManager.dispatch()`
-   - `CardCompiler` compound-cost pattern extraction (4 cards): `EffectParser` does not yet recognize every compound cost pattern from card text
+   - `CardCompiler` compound-cost pattern extraction (6 cards): `EffectParser` does not yet recognize every compound cost pattern from card text
+   - Parser gaps on deck cards: `EMPTY_ABILITY` (ability text parsed to no effects) and `UNKNOWN_TOKENS` (unclassified words) flags, fixed in `EffectParser`/`EffectTables` or with a manual override
 
-   `CardCompatibilityReport`'s current baseline (2322 cards, 2032 playable) is entirely UNIMPLEMENTED_TRIGGER (286: MAIN×231, OPPONENTS_ATTACK×42, ON_BLOCK×11, 2 others) and COMPOUND_COST (4). Only the gaps that touch the starter decks block v1; the rest can follow.
+   `CardCompatibilityReport`'s current baseline (2851 cards, 2242 passing, re-measured 2026-11-15) flags UNIMPLEMENTED_TRIGGER (366: MAIN×298, OPPONENTS_ATTACK×56, ON_BLOCK×12), COMPOUND_COST (6), EMPTY_ABILITY (213: an ability the parser produced no effects for) and UNKNOWN_TOKENS (104: words the lexer could not classify). A card can carry several flags. Only the gaps that touch the starter decks block v1; the rest can follow.
 4. **Real-card decks.** Replace the 12 synthetic decks in `GameFactory` with 4–6 real starter decks, shipped as **card-ID lists only**. Card data is fetched and compiled on first run, so no card text lives in this repo.
 5. **Heuristic AI opponent.** Greedy move selection over the legal-move list, scored on board, life, DON and card advantage. No training data needed.
 6. **Difficulty levels.** Vary lookahead depth, how often the AI picks a weaker move on purpose, and how aggressively it attacks and blocks.
@@ -387,20 +388,25 @@ S3 bucket: game-logs/YYYY/MM/DD/<gameId>.json  ──►  ML track datasets
 
 **Data caveat:** behavior cloning and archetype simulation need real played games, which only exist once v2.1 has been collecting for a while. Simulating one specific person's style is data-starved enough that it isn't recommended at all.
 
-### ML track (runs alongside v2–v4)
+### ML track (step 0 starts now; steps 1–4 alongside v2–v4)
 
-A staircase of machine-learning work, from classic supervised learning up to self-play reinforcement learning. Each step produces something the game uses, and each has a clear yardstick to beat.
+A staircase of machine-learning work, from a supervised model over card text up to self-play reinforcement learning. Each step produces something the project uses, and each is judged against a published baseline. Existing OPTCG simulators with AI opponents keep their engines and models closed. This track is built to be inspectable instead: the code that rebuilds each dataset, the baselines and the evaluation harness live in the repo, and every result can be rerun. Card text itself stays out of the repo, as with the rest of the scraped data.
 
-The key enabler is v1's AI: **AI-vs-AI games generate unlimited training data**, so steps 1–2 don't wait for real players.
+**Evaluation harness (built with v1, used by every step).** A ladder of bots: random → greedy heuristic (v1) → ISMCTS (v4) → learned policies. Matches use fixed decks, fixed seeds and swapped seats, and results are reported as Elo with confidence intervals and committed as CSV. "Model X is better" always means a ladder result, not a single win rate against the previous version.
 
 | Step | Model | Learns from | Used for | Yardstick |
 |---|---|---|---|---|
-| 1 | **Deck strength** — regression, then random forests / gradient boosting (scikit-learn) | Deck features (cost curve, removal density, keyword counts, DON ramp) → win rate over simulated games | v3's deck rating | Beats a rating built from hand-picked weights |
-| 2 | **Win probability from a position** — classifier, then a small neural net | Positions from simulated games, labeled with who won | Replaces the AI's hand-tuned scoring; better advisor reasons | The learned AI beats the heuristic AI over many games |
-| 3 | **Behavior cloning** — predict the move a human makes | v2.1 recorded human games | More human-like opponents; first step toward deck-archetype simulation | Move-prediction accuracy on held-out games |
-| 4 | **Self-play RL** — OpenSpiel (e.g. PPO, NFSP) | The engine itself, starting from step 2/3 models | v4's strongest opponents | Win rate vs. ISMCTS and vs. step 2 |
+| 0 | **Card text → structured effects**: a small sequence-to-structure model (e.g. fine-tuned T5-small), with constrained LLM decoding as a comparison | (card text, compiled `effects[]`) pairs from the hand-written pipeline, plus a hand-verified gold set | Same-day support for new sets; proposed parses for the cards `CardCompatibilityReport` flags | Exact-match and per-field accuracy on a **held-out set split** (train on OP01–OP14, test on OP15–OP17, EB05 and each new release), compared with the hand-written parser on the same gold set |
+| 1 | **Deck strength**: regression, then random forests / gradient boosting (scikit-learn) | Deck features (cost curve, removal density, keyword counts, DON ramp) → win rate over simulated games | v3's deck rating | Beats a rating built from hand-picked weights |
+| 2 | **Win probability from a position**: classifier, then a small neural net | Positions from simulated games, labeled with who won | Replaces the AI's hand-tuned scoring; better advisor reasons | Climbs the ladder above the heuristic AI |
+| 3 | **Behavior cloning**: predict the move a human makes | v2.1 recorded human games | More human-like opponents; first step toward deck-archetype simulation | Move-prediction accuracy on held-out games |
+| 4 | **Self-play RL**: OpenSpiel (e.g. PPO, NFSP) | The engine itself, starting from step 2/3 models | v4's strongest opponents | Ladder rating vs. ISMCTS and vs. step 2 |
 
-Steps 1–2 need only v1 and Python with scikit-learn: no OpenSpiel, no GPU. Models are trained offline and exported to Java (e.g. ONNX), so the game never depends on Python at runtime.
+**Step 0 needs nothing from v1.** It only uses the card pipeline that exists today (scraper → lexer → parser → compiled JSON), so it can run in parallel with v1. Two cautions shape it:
+- **Labels are only as good as the parser.** Training pairs come from the hand-written pipeline, so accuracy is reported on a hand-verified gold set (a few hundred cards sampled across sets and effect types, stored as card IDs and verified effect structures, not card text), never on parser-labeled data alone. Cards that pass the static check are the training pool; flagged cards are the hard cases.
+- **The engine stays the authority.** A model's parse is accepted only once tests and `CardCompatibilityReport` confirm it, the same rule as the LLM parser assistant below, which becomes step 0's LLM baseline.
+
+Steps 1–2 need only v1's AI and Python with scikit-learn: no OpenSpiel, no GPU. AI-vs-AI games generate unlimited training data, so they don't wait for real players. Models are trained offline and exported to Java (e.g. ONNX), so the game never depends on Python at runtime.
 
 **Optional LLM features (ideas, not scheduled).** Same rule throughout: the engine decides the rules, and an LLM only explains.
 - **Rules Q&A (RAG):** answer "can I block with a rested character?" by retrieving the matching sections of Bandai's Comprehensive Rules and citing § numbers. The rules document is fetched at runtime, not stored in this repo.
@@ -416,4 +422,4 @@ The engine's source code is MIT-licensed — see [LICENSE](LICENSE). "One Piece 
 
 See [DEVLOG.md](DEVLOG.md) for a full account of what was built manually, what was AI-assisted, the key prompts used, and what changed through iteration.
 
-*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is complete: all 29 items done, 370 tests green, 2032/2322 cards (87.5%) fully playable; keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, GRANT_KEYWORD), the full tools pipeline (EffectLexer → EffectParser → CardCompiler → compiled JSON) with 99%/96% lexer coverage, ACTIVATED_MAIN interactive abilities, OPPONENTS_TURN dispatch, compound costs, and the CardCompatibilityReport playability baseline are all in. Next is v1, the learn-and-practice MVP (see [MVP.md](MVP.md)); none of its items have been started. The end-to-end match-flow validation (playing a full game through to a win condition via the CLI, confirming the whole turn/phase/battle/trigger sequence holds together) also has not been done yet — unit-test coverage and integration/playthrough correctness are separate claims.*
+*This project is in active development. Phase 1 (CMU Complete) is done — the core rules engine, cost enforcement, card data pipeline, and ability parser are all in place. Phase 2 is complete: all 29 items done, 370 tests green, 2242/2851 cards (78.6%) pass the static `CardCompatibilityReport` check as of the 2026-11-15 rescrape (OP15–OP17, EB05); that check confirms every parsed ability uses only implemented mechanics, not that each card has been played; keyword semantics (Rush, Blocker, Double Attack, Banish, Unblockable, Trigger, GRANT_KEYWORD), the full tools pipeline (EffectLexer → EffectParser → CardCompiler → compiled JSON) with 99%/96% lexer coverage, ACTIVATED_MAIN interactive abilities, OPPONENTS_TURN dispatch, compound costs, and the CardCompatibilityReport playability baseline are all in. Next is v1, the learn-and-practice MVP (see [MVP.md](MVP.md)); none of its items have been started. The end-to-end match-flow validation (playing a full game through to a win condition via the CLI, confirming the whole turn/phase/battle/trigger sequence holds together) also has not been done yet — unit-test coverage and integration/playthrough correctness are separate claims.*

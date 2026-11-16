@@ -251,7 +251,7 @@ public class CardChecklistCsvGenerator {
      * @return trimmed text with the disclaimer suffix removed; original text if
      *         no disclaimer is present; empty string if {@code text} is null or blank
      */
-    private static String stripDisclaimer(String text) {
+    static String stripDisclaimer(String text) {
         if (text == null || text.isBlank()) return "";
         String lower = text.toLowerCase();
         int idx = lower.indexOf("disclaimer:");
@@ -271,7 +271,7 @@ public class CardChecklistCsvGenerator {
      * @return distinct unrecognised words in encounter order; empty list if all
      *         tokens in every ability body were recognised by the EffectLexer
      */
-    private static List<String> collectUnknownTokens(String cardText) {
+    static List<String> collectUnknownTokens(String cardText) {
         if (cardText == null || cardText.isBlank()) return Collections.emptyList();
 
         Set<String> seen = new LinkedHashSet<>();
