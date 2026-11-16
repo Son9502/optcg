@@ -25,11 +25,11 @@
 
 ---
 
-## CardCompatibilityReport baseline (re-verified 2026-09-14)
-- Total cards: 2322 | Fully playable: 2032 (87.5%)
-- UNIMPLEMENTED_TRIGGER: 286 (MAIN×231, OPPONENTS_ATTACK×42, ON_BLOCK×11, and 2 others)
+## CardCompatibilityReport baseline (re-verified 2026-11-15, after OP15–OP17/EB05 rescrape)
+- Total cards: 2851 | Fully playable: 2480 (87.0%)
+- UNIMPLEMENTED_TRIGGER: 366 (MAIN×298, OPPONENTS_ATTACK×56, ON_BLOCK×12)
 - UNIMPLEMENTED_COST: 0 (LIFE split into LIFE_TO_HAND / LIFE_TO_TRASH — resolved)
-- COMPOUND_COST: 4 cards
+- COMPOUND_COST: 6 cards
 - NO_ABILITIES: 0 cards (was 107 at end of Phase 2 — resolved since, see item 7 above)
 
 Note: the `compiled/` directory is gitignored (regenerated locally from `raw/` via `CardCompiler`, never committed). The 1903/82% figure recorded in `DEVLOG.md` at Phase 2 completion is a legitimate historical snapshot from that session, but the local `compiled/` cache in this checkout had gone stale since (found still emitting the pre-Item-28 singular `"cost"` field instead of `"costs"`, causing `CardDatabase` to silently skip most cards on load). Regenerating via `CardCompiler` before reporting fixed it — the numbers above are from the fresh run. If a future session's `CardCompatibilityReport` output looks implausibly low (e.g. only a few hundred cards analyzed), regenerate `compiled/` first before trusting the number.
