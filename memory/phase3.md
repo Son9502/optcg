@@ -26,7 +26,9 @@
 ---
 
 ## CardCompatibilityReport baseline (re-verified 2026-11-15, after OP15–OP17/EB05 rescrape)
-- Total cards: 2851 | Fully playable: 2480 (87.0%)
+- Total cards: 2851 | Passing static check: 2242 (78.6%). Static only: no card is executed.
+- EMPTY_ABILITY: 213 cards (ability with no parsed effects, excluding pure keywords)
+- UNKNOWN_TOKENS: 104 cards (lexer left unclassified words)
 - UNIMPLEMENTED_TRIGGER: 366 (MAIN×298, OPPONENTS_ATTACK×56, ON_BLOCK×12)
 - UNIMPLEMENTED_COST: 0 (LIFE split into LIFE_TO_HAND / LIFE_TO_TRASH — resolved)
 - COMPOUND_COST: 6 cards

@@ -47,7 +47,9 @@ public class CardCompatibilityReport {
         UNIMPLEMENTED_CONDITION,
         COMPOUND_COST, // costs.size() > 1
         WHILE_IN_PLAY_DURATION, // Future Rescoping — source-dependent continuous
-        NO_ABILITIES // non-blank card_text but abilities list is empty
+        NO_ABILITIES, // non-blank card_text but abilities list is empty
+        EMPTY_ABILITY, // ability parsed with no effects (and not a pure keyword like Blocker)
+        UNKNOWN_TOKENS // EffectLexer left words it could not classify (same check as card_checklist.csv)
     }
 
     record Row(
@@ -118,9 +120,26 @@ public class CardCompatibilityReport {
                                     "Cost: " + cost.type.name()));
                         }
                     }
-                    checkCondition(card, ability.condition(), rows);
+                }
+                // Condition and effect checks apply whether or not the ability has costs.
+                checkCondition(card, ability.condition(), rows);
+
+                boolean pureKeyword = ability.triggerType() == Trigger.KEYWORD && ability.keyword() != null;
+                if (ability.effects() == null || ability.effects().isEmpty()) {
+                    if (!pureKeyword) {
+                        rows.add(new Row(card.id(), card.name(), card.cardType().name(), Flag.EMPTY_ABILITY,
+                                "Trigger: " + ability.triggerType().name()));
+                    }
+                } else {
                     checkEffects(card, ability.effects(), rows);
                 }
+            }
+
+            List<String> unknowns = CardChecklistCsvGenerator.collectUnknownTokens(
+                    CardChecklistCsvGenerator.stripDisclaimer(card.description()));
+            if (!unknowns.isEmpty()) {
+                rows.add(new Row(card.id(), card.name(), card.cardType().name(), Flag.UNKNOWN_TOKENS,
+                        truncate(String.join(" | ", unknowns), 60)));
             }
         }
         return rows;
@@ -186,11 +205,12 @@ public class CardCompatibilityReport {
         System.out.println("Total cards analyzed: " + totalCards);
         int distinctCardIds = rows.stream().map(Row::cardId).collect(toSet()).size();
         System.out.println("Distinct cards with issues: " + distinctCardIds);
-        int fullyPlayable = totalCards - distinctCardIds;
-        System.out.println("Fully playable cards: " + fullyPlayable);
-        Map<Flag, Long> counts = rows.stream()
-                .collect(groupingBy(Row::flag, () -> new EnumMap<>(Flag.class), counting()));
-        counts.forEach((flag, count) -> System.out.printf("  %-28s %d cards%n", flag, count));
+        int passing = totalCards - distinctCardIds;
+        System.out.printf("Cards passing the static check: %d (%.1f%%)%n", passing, 100.0 * passing / totalCards);
+        System.out.println("  (static check only: no flags raised; does not execute cards or verify parse correctness)");
+        Map<Flag, Set<String>> cardsByFlag = rows.stream()
+                .collect(groupingBy(Row::flag, () -> new EnumMap<>(Flag.class), mapping(Row::cardId, toSet())));
+        cardsByFlag.forEach((flag, ids) -> System.out.printf("  %-28s %d cards%n", flag, ids.size()));
         System.out.println("Report written to csv/card_compatibility_report.csv");
     }
 

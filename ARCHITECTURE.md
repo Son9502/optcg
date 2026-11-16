@@ -160,7 +160,7 @@ src/
 │   │       ├── CardChecklistCsvGenerator.java   ← Reads compiled cards → EffectLexer → collects UNKNOWN tokens → writes csv/card_checklist.csv
 │   │       ├── LexerCoverageReport.java         ← Runs EffectLexer on all CSV templates; reports fully-tokenised % and top unknown tokens
 │   │       ├── Report.java                      ← Shared CSV row record used by LexerCoverageReport
-│   │       └── CardCompatibilityReport.java     ← Flags cards not yet fully playable by the engine; writes csv/card_compatibility_report.csv
+│   │       └── CardCompatibilityReport.java     ← Static check: flags cards using unimplemented mechanics, empty abilities or unknown words; writes csv/card_compatibility_report.csv
 │   └── resources/
 │       ├── compiled/data/                       ← Engine-ready JSON (CardDatabase reads this)
 │       │   ├── sets/                            ← One file per card set (e.g. OP01.json)

@@ -54,7 +54,7 @@ MVP is complete when all of the following hold simultaneously, not individually:
 - [ ] Decisions go through `PlayerController`; human, AI and scripted players are interchangeable, and there is one stdin reader
 - [ ] An automated test plays a full game to completion via the actual engine entry points and asserts a winner is declared correctly
 - [ ] `GameFactory` deals 4–6 real starter decks from card-ID lists, not synthetic test decks
-- [ ] `CardCompatibilityReport` shows **every card in those decks** as fully playable, re-run and confirmed (not just "the code looks done")
+- [ ] `CardCompatibilityReport` shows **every card in those decks** with no flags, re-run and confirmed (not just "the code looks done"), and each of those cards is played at least once by a scripted test
 - [ ] A player can select an opponent difficulty and the AI's play measurably changes with it (not just a label)
 - [ ] A player can ask for a move suggestion at any legal decision point and get a reasoned answer, not just a bare card name
 - [ ] A new player with no prior exposure to the CLI can get through their first game with the built-in walkthrough, without needing to read source code or ask someone else how the menus work
