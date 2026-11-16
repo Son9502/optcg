@@ -289,7 +289,7 @@ Phases 0–2 built the engine. From here the roadmap is organised by **versions*
 | **v2.1 — Game recording** | Every game saved as a replayable log; the data the v4 AI learns from | Planned |
 | **v3 — Deck builder & online play** | Build and rate decks; play friends online; tournaments | Planned |
 | **v4 — Stronger AI** | Search- and learning-based opponents (OpenSpiel), and "play like this deck" simulation | Planned; needs v2.1 data |
-| **ML track** | Learned models that improve the AI and deck ratings, built step by step from v1 onward | Planned; starts after v1 |
+| **ML track** | A card-text model for new sets, then learned models that improve the AI and deck ratings, all measured on a public bot ladder | Planned; step 0 can start now, steps 1–4 after v1 |
 
 ### v1 — MVP: learn and practice in the terminal
 
@@ -387,20 +387,25 @@ S3 bucket: game-logs/YYYY/MM/DD/<gameId>.json  ──►  ML track datasets
 
 **Data caveat:** behavior cloning and archetype simulation need real played games, which only exist once v2.1 has been collecting for a while. Simulating one specific person's style is data-starved enough that it isn't recommended at all.
 
-### ML track (runs alongside v2–v4)
+### ML track (step 0 starts now; steps 1–4 alongside v2–v4)
 
-A staircase of machine-learning work, from classic supervised learning up to self-play reinforcement learning. Each step produces something the game uses, and each has a clear yardstick to beat.
+A staircase of machine-learning work, from a supervised model over card text up to self-play reinforcement learning. Each step produces something the project uses, and each is judged against a published baseline. Existing OPTCG simulators with AI opponents keep their engines and models closed. This track is built to be inspectable instead: the code that rebuilds each dataset, the baselines and the evaluation harness live in the repo, and every result can be rerun. Card text itself stays out of the repo, as with the rest of the scraped data.
 
-The key enabler is v1's AI: **AI-vs-AI games generate unlimited training data**, so steps 1–2 don't wait for real players.
+**Evaluation harness (built with v1, used by every step).** A ladder of bots: random → greedy heuristic (v1) → ISMCTS (v4) → learned policies. Matches use fixed decks, fixed seeds and swapped seats, and results are reported as Elo with confidence intervals and committed as CSV. "Model X is better" always means a ladder result, not a single win rate against the previous version.
 
 | Step | Model | Learns from | Used for | Yardstick |
 |---|---|---|---|---|
-| 1 | **Deck strength** — regression, then random forests / gradient boosting (scikit-learn) | Deck features (cost curve, removal density, keyword counts, DON ramp) → win rate over simulated games | v3's deck rating | Beats a rating built from hand-picked weights |
-| 2 | **Win probability from a position** — classifier, then a small neural net | Positions from simulated games, labeled with who won | Replaces the AI's hand-tuned scoring; better advisor reasons | The learned AI beats the heuristic AI over many games |
-| 3 | **Behavior cloning** — predict the move a human makes | v2.1 recorded human games | More human-like opponents; first step toward deck-archetype simulation | Move-prediction accuracy on held-out games |
-| 4 | **Self-play RL** — OpenSpiel (e.g. PPO, NFSP) | The engine itself, starting from step 2/3 models | v4's strongest opponents | Win rate vs. ISMCTS and vs. step 2 |
+| 0 | **Card text → structured effects**: a small sequence-to-structure model (e.g. fine-tuned T5-small), with constrained LLM decoding as a comparison | (card text, compiled `effects[]`) pairs from the hand-written pipeline, plus a hand-verified gold set | Same-day support for new sets; proposed parses for the cards `CardCompatibilityReport` flags | Exact-match and per-field accuracy on a **held-out set split** (train on OP01–OP14, test on OP15–OP17, EB05 and each new release), compared with the hand-written parser on the same gold set |
+| 1 | **Deck strength**: regression, then random forests / gradient boosting (scikit-learn) | Deck features (cost curve, removal density, keyword counts, DON ramp) → win rate over simulated games | v3's deck rating | Beats a rating built from hand-picked weights |
+| 2 | **Win probability from a position**: classifier, then a small neural net | Positions from simulated games, labeled with who won | Replaces the AI's hand-tuned scoring; better advisor reasons | Climbs the ladder above the heuristic AI |
+| 3 | **Behavior cloning**: predict the move a human makes | v2.1 recorded human games | More human-like opponents; first step toward deck-archetype simulation | Move-prediction accuracy on held-out games |
+| 4 | **Self-play RL**: OpenSpiel (e.g. PPO, NFSP) | The engine itself, starting from step 2/3 models | v4's strongest opponents | Ladder rating vs. ISMCTS and vs. step 2 |
 
-Steps 1–2 need only v1 and Python with scikit-learn: no OpenSpiel, no GPU. Models are trained offline and exported to Java (e.g. ONNX), so the game never depends on Python at runtime.
+**Step 0 needs nothing from v1.** It only uses the card pipeline that exists today (scraper → lexer → parser → compiled JSON), so it can run in parallel with v1. Two cautions shape it:
+- **Labels are only as good as the parser.** Training pairs come from the hand-written pipeline, so accuracy is reported on a hand-verified gold set (a few hundred cards sampled across sets and effect types, stored as card IDs and verified effect structures, not card text), never on parser-labeled data alone. Cards that pass the static check are the training pool; flagged cards are the hard cases.
+- **The engine stays the authority.** A model's parse is accepted only once tests and `CardCompatibilityReport` confirm it, the same rule as the LLM parser assistant below, which becomes step 0's LLM baseline.
+
+Steps 1–2 need only v1's AI and Python with scikit-learn: no OpenSpiel, no GPU. AI-vs-AI games generate unlimited training data, so they don't wait for real players. Models are trained offline and exported to Java (e.g. ONNX), so the game never depends on Python at runtime.
 
 **Optional LLM features (ideas, not scheduled).** Same rule throughout: the engine decides the rules, and an LLM only explains.
 - **Rules Q&A (RAG):** answer "can I block with a rested character?" by retrieving the matching sections of Bandai's Comprehensive Rules and citing § numbers. The rules document is fetched at runtime, not stored in this repo.
