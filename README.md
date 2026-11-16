@@ -331,7 +331,7 @@ GameEngine ──► GameState ──► GameStateServer (WebSocket, JSON snapsh
                 (React; plays vs AI)    (CLI, kept for debugging)
 ```
 
-- Single-player against the v1 AI, hosted alongside the project site
+- Single-player against the v1 AI. The page stays on GitHub Pages; the game server runs on AWS (see [Hosting on AWS](#hosting-on-aws-v2-and-v21))
 - Card names, costs and power shown as text; **no card art**, keeping with the disclaimer above
 - The old Tmux design notes stay in [memory/phase2.5.md](memory/phase2.5.md) for reference
 
@@ -339,14 +339,44 @@ GameEngine ──► GameState ──► GameStateServer (WebSocket, JSON snapsh
 
 - Save every game as an action log (seed + decks + each chosen action), which replays exactly through the engine
 - Replay any previous match, pause it, and take over either side
-- Opt-in, anonymous collection from the web client; this is the dataset v4 depends on. No public OPTCG game-log dataset exists, so starting early matters
+- Opt-in, anonymous collection from the web client, stored in S3; this is the dataset v4 depends on. No public OPTCG game-log dataset exists, so starting early matters
+
+### Hosting on AWS (v2 and v2.1)
+
+GitHub Pages only serves static files, but v2's game server keeps a WebSocket open for every game, so it needs a real server. AWS hosts the server and the v2.1 game logs; the site itself stays on GitHub Pages.
+
+```
+Browser (son9502.github.io/optcg)
+        │  wss:// (WebSocket over TLS)
+        ▼
+Game server container (Java 21, Docker)
+        │  one JSON log per finished game (opt-in, anonymous)
+        ▼
+S3 bucket: game-logs/YYYY/MM/DD/<gameId>.json  ──►  ML track datasets
+```
+
+| Piece | Choice | Notes |
+|---|---|---|
+| **Container** | Docker image of the engine + WebSocket server, stored in ECR | Same image runs locally (`docker run`) and on AWS |
+| **Compute, stage 1** | One small EC2 or Lightsail instance running the container, with Caddy in front for automatic HTTPS | Cheapest setup that supports WebSockets; enough for a portfolio project |
+| **Compute, stage 2** | ECS Fargate behind an Application Load Balancer | Only once traffic needs more than one server. The load balancer alone costs roughly $16+/month, so not before |
+| **Game logs** | S3, with a lifecycle rule moving old logs to cheaper storage | The server's IAM role can only write to the `game-logs/` prefix |
+| **Infrastructure as code** | Terraform (or AWS CDK) in `infra/` | The whole stack is created and torn down with one command; nothing is set up by hand in the console |
+| **CI/CD** | GitHub Actions: `mvn test` → build image → push to ECR → deploy | Authenticates to AWS with OIDC, so no AWS keys are stored in GitHub |
+| **Monitoring** | CloudWatch logs and an error alarm | |
+
+**Ground rules**
+- **Billing alert before the first deploy:** an AWS Budgets alert at a small monthly limit (e.g. $10), set up in the same Terraform.
+- **No long-lived keys:** OIDC for CI, IAM roles for the server, nothing secret in the repo.
+- **Private by default:** game logs contain decks, seeds and actions only, with no account IDs, IP addresses or names. Collection is opt-in.
+- **One-command teardown:** if the project pauses, `terraform destroy` stops all charges.
 
 ### v3 — Deck builder & online play
 
 - Deck builder with legality checks and a deck rating (curve, removal density, keyword density, DON ramp)
 - Online play: vs friend (gamer tag), vs local (region matchmaking), vs global
 - Tournament mode: bracket-style matchups
-- Needs accounts and a hosted game server, so it's the largest jump in hosting cost
+- Needs accounts and a hosted game server, so it's the largest jump in hosting cost. On AWS this adds Cognito (accounts), DynamoDB (players, matches, ratings) and autoscaling for the game servers
 
 ### v4 — Stronger AI and simulation
 
