@@ -1,6 +1,13 @@
 # One Piece Virtual TCG — `optcg`
 
-A Java-based digital engine for the One Piece Card Game (OPTCG), built primarily as a **text-based learning and practice tool**: a place for new or returning players to learn the game by playing it correctly against a terminal opponent, and to practice against an AI whose difficulty can be tuned. The longer-term goal is for that AI's play to be grounded in real games played by real people, rather than hand-tuned heuristics alone — see [MVP.md](MVP.md) for what "done enough to call it a product" actually means, and why that's scoped well short of the full roadmap below. Secondary extensions explored further down this roadmap — play in the browser, game recording and replay, online play, simulating specific decks — are stretch goals that follow *after* the core learn/practice loop works, not prerequisites for it.
+A Java-based digital engine for the One Piece Card Game (OPTCG), built primarily as a **text-based learning and practice tool** for new and returning players. It has four goals:
+
+1. **Play the game correctly:** full games in the terminal against an AI opponent whose difficulty can be tuned.
+2. **Understand why a move is good:** a move advisor that explains its reasoning, and the strategy behind it.
+3. **Find decks that fit how you play:** a short quiz and your own in-game choices point you to colors, starter decks and matchups that suit you, with the reasons spelled out.
+4. **Learn the leaders:** a concrete guide to playing most, ideally all, leaders.
+
+The longer-term goal is for that AI's play to be grounded in real games played by real people, rather than hand-tuned heuristics alone — see [MVP.md](MVP.md) for what "done enough to call it a product" actually means, and why that's scoped well short of the full roadmap below. Secondary extensions explored further down this roadmap — play in the browser, game recording and replay, online play, simulating specific decks — are stretch goals that follow *after* the core learn/practice loop works, not prerequisites for it.
 
 > This is an unofficial, non-commercial fan project. "One Piece Card Game," its card data, names, and text are the property of Bandai and the One Piece Card Game's respective rights holders. This project is not affiliated with or endorsed by them. Card data is sourced from the community-run [optcgapi.com](https://www.optcgapi.com) API, not from Bandai directly. The official rules this engine implements are published by Bandai as the [Comprehensive Rules](https://en.onepiece-cardgame.com/pdf/rule_comprehensive.pdf) — § references throughout this repo's docs point to that document.
 
@@ -285,11 +292,13 @@ Phases 0–2 built the engine. From here the roadmap is organised by **versions*
 | Version | What a player gets | Status |
 |---|---|---|
 | **v1 — MVP** | Learn and practice in the terminal: real decks, an AI opponent with difficulty levels, a move advisor and a short walkthrough | Not started — see [MVP.md](MVP.md) |
+| **v1.5 — Find your playstyle** | A short beginner quiz, concept-focused teaching decks, and a playstyle profile that recommends colors, starter decks and matchups, with reasons | Planned; needs v1's advisor and decision log |
+| **Leader guides** | One guide per leader: its win plan, key cards, how to pilot it, and practice games with the advisor. Rolls out leader by leader | Planned; from v1.5, each leader added once its deck is fully supported |
 | **v2 — Play in the browser** | The same game against the AI in a web page, replacing the planned Tmux UI and JavaFX GUI | Planned |
 | **v2.1 — Game recording** | Every game saved as a replayable log; the data the v4 AI learns from | Planned |
 | **v3 — Deck builder & online play** | Build and rate decks; play friends online; tournaments | Planned |
 | **v4 — Stronger AI** | Search- and learning-based opponents (OpenSpiel), and "play like this deck" simulation | Planned; needs v2.1 data |
-| **ML track** | A card-text model for new sets, then learned models that improve the AI and deck ratings, all measured on a public bot ladder | Planned; step 0 can start now, steps 1–4 after v1 |
+| **ML track** | A card-text model for new sets, then learned models that improve the AI and deck ratings, all measured on a public bot ladder | Planned; step 0 can start now, steps 1–5 after v1 |
 
 ### v1 — MVP: learn and practice in the terminal
 
@@ -308,7 +317,7 @@ The full definition, with a checkable definition of done, is in [MVP.md](MVP.md)
    - Parser gaps on deck cards: `EMPTY_ABILITY` (ability text parsed to no effects) and `UNKNOWN_TOKENS` (unclassified words) flags, fixed in `EffectParser`/`EffectTables` or with a manual override
 
    `CardCompatibilityReport`'s current baseline (2851 cards, 2242 passing, re-measured 2026-11-15) flags UNIMPLEMENTED_TRIGGER (366: MAIN×298, OPPONENTS_ATTACK×56, ON_BLOCK×12), COMPOUND_COST (6), EMPTY_ABILITY (213: an ability the parser produced no effects for) and UNKNOWN_TOKENS (104: words the lexer could not classify). A card can carry several flags. Only the gaps that touch the starter decks block v1; the rest can follow.
-4. **Real-card decks.** Replace the 12 synthetic decks in `GameFactory` with 4–6 real starter decks, shipped as **card-ID lists only**. Card data is fetched and compiled on first run, so no card text lives in this repo.
+4. **Real-card decks.** Replace the 12 synthetic decks in `GameFactory` with 4–6 real starter decks, shipped as **card-ID lists only**, chosen so that together they cover the basic concepts (attacking and DON, Blockers and counters, life and Triggers, card draw, trash and removal); v1.5's teaching decks come from this set. Card data is fetched and compiled on first run, so no card text lives in this repo.
 5. **Heuristic AI opponent.** Greedy move selection over the legal-move list, scored on board, life, DON and card advantage. No training data needed.
 6. **Difficulty levels.** Vary lookahead depth, how often the AI picks a weaker move on purpose, and how aggressively it attacks and blocks.
 7. **Move advisor.** The AI's scoring, exposed as "what's the best move here and why". The AI returns its reasons as structured data (e.g. "removes their only Blocker", "keeps 2 DON for a counter"), and the advisor prints them as plain sentences. An **optional LLM layer** can reword those reasons more naturally, but it only rephrases what the engine produced: it never picks the move or states a rule. The advisor works fully offline without it.
@@ -318,6 +327,35 @@ The full definition, with a checkable definition of done, is in [MVP.md](MVP.md)
 - **Numbered actions:** every legal move at a decision point is one entry in a list.
 - **Cloneable, seeded state:** `GameState` can be deep-copied and every shuffle uses a seed, so a search can try a move and rewind.
 - **Per-player views:** a player's view hides the opponent's hand, life cards and deck order. OPTCG is a hidden-information game, and both the AI and OpenSpiel must only see what that player could see.
+- **Loggable decisions:** every decision records its type, the options offered, the choice made and a reference to the game state. v1.5 uses this to measure playstyle, and v2.1 uses it to replay games.
+
+### v1.5 — Find your playstyle
+
+After learning the rules, a beginner's first real question is "which deck should I play?" This version answers it from how they actually play, and explains the answer. It runs in the terminal, so it doesn't wait for v2.
+
+1. **A short quiz on first launch (about 2 minutes).**
+   - *Card-game background:* which games they've played before (Magic: The Gathering, Pokémon, Yu-Gi-Oh!, Hearthstone, Lorcana, none). This only sets a starting guess, for example that players who liked aggressive decks elsewhere often enjoy Red, and real play data replaces it as it comes in.
+   - *6–8 "what would you do?" positions*, the same for everyone and with no deck involved. Example: "Your opponent is at 1 life. Attack with everything, or keep a Blocker back?"
+2. **A few teaching decks, not every starter deck.** 2–3 decks from v1's starter set, chosen so that together they cover the basic concepts: attacking and DON attachment, Blockers and counters, life and Triggers, drawing and card advantage, and trash and removal. Each concept is introduced in the deck where it matters most.
+3. **Style measures, compared with the advisor.** Every decision is logged with its options (v1's loggable-decisions rule). Each measure compares the player's choice with the advisor's top move *in the same position*, so it describes the player rather than the deck they happen to hold:
+   - attacking when it's optional, and hitting the leader versus characters
+   - blocking and countering when not forced to
+   - attaching DON versus playing cards
+   - how many cards they keep in hand, and what they remove first
+4. **Two separate signals.** *Style* is how the player consistently differs from the advisor. *Skill per deck* is how close their moves are to the advisor's best, plus their results against a fixed AI difficulty. What someone enjoys and what they're good at can differ, and the recommendation says so when they do. Profiles are built from individual decisions rather than only wins, show how confident they are, and weight recent games more, because beginners improve fast.
+5. **Recommendations that explain themselves**, in the advisor's voice. Example: "You attack whenever you can and rarely save counters, which is closest to Red. Your best results so far are with Green, so try a Red/Green deck. Your Red struggles against Blue control because you commit too much into bounce effects." Matchup notes combine the player's own results with AI-vs-AI deck win rates.
+
+v1.5 is rule-based and needs no trained model. ML track step 2 later replaces the hand-written measures with a learned player-style model.
+
+### Leader guides (rolling out from v1.5)
+
+A concrete way to learn how to play each leader, not just which one to pick.
+
+- **One guide per leader:** what the leader's ability does, its win plan, the key cards and lines in a sample deck, and common mistakes. Drafted from the engine's own data (the leader's ability, its deck archetype, AI-vs-AI games) and checked by hand.
+- **Practice:** play the leader against the AI with the advisor explaining moves, then a few positions that test the leader's key decisions.
+- **What to try next**, from the playstyle profile: for example, "you liked a Red aggro leader; try a Red/Green leader next."
+- **Honest coverage:** a leader is added only when every card in its sample deck passes `CardCompatibilityReport` and is played by a scripted test. The list grows with engine coverage, with most, ideally all, leaders as the target.
+- Card names and stats are shown as text only, with no card art.
 
 ### v2 — Play in the browser
 
@@ -388,7 +426,7 @@ S3 bucket: game-logs/YYYY/MM/DD/<gameId>.json  ──►  ML track datasets
 
 **Data caveat:** behavior cloning and archetype simulation need real played games, which only exist once v2.1 has been collecting for a while. Simulating one specific person's style is data-starved enough that it isn't recommended at all.
 
-### ML track (step 0 starts now; steps 1–4 alongside v2–v4)
+### ML track (step 0 starts now; steps 1–5 alongside v1.5–v4)
 
 A staircase of machine-learning work, from a supervised model over card text up to self-play reinforcement learning. Each step produces something the project uses, and each is judged against a published baseline. Existing OPTCG simulators with AI opponents keep their engines and models closed. This track is built to be inspectable instead: the code that rebuilds each dataset, the baselines and the evaluation harness live in the repo, and every result can be rerun. Card text itself stays out of the repo, as with the rest of the scraped data.
 
@@ -398,15 +436,16 @@ A staircase of machine-learning work, from a supervised model over card text up 
 |---|---|---|---|---|
 | 0 | **Card text → structured effects**: a small sequence-to-structure model (e.g. fine-tuned T5-small), with constrained LLM decoding as a comparison | (card text, compiled `effects[]`) pairs from the hand-written pipeline, plus a hand-verified gold set | Same-day support for new sets; proposed parses for the cards `CardCompatibilityReport` flags | Exact-match and per-field accuracy on a **held-out set split** (train on OP01–OP14, test on OP15–OP17, EB05 and each new release), compared with the hand-written parser on the same gold set |
 | 1 | **Deck strength**: regression, then random forests / gradient boosting (scikit-learn) | Deck features (cost curve, removal density, keyword counts, DON ramp) → win rate over simulated games | v3's deck rating | Beats a rating built from hand-picked weights |
-| 2 | **Win probability from a position**: classifier, then a small neural net | Positions from simulated games, labeled with who won | Replaces the AI's hand-tuned scoring; better advisor reasons | Climbs the ladder above the heuristic AI |
-| 3 | **Behavior cloning**: predict the move a human makes | v2.1 recorded human games | More human-like opponents; first step toward deck-archetype simulation | Move-prediction accuracy on held-out games |
-| 4 | **Self-play RL**: OpenSpiel (e.g. PPO, NFSP) | The engine itself, starting from step 2/3 models | v4's strongest opponents | Ladder rating vs. ISMCTS and vs. step 2 |
+| 2 | **Player style**: clustering players with similar habits, then a supervised model once v2.1 has human games | Logged decisions compared with the advisor's ranking, plus quiz answers | Replaces v1.5's hand-written style measures; better deck and leader recommendations | Recommended decks beat a randomly assigned deck on the player's *next* games |
+| 3 | **Win probability from a position**: classifier, then a small neural net | Positions from simulated games, labeled with who won | Replaces the AI's hand-tuned scoring; better advisor reasons | Climbs the ladder above the heuristic AI |
+| 4 | **Behavior cloning**: predict the move a human makes | v2.1 recorded human games | More human-like opponents; first step toward deck-archetype simulation | Move-prediction accuracy on held-out games |
+| 5 | **Self-play RL**: OpenSpiel (e.g. PPO, NFSP) | The engine itself, starting from step 3/4 models | v4's strongest opponents | Ladder rating vs. ISMCTS and vs. step 3 |
 
 **Step 0 needs nothing from v1.** It only uses the card pipeline that exists today (scraper → lexer → parser → compiled JSON), so it can run in parallel with v1. Two cautions shape it:
 - **Labels are only as good as the parser.** Training pairs come from the hand-written pipeline, so accuracy is reported on a hand-verified gold set (a few hundred cards sampled across sets and effect types, stored as card IDs and verified effect structures, not card text), never on parser-labeled data alone. Cards that pass the static check are the training pool; flagged cards are the hard cases.
 - **The engine stays the authority.** A model's parse is accepted only once tests and `CardCompatibilityReport` confirm it, the same rule as the LLM parser assistant below, which becomes step 0's LLM baseline.
 
-Steps 1–2 need only v1's AI and Python with scikit-learn: no OpenSpiel, no GPU. AI-vs-AI games generate unlimited training data, so they don't wait for real players. Models are trained offline and exported to Java (e.g. ONNX), so the game never depends on Python at runtime.
+Steps 1 and 3 need only v1's AI and Python with scikit-learn: no OpenSpiel, no GPU. AI-vs-AI games generate unlimited training data, so they don't wait for real players. Models are trained offline and exported to Java (e.g. ONNX), so the game never depends on Python at runtime.
 
 **Optional LLM features (ideas, not scheduled).** Same rule throughout: the engine decides the rules, and an LLM only explains.
 - **Rules Q&A (RAG):** answer "can I block with a rested character?" by retrieving the matching sections of Bandai's Comprehensive Rules and citing § numbers. The rules document is fetched at runtime, not stored in this repo.
